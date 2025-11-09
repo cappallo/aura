@@ -1,0 +1,66 @@
+// This is a module demonstrating comment features in Lx.
+// It includes line comments, block comments, and structured doc comments.
+module examples.comments
+
+/// spec:
+///   description: "A 2D point with integer coordinates."
+///   fields:
+///     - x: "The X coordinate"
+///     - y: "The Y coordinate"
+type Point {
+	x: Int
+	y: Int
+}
+
+/// spec:
+///   description: "Calculate the Manhattan distance between two points."
+///   inputs:
+///     - p1: "First point"
+///     - p2: "Second point"
+///   outputs:
+///     - "The Manhattan distance (sum of absolute differences)"
+///   laws:
+///     - "distance(p1, p2) == distance(p2, p1)"
+///     - "distance(p, p) == 0"
+fn manhattan_distance(p1: Point, p2: Point) -> Int {
+	// Calculate absolute differences for each axis
+	let dx = math.abs(p1.x - p2.x);
+	let dy = math.abs(p1.y - p2.y);
+	
+	/* Return the sum of the differences.
+	   This is also known as the L1 norm or taxicab distance. */
+	return dx + dy;
+}
+
+/// spec:
+///   description: "Create a point at the origin (0, 0)."
+///   outputs:
+///     - "A point with both coordinates set to zero"
+fn origin() -> Point {
+	return Point { x: 0, y: 0 };
+}
+
+// Test suite for point operations
+test point_tests {
+	// Test origin creation
+	let p = origin();
+	test.assert_equal(p.x, 0);
+	test.assert_equal(p.y, 0);
+	
+	/* Test Manhattan distance calculation
+	   with some example points */
+	let p1 = Point { x: 0, y: 0 };
+	let p2 = Point { x: 3, y: 4 };
+	test.assert_equal(manhattan_distance(p1, p2), 7);
+	
+	// Distance to self should be zero
+	test.assert_equal(manhattan_distance(p1, p1), 0);
+	
+	// Distance should be symmetric
+	let p3 = Point { x: 1, y: 1 };
+	let p4 = Point { x: 4, y: 5 };
+	test.assert_equal(
+		manhattan_distance(p3, p4),
+		manhattan_distance(p4, p3)
+	);
+}

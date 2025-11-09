@@ -25,6 +25,7 @@ runCommand("node", [cliPath, "test", "examples/logging.lx"]);
 runCommand("node", [cliPath, "test", "examples/contracts.lx"]);
 runCommand("node", [cliPath, "test", "examples/builtins.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
+runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 
 runExpectFailure(
   "Expected contract failure when clamp is called with min > max",

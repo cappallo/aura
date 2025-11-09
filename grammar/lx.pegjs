@@ -51,7 +51,20 @@ Alias
 	= __ "as" __ alias:Ident { return alias; }
 
 TopLevelDecl
-	= BlockGap? decl:TopLevelDeclCore { return decl; }
+	= BlockGap? docs:DocCommentBlock? decl:TopLevelDeclCore { 
+			if (docs) {
+				decl.docComment = docs;
+			}
+			return decl; 
+		}
+
+DocCommentBlock
+	= head:DocCommentLine tail:(NL DocCommentLine)* NL? {
+			return [head, ...tail.map(t => t[1])].join("\n");
+		}
+
+DocCommentLine
+	= _? comment:DocComment { return comment; }
 
 TopLevelDeclCore
 	= EffectDecl
@@ -119,7 +132,7 @@ FieldDeclList
 		}
 
 FieldSeparator
-	= (NL)+
+	= _ (NL)+
 	/ _ "," _
 
 
@@ -415,7 +428,7 @@ BaseExpr
 	/ ParenthesizedExpr
 
 ListLiteral
-	= "[" _ elements:ExprList? _ "]" {
+	= "[" BlockGap? _ elements:ExprList? BlockGap? _ "]" {
 			return {
 				kind: "ListLiteral",
 				elements: elements || [],
@@ -424,8 +437,8 @@ ListLiteral
 		}
 
 ExprList
-	= head:Expr tail:(_ "," _ Expr)* {
-			return foldList(head, tail, 3);
+	= head:Expr tail:(BlockGap? _ "," BlockGap? _ Expr)* {
+			return foldList(head, tail, 5);
 		}
 
 RecordLiteral
@@ -454,7 +467,7 @@ RecordField
 		}
 
 CallExpr
-	= callee:QualifiedIdent _ "(" _ args:ExprList? _ ")" {
+	= callee:QualifiedIdent _ "(" BlockGap? _ args:ExprList? BlockGap? _ ")" {
 			return {
 				kind: "CallExpr",
 				callee,
@@ -539,6 +552,7 @@ BlockGap
 GapUnit
 	= NL
 	/ [ \t]+
+	/ Comment
 
 Integer
 	= digits:[0-9]+ { return digits.join(""); }
@@ -557,17 +571,31 @@ QualifiedIdent
 CtorName
 	= $([A-Z][a-zA-Z0-9_]*)
 
+// Comments
+DocComment
+	= "///" _ text:(![\n\r] .)* { return text.map(t => t[1]).join(""); }
+
+LineComment
+	= "//" !"/" (![\n\r] .)*
+
+BlockComment
+	= "/*" (!"*/" .)* "*/"
+
+Comment
+	= LineComment / BlockComment
+
+// Whitespace (includes comments)
 NL
 	= [\n\r]+
 
 _
-	= [ \t]*
+	= ([ \t] / Comment)*
 
 __
-	= [ \t]+
+	= ([ \t] / Comment)+
 
 WSAny
-	= [ \t\n\r]
+	= [ \t\n\r] / Comment
 
 Terminator
 	= _? ";" _?

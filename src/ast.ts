@@ -29,6 +29,7 @@ export type TopLevelDecl =
 export type EffectDecl = {
   kind: "EffectDecl";
   name: string;
+  docComment?: string;
 };
 
 export type TypeDecl = AliasTypeDecl | RecordTypeDecl | SumTypeDecl;
@@ -38,6 +39,7 @@ export type AliasTypeDecl = {
   name: string;
   typeParams: string[];
   target: TypeExpr;
+  docComment?: string;
 };
 
 export type RecordTypeDecl = {
@@ -45,6 +47,7 @@ export type RecordTypeDecl = {
   name: string;
   typeParams: string[];
   fields: Field[];
+  docComment?: string;
 };
 
 export type SumTypeDecl = {
@@ -52,6 +55,7 @@ export type SumTypeDecl = {
   name: string;
   typeParams: string[];
   variants: Variant[];
+  docComment?: string;
 };
 
 export type Field = {
@@ -76,6 +80,7 @@ export type FnDecl = {
   returnType: TypeExpr;
   effects: string[];
   body: Block;
+  docComment?: string;
 };
 
 export type Param = {
@@ -227,6 +232,7 @@ export type TestDecl = {
   kind: "TestDecl";
   name: string;
   body: Block;
+  docComment?: string;
 };
 
 export type PropertyDecl = {
@@ -235,6 +241,7 @@ export type PropertyDecl = {
   params: PropertyParam[];
   body: Block;
   iterations?: number;
+  docComment?: string;
 };
 
 export type FnContractDecl = {
@@ -244,4 +251,5 @@ export type FnContractDecl = {
   returnType: TypeExpr | null;
   requires: Expr[];
   ensures: Expr[];
+  docComment?: string;
 };

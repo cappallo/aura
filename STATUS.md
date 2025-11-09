@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~40% (Core language ~75% complete, LLM-first tooling ~5% complete)
+**Overall Progress:** ~45% (Core language ~75% complete, LLM-first tooling ~15% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -118,7 +118,9 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Multi-file interpreter**: Runtime function calls across modules
 
 ### 7. LLM-First Tooling (THOUGHTS.md)
-- ❌ Comments and doc strings (`//`, `/* */`, `/// spec:`)
+- ✅ Comments and doc strings (`//`, `/* */`, `/// spec:`)
+- ✅ Structured doc comment parsing (description, inputs, outputs, laws, fields)
+- ✅ Doc comment validation (parameters and fields must exist)
 - ❌ Structured error output (JSON format for LLM consumption)
 - ❌ Structured logging output (logs currently printed to console)
 - ❌ Explain/tracing tooling API
@@ -157,7 +159,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 14 example files including:
+The implementation successfully runs 15+ example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -165,6 +167,7 @@ The implementation successfully runs 14 example files including:
 - ✅ `result.lx` - Error handling patterns
 - ✅ `property_basics.lx` - Property-based testing with predicates and assertions
 - ✅ `builtins.lx` - Extended standard library (string, math, list operations)
+- ✅ `comments.lx` - Line comments, block comments, and structured doc comments with `spec:` format
 
 ---
 
@@ -210,16 +213,16 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Why third:** High value for LLM workflow; complements existing test infrastructure.
 
 ### **Priority 4: Comments & Documentation (THOUGHTS.md §3.1)**
-**Status:** 🔴 Not started - **CRITICAL for LLM-first design**  
+**Status:** ✅ Complete  
 **Goal:** Enable natural-language specs and inline documentation
-- [ ] Add line comment support (`//`) to grammar
-- [ ] Add block comment support (`/* */`) to grammar
-- [ ] Implement structured doc comments (`/// spec:`) in grammar
-- [ ] Preserve doc comments in AST for tooling
-- [ ] Parse structured spec format (description, inputs, outputs, laws)
-- [ ] Add example with commented code to demonstrate
+- [x] Add line comment support (`//`) to grammar
+- [x] Add block comment support (`/* */`) to grammar
+- [x] Implement structured doc comments (`/// spec:`) in grammar
+- [x] Preserve doc comments in AST for tooling
+- [x] Parse structured spec format (description, inputs, outputs, laws)
+- [x] Add example with commented code to demonstrate
 
-**Why fourth:** Violates core design principle (THOUGHTS.md §3.1: "comments, specs, and tests as first-class citizens"). Essential for LLM code generation and understanding.
+**Completed:** Comments and structured documentation are now fully supported! Line comments (`//`), block comments (`/* */`), and doc comments (`///`) all work. Doc comments with `spec:` format are parsed into structured data and validated against declarations.
 
 ### **Priority 5: Structured Error Output (THOUGHTS.md §2.2, §5.1)**
 **Status:** 🔴 Not started - **HIGH priority for LLM workflow**  
@@ -326,10 +329,9 @@ lx check <file.lx>                        # Type check only
 ## 🐛 Known Issues
 
 ### Critical (LLM-First Design Violations)
-1. **No comments or doc strings** - Grammar doesn't support `//` or `/* */` comments, violating THOUGHTS.md §3.1 design principle of "comments, specs, and tests as first-class citizens"
-2. **No structured error output** - Errors are human-readable strings, not JSON format per THOUGHTS.md §2.2 for LLM consumption
-3. **No structured logging** - `Log.debug`/`Log.trace` print to console rather than emitting machine-readable structured logs (THOUGHTS.md §5.1)
-4. **No explain/tracing hooks** - Missing execution tracing tooling per THOUGHTS.md §5.2 (`explain fn(args)`)
+1. **No structured error output** - Errors are human-readable strings, not JSON format per THOUGHTS.md §2.2 for LLM consumption
+2. **No structured logging** - `Log.debug`/`Log.trace` print to console rather than emitting machine-readable structured logs (THOUGHTS.md §5.1)
+3. **No explain/tracing hooks** - Missing execution tracing tooling per THOUGHTS.md §5.2 (`explain fn(args)`)
 
 ### Tooling Gaps
 5. **No canonical formatter** - No pretty-printer for consistent code layout (THOUGHTS.md §1.2, §6.1)
@@ -358,7 +360,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§2.1 Pure-by-default, explicit effects** | ✅ Good | Effect system implemented and enforced |
 | **§2.2 Strong, local, simple types** | ✅ Good | Full type inference with location-based errors |
 | **§2.3 Total/defined behavior (no UB)** | ✅ Good | All operations defined or rejected statically |
-| **§3.1 Natural-language spec blocks** | ❌ Missing | No `/// spec:` comments supported |
+| **§3.1 Natural-language spec blocks** | ✅ Good | `/// spec:` doc comments implemented with parsing and validation |
 | **§3.2 Inline tests & properties** | ✅ Good | `test` and `property` blocks implemented |
 | **§4.1 Small, versioned stdlib** | 🟡 Partial | Small stdlib (✅), but no version tracking (❌) |
 | **§4.2 Schema-first external data** | ❌ Missing | Schemas planned but not implemented |
@@ -369,13 +371,12 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
 | **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles, but **critical tooling and developer experience features are missing**, especially:
-- Comments and documentation (§3.1) - **CRITICAL** → Priority 4
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments and documentation (§3.1) are now complete. Remaining critical tooling features needed:
 - Structured errors/logging for LLM consumption (§2.2, §5.1) - **HIGH** → Priority 5
 - Execution tracing and explain hooks (§5.2) → Priority 7
 - Canonical formatting and patch-based editing (§6.1) → Priority 7
 
-**Impact:** Without these tooling features, Lx cannot fully realize its LLM-first design vision. The language core is solid (~75% complete), but the LLM developer experience layer is barely started (~5% complete), bringing overall progress to ~40%.
+**Impact:** The language core is solid (~75% complete), and the LLM developer experience layer is progressing (~15% complete), bringing overall progress to ~45%. Comments and doc strings were a major step forward for LLM-first design.
 
 ---
 
