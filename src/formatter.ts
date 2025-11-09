@@ -244,7 +244,12 @@ function formatExpr(expr: AST.Expr, indent: number): string {
     case "BinaryExpr":
       return `${formatExpr(expr.left, indent)} ${expr.op} ${formatExpr(expr.right, indent)}`;
     case "CallExpr":
-      const args = expr.args.map((a: AST.Expr) => formatExpr(a, indent)).join(", ");
+      const args = expr.args.map((arg) => {
+        if (arg.kind === "NamedArg") {
+          return `${arg.name} = ${formatExpr(arg.expr, indent)}`;
+        }
+        return formatExpr(arg.expr, indent);
+      }).join(", ");
       return `${expr.callee}(${args})`;
     case "IfExpr":
       return formatIfExpr(expr, indent);

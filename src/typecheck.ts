@@ -1,4 +1,5 @@
 import * as ast from "./ast";
+import { alignCallArguments, CallArgIssue } from "./callargs";
 import type { SymbolTable, ResolvedModule } from "./loader";
 import { resolveIdentifier } from "./loader";
 
@@ -158,6 +159,7 @@ function freshTypeVar(name: string | undefined, rigid: boolean, state: InferStat
 
 type BuiltinFunctionInfo = {
   arity: number | null;
+  paramNames: string[];
   effects: Set<string>;
   instantiateType: (state: InferState) => TypeFunction;
 };
@@ -165,6 +167,7 @@ type BuiltinFunctionInfo = {
 const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   "list.len": {
     arity: 1,
+    paramNames: ["list"],
     effects: new Set(),
     instantiateType: (state) => {
       const element = freshTypeVar("T", false, state);
@@ -173,6 +176,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "test.assert_equal": {
     arity: 2,
+    paramNames: ["expected", "actual"],
     effects: new Set(),
     instantiateType: (state) => {
       const valueType = freshTypeVar("T", false, state);
@@ -181,26 +185,31 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   assert: {
     arity: 1,
+    paramNames: ["condition"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([BOOL_TYPE], UNIT_TYPE),
   },
   "str.concat": {
     arity: 2,
+    paramNames: ["left", "right"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], STRING_TYPE),
   },
   __negate: {
     arity: 1,
+    paramNames: ["value"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
   },
   __not: {
     arity: 1,
+    paramNames: ["value"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([BOOL_TYPE], BOOL_TYPE),
   },
   "Log.debug": {
     arity: 2,
+    paramNames: ["label", "payload"],
     effects: new Set(["Log"]),
     instantiateType: (state) => {
       const payload = freshTypeVar("Payload", false, state);
@@ -209,6 +218,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "Log.trace": {
     arity: 2,
+    paramNames: ["label", "payload"],
     effects: new Set(["Log"]),
     instantiateType: (state) => {
       const payload = freshTypeVar("Payload", false, state);
@@ -217,16 +227,19 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "str.len": {
     arity: 1,
+    paramNames: ["text"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([STRING_TYPE], INT_TYPE),
   },
   "str.slice": {
     arity: 3,
+    paramNames: ["text", "start", "end"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([STRING_TYPE, INT_TYPE, INT_TYPE], STRING_TYPE),
   },
   "str.at": {
     arity: 2,
+    paramNames: ["text", "index"],
     effects: new Set(),
     instantiateType: (state) => {
       const optionType = makeOptionType(STRING_TYPE);
@@ -235,21 +248,25 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "math.abs": {
     arity: 1,
+    paramNames: ["value"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
   },
   "math.min": {
     arity: 2,
+    paramNames: ["left", "right"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
   },
   "math.max": {
     arity: 2,
+    paramNames: ["left", "right"],
     effects: new Set(),
     instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
   },
   "list.map": {
     arity: 2,
+    paramNames: ["list", "mapper"],
     effects: new Set(),
     instantiateType: (state) => {
       const inputElem = freshTypeVar("A", false, state);
@@ -260,6 +277,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "list.filter": {
     arity: 2,
+    paramNames: ["list", "predicate"],
     effects: new Set(),
     instantiateType: (state) => {
       const element = freshTypeVar("T", false, state);
@@ -269,6 +287,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "list.fold": {
     arity: 3,
+    paramNames: ["list", "initial", "reducer"],
     effects: new Set(),
     instantiateType: (state) => {
       const element = freshTypeVar("T", false, state);
@@ -279,6 +298,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "json.encode": {
     arity: 1,
+    paramNames: ["value"],
     effects: new Set(),
     instantiateType: (state) => {
       const value = freshTypeVar("T", false, state);
@@ -287,6 +307,7 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   },
   "json.decode": {
     arity: 1,
+    paramNames: ["text"],
     effects: new Set(),
     instantiateType: (state) => {
       const resultType = freshTypeVar("T", false, state);
@@ -1173,24 +1194,31 @@ function inferBinaryExpr(expr: ast.BinaryExpr, env: TypeEnv, state: InferState):
 }
 
 function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Type {
+  const argTypes = new Map<ast.CallArg, Type>();
+  for (const callArg of expr.args) {
+    argTypes.set(callArg, inferExpr(callArg.expr, env, state));
+  }
+
   const builtin = BUILTIN_FUNCTIONS[expr.callee];
   if (builtin) {
-    if (builtin.arity !== null && builtin.arity !== expr.args.length) {
-      state.errors.push({
-        message: `Builtin '${expr.callee}' expects ${builtin.arity} arguments but got ${expr.args.length}`,
-      });
-    }
+    const alignment = alignCallArguments(expr, builtin.paramNames);
+    reportCallArgIssues(expr, expr.callee, alignment.issues, state.errors, state.currentFilePath);
+
     const instantiated = builtin.instantiateType(state);
     verifyEffectSubset(builtin.effects, state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
-    expr.args.forEach((arg, index) => {
-      const argType = inferExpr(arg, env, state);
+
+    alignment.ordered.forEach((arg, index) => {
       const expectedParam = instantiated.params[index] ?? freshTypeVar("BuiltinArg", false, state);
+      if (!arg) {
+        return;
+      }
+      const argType = argTypes.get(arg) ?? freshTypeVar("BuiltinArg", false, state);
       unify(
         argType,
         expectedParam,
         state,
-        `Argument ${index + 1} of builtin '${expr.callee}' has incompatible type`,
-        arg.loc,
+        `Argument '${builtin.paramNames[index] ?? `#${index + 1}`}' of builtin '${expr.callee}' has incompatible type`,
+        arg.expr.loc,
       );
     });
     return applySubstitution(instantiated.returnType, state);
@@ -1208,15 +1236,10 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
     return freshTypeVar("UnknownCall", false, state);
   }
 
-  if (signature.paramCount !== expr.args.length) {
-    state.errors.push(makeError(
-      `Function '${expr.callee}' expects ${signature.paramCount} arguments but got ${expr.args.length}`,
-      expr.loc,
-      state.currentFilePath
-    ));
-  }
-
   verifyEffectSubset(signature.effects, state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
+
+  const alignment = alignCallArguments(expr, signature.paramNames);
+  reportCallArgIssues(expr, expr.callee, alignment.issues, state.errors, state.currentFilePath);
 
   const instantiated = instantiateFunctionSignature(signature, state, false);
   if (!instantiated) {
@@ -1224,16 +1247,19 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
     return freshTypeVar("UnknownCall", false, state);
   }
 
-  for (let i = 0; i < expr.args.length; i += 1) {
-    const argExpr = expr.args[i]!;
-    const argType = inferExpr(argExpr, env, state);
+  for (let i = 0; i < signature.paramCount; i += 1) {
+    const alignedArg = alignment.ordered[i];
+    if (!alignedArg) {
+      continue;
+    }
+    const argType = argTypes.get(alignedArg) ?? freshTypeVar("Param", false, state);
     const expectedParam = instantiated.params[i] ?? freshTypeVar("Param", false, state);
     unify(
       argType,
       expectedParam,
       state,
-      `Argument ${i + 1} of function '${expr.callee}' has incompatible type`,
-      argExpr.loc,
+      `Argument '${signature.paramNames[i] ?? `#${i + 1}`}' of function '${expr.callee}' has incompatible type`,
+      alignedArg.expr.loc,
     );
   }
 
@@ -1874,7 +1900,7 @@ function checkContractExpr(
     case "CallExpr": {
       checkContractCall(expr, ctx, errors, contractName);
       for (const arg of expr.args) {
-        checkContractExpr(arg, ctx, errors, contractName);
+        checkContractExpr(arg.expr, ctx, errors, contractName);
       }
       return;
     }
@@ -1980,11 +2006,8 @@ function checkContractCall(
 ) {
   const builtin = BUILTIN_FUNCTIONS[expr.callee];
   if (builtin) {
-    if (builtin.arity !== null && builtin.arity !== expr.args.length) {
-      errors.push({
-        message: `Builtin '${expr.callee}' expects ${builtin.arity} arguments but got ${expr.args.length}`,
-      });
-    }
+    const alignment = alignCallArguments(expr, builtin.paramNames);
+    reportCallArgIssues(expr, expr.callee, alignment.issues, errors);
     if (builtin.effects.size > 0) {
       errors.push({
         message: `Contract for '${contractName}' cannot call effectful builtin '${expr.callee}'`,
@@ -2005,11 +2028,8 @@ function checkContractCall(
     return;
   }
 
-  if (signature.paramCount !== expr.args.length) {
-    errors.push({
-      message: `Function '${expr.callee}' expects ${signature.paramCount} arguments but got ${expr.args.length}`,
-    });
-  }
+  const alignment = alignCallArguments(expr, signature.paramNames);
+  reportCallArgIssues(expr, expr.callee, alignment.issues, errors);
 
   if (signature.effects.size > 0) {
     errors.push({
@@ -2034,6 +2054,52 @@ function verifyEffectSubset(
       errors.push({
         message: `Function '${callerName}' cannot call '${calleeName}' because it is missing effect '${effect}'`,
       });
+    }
+  }
+}
+
+function reportCallArgIssues(
+  expr: ast.CallExpr,
+  callee: string,
+  issues: CallArgIssue[],
+  errors: TypeCheckError[],
+  filePath?: string,
+) {
+  for (const issue of issues) {
+    switch (issue.kind) {
+      case "TooManyArguments":
+        errors.push(makeError(`Call to '${callee}' has too many arguments`, issue.arg.expr.loc, filePath));
+        break;
+      case "UnknownParameter":
+        errors.push(makeError(
+          `Call to '${callee}' has no parameter named '${issue.name}'`,
+          issue.arg.expr.loc,
+          filePath,
+        ));
+        break;
+      case "DuplicateParameter":
+        errors.push(makeError(
+          `Parameter '${issue.name}' is provided multiple times in call to '${callee}'`,
+          issue.arg.expr.loc,
+          filePath,
+        ));
+        break;
+      case "MissingParameter":
+        errors.push(makeError(
+          `Call to '${callee}' is missing an argument for parameter '${issue.name}'`,
+          expr.loc,
+          filePath,
+        ));
+        break;
+      case "PositionalAfterNamed":
+        errors.push(makeError(
+          `Positional arguments must appear before named arguments when calling '${callee}'`,
+          issue.arg.expr.loc,
+          filePath,
+        ));
+        break;
+      default:
+        break;
     }
   }
 }

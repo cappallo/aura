@@ -405,7 +405,7 @@ UnaryExpr
 			return {
 				kind: "CallExpr",
 				callee: op === "-" ? "__negate" : "__not",
-				args: [expr],
+				args: [{ kind: "PositionalArg", expr }],
 				loc: location(),
 			};
 		}
@@ -488,13 +488,26 @@ RecordField
 		}
 
 CallExpr
-	= callee:QualifiedIdent _ "(" BlockGap? _ args:ExprList? BlockGap? _ ")" {
+	= callee:QualifiedIdent _ "(" BlockGap? _ args:CallArgList? BlockGap? _ ")" {
 			return {
 				kind: "CallExpr",
 				callee,
 				args: args || [],
 				loc: location(),
 			};
+		}
+
+CallArgList
+	= head:CallArg tail:(BlockGap? _ "," BlockGap? _ CallArg)* {
+			return foldList(head, tail, 5);
+		}
+
+CallArg
+	= name:Ident _ "=" _ expr:Expr {
+			return { kind: "NamedArg", name, expr };
+		}
+	/ expr:Expr {
+			return { kind: "PositionalArg", expr };
 		}
 
 IntLiteral

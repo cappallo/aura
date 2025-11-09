@@ -207,10 +207,14 @@ export type BinaryExpr = {
   loc?: SourceLocation;
 };
 
+export type CallArg =
+  | { kind: "PositionalArg"; expr: Expr }
+  | { kind: "NamedArg"; name: string; expr: Expr };
+
 export type CallExpr = {
   kind: "CallExpr";
   callee: string;
-  args: Expr[];
+  args: CallArg[];
   loc?: SourceLocation;
 };
 

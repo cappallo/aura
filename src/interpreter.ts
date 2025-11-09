@@ -1,4 +1,5 @@
 import * as ast from "./ast";
+import { alignCallArguments, CallArgIssue } from "./callargs";
 import { StructuredLog } from "./structured";
 
 export type Value =
@@ -52,6 +53,36 @@ const MAX_SHRINK_ATTEMPTS = 100;
 const MAX_GENERATION_ATTEMPTS = 100;
 const MAX_GENERATION_DEPTH = 4;
 const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
+
+const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
+  "list.len": ["list"],
+  "test.assert_equal": ["expected", "actual"],
+  assert: ["condition"],
+  "str.concat": ["left", "right"],
+  __negate: ["value"],
+  __not: ["value"],
+  "Log.debug": ["label", "payload"],
+  "Log.trace": ["label", "payload"],
+  "str.len": ["text"],
+  "str.slice": ["text", "start", "end"],
+  "str.at": ["text", "index"],
+  "math.abs": ["value"],
+  "math.min": ["left", "right"],
+  "math.max": ["left", "right"],
+  "list.map": ["list", "mapper"],
+  "list.filter": ["list", "predicate"],
+  "list.fold": ["list", "initial", "reducer"],
+  "json.encode": ["value"],
+  "json.decode": ["text"],
+};
+
+function getBuiltinParamNames(name: string): string[] {
+  const names = BUILTIN_PARAM_NAMES[name];
+  if (!names) {
+    throw new RuntimeError(`Internal error: missing parameter metadata for builtin '${name}'`);
+  }
+  return names;
+}
 
 export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json"): Runtime {
   const functions = new Map<string, ast.FnDecl>();
@@ -491,12 +522,101 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   }
 }
 
-function builtinLength(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("length expects exactly one argument");
+type BoundCallArguments = {
+  alignment: ReturnType<typeof alignCallArguments>;
+  values: Map<string, Value>;
+};
+
+function bindCallArguments(
+  expr: ast.CallExpr,
+  paramNames: string[],
+  env: Env,
+  runtime: Runtime,
+  options?: { skip?: Iterable<string> },
+): BoundCallArguments {
+  const alignment = alignCallArguments(expr, paramNames);
+  if (alignment.issues.length > 0) {
+    const message = describeCallArgIssue(expr.callee, alignment.issues[0]!);
+    throw new RuntimeError(message);
   }
-  const listArg = expr.args[0]!;
-  const listValue = evalExpr(listArg, env, runtime);
+
+  const skipSet = new Set(options?.skip ?? []);
+  const values = new Map<string, Value>();
+  const argToParam = new Map<ast.CallArg, string>();
+
+  alignment.ordered.forEach((arg, index) => {
+    if (arg) {
+      argToParam.set(arg, paramNames[index]!);
+    }
+  });
+
+  for (const arg of expr.args) {
+    const paramName = argToParam.get(arg);
+    if (!paramName) {
+      continue;
+    }
+    if (skipSet.has(paramName) || values.has(paramName)) {
+      continue;
+    }
+    values.set(paramName, evalExpr(arg.expr, env, runtime));
+  }
+
+  return { alignment, values };
+}
+
+function describeCallArgIssue(callee: string, issue: CallArgIssue): string {
+  switch (issue.kind) {
+    case "TooManyArguments":
+      return `Call to '${callee}' has too many arguments`;
+    case "UnknownParameter":
+      return `Call to '${callee}' has no parameter named '${issue.name}'`;
+    case "DuplicateParameter":
+      return `Parameter '${issue.name}' was provided multiple times when calling '${callee}'`;
+    case "MissingParameter":
+      return `Call to '${callee}' is missing an argument for parameter '${issue.name}'`;
+    case "PositionalAfterNamed":
+      return `Positional arguments must come before named arguments when calling '${callee}'`;
+    default:
+      return `Invalid arguments supplied to '${callee}'`;
+  }
+}
+
+function expectValue(values: Map<string, Value>, name: string, callee: string): Value {
+  const value = values.get(name);
+  if (value === undefined) {
+    throw new RuntimeError(`Call to '${callee}' is missing argument '${name}'`);
+  }
+  return value;
+}
+
+function getArgumentByName(
+  alignment: ReturnType<typeof alignCallArguments>,
+  paramNames: string[],
+  name: string,
+): ast.CallArg | null {
+  const index = paramNames.indexOf(name);
+  if (index === -1) {
+    return null;
+  }
+  return alignment.ordered[index] ?? null;
+}
+
+function resolveFunctionReference(name: string, runtime: Runtime, context: string): ast.FnDecl {
+  let resolvedName = name;
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    resolvedName = resolveIdentifier(name, runtime.module, runtime.symbolTable);
+  }
+  const fn = runtime.functions.get(resolvedName);
+  if (!fn) {
+    throw new RuntimeError(`Unknown function '${name}' in ${context}`);
+  }
+  return fn;
+}
+
+function builtinLength(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.len"), env, runtime);
+  const listValue = expectValue(values, "list", expr.callee);
   if (listValue.kind !== "List") {
     throw new RuntimeError("length expects a list argument");
   }
@@ -504,22 +624,18 @@ function builtinLength(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinAssertEqual(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("test.assert_equal expects exactly two arguments");
-  }
-  const left = evalExpr(expr.args[0]!, env, runtime);
-  const right = evalExpr(expr.args[1]!, env, runtime);
-  if (!valueEquals(left, right)) {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("test.assert_equal"), env, runtime);
+  const expected = expectValue(values, "expected", expr.callee);
+  const actual = expectValue(values, "actual", expr.callee);
+  if (!valueEquals(expected, actual)) {
     throw new RuntimeError("test.assert_equal failed");
   }
   return { kind: "Unit" };
 }
 
 function builtinAssert(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("assert expects exactly one argument");
-  }
-  const condition = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("assert"), env, runtime);
+  const condition = expectValue(values, "condition", expr.callee);
   if (condition.kind !== "Bool") {
     throw new RuntimeError("assert expects a boolean argument");
   }
@@ -530,26 +646,23 @@ function builtinAssert(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinStrConcat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("str_concat expects exactly two arguments");
-  }
-  const left = evalExpr(expr.args[0]!, env, runtime);
-  const right = evalExpr(expr.args[1]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.concat"), env, runtime);
+  const left = expectValue(values, "left", expr.callee);
+  const right = expectValue(values, "right", expr.callee);
   if (left.kind !== "String" || right.kind !== "String") {
-    throw new RuntimeError("str_concat expects two string arguments");
+    throw new RuntimeError("str.concat expects two string arguments");
   }
   return { kind: "String", value: left.value + right.value };
 }
 
 function builtinLog(level: "debug" | "trace", expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError(`Log.${level} expects exactly two arguments`);
-  }
-  const labelValue = evalExpr(expr.args[0]!, env, runtime);
+  const paramNames = getBuiltinParamNames(level === "debug" ? "Log.debug" : "Log.trace");
+  const { values } = bindCallArguments(expr, paramNames, env, runtime);
+  const labelValue = expectValue(values, "label", expr.callee);
+  const payloadValue = expectValue(values, "payload", expr.callee);
   if (labelValue.kind !== "String") {
     throw new RuntimeError(`Log.${level} expects the first argument to be a string label`);
   }
-  const payloadValue = evalExpr(expr.args[1]!, env, runtime);
   if (payloadValue.kind !== "Ctor") {
     throw new RuntimeError(`Log.${level} expects the payload to be a record value`);
   }
@@ -578,10 +691,8 @@ function builtinLog(level: "debug" | "trace", expr: ast.CallExpr, env: Env, runt
 }
 
 function builtinNegate(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("negation expects exactly one argument");
-  }
-  const value = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("__negate"), env, runtime);
+  const value = expectValue(values, "value", expr.callee);
   if (value.kind !== "Int") {
     throw new RuntimeError("negation expects an integer argument");
   }
@@ -589,10 +700,8 @@ function builtinNegate(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinNot(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("logical not expects exactly one argument");
-  }
-  const value = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("__not"), env, runtime);
+  const value = expectValue(values, "value", expr.callee);
   if (value.kind !== "Bool") {
     throw new RuntimeError("logical not expects a boolean argument");
   }
@@ -601,10 +710,8 @@ function builtinNot(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 
 // String operations
 function builtinStrLen(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("str.len expects exactly one argument");
-  }
-  const str = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.len"), env, runtime);
+  const str = expectValue(values, "text", expr.callee);
   if (str.kind !== "String") {
     throw new RuntimeError("str.len expects a string argument");
   }
@@ -612,12 +719,10 @@ function builtinStrLen(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinStrSlice(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 3) {
-    throw new RuntimeError("str.slice expects exactly three arguments");
-  }
-  const str = evalExpr(expr.args[0]!, env, runtime);
-  const start = evalExpr(expr.args[1]!, env, runtime);
-  const end = evalExpr(expr.args[2]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.slice"), env, runtime);
+  const str = expectValue(values, "text", expr.callee);
+  const start = expectValue(values, "start", expr.callee);
+  const end = expectValue(values, "end", expr.callee);
   
   if (str.kind !== "String") {
     throw new RuntimeError("str.slice expects a string as first argument");
@@ -630,11 +735,9 @@ function builtinStrSlice(expr: ast.CallExpr, env: Env, runtime: Runtime): Value 
 }
 
 function builtinStrAt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("str.at expects exactly two arguments");
-  }
-  const str = evalExpr(expr.args[0]!, env, runtime);
-  const index = evalExpr(expr.args[1]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.at"), env, runtime);
+  const str = expectValue(values, "text", expr.callee);
+  const index = expectValue(values, "index", expr.callee);
   
   if (str.kind !== "String") {
     throw new RuntimeError("str.at expects a string as first argument");
@@ -645,11 +748,9 @@ function builtinStrAt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   
   const idx = index.value;
   if (idx < 0 || idx >= str.value.length) {
-    // Return None
     return { kind: "Ctor", name: "None", fields: new Map() };
   }
   
-  // Return Some(char)
   const char = str.value.charAt(idx);
   const fields = new Map<string, Value>();
   fields.set("value", { kind: "String", value: char });
@@ -662,10 +763,8 @@ function builtinStrAt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 
 // Math operations
 function builtinMathAbs(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("math.abs expects exactly one argument");
-  }
-  const value = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("math.abs"), env, runtime);
+  const value = expectValue(values, "value", expr.callee);
   if (value.kind !== "Int") {
     throw new RuntimeError("math.abs expects an integer argument");
   }
@@ -673,11 +772,9 @@ function builtinMathAbs(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinMathMin(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("math.min expects exactly two arguments");
-  }
-  const left = evalExpr(expr.args[0]!, env, runtime);
-  const right = evalExpr(expr.args[1]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("math.min"), env, runtime);
+  const left = expectValue(values, "left", expr.callee);
+  const right = expectValue(values, "right", expr.callee);
   
   if (left.kind !== "Int" || right.kind !== "Int") {
     throw new RuntimeError("math.min expects integer arguments");
@@ -686,11 +783,9 @@ function builtinMathMin(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinMathMax(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("math.max expects exactly two arguments");
-  }
-  const left = evalExpr(expr.args[0]!, env, runtime);
-  const right = evalExpr(expr.args[1]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("math.max"), env, runtime);
+  const left = expectValue(values, "left", expr.callee);
+  const right = expectValue(values, "right", expr.callee);
   
   if (left.kind !== "Int" || right.kind !== "Int") {
     throw new RuntimeError("math.max expects integer arguments");
@@ -700,34 +795,20 @@ function builtinMathMax(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 
 // List operations
 function builtinListMap(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("list.map expects exactly two arguments");
-  }
-  const list = evalExpr(expr.args[0]!, env, runtime);
-  const fnArg = expr.args[1]!;
+  const paramNames = getBuiltinParamNames("list.map");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["mapper"] });
+  const list = expectValue(values, "list", expr.callee);
   
   if (list.kind !== "List") {
     throw new RuntimeError("list.map expects a list as first argument");
   }
   
-  // The function argument should be a variable name referencing a function
-  if (fnArg.kind !== "VarRef") {
+  const mapperArg = getArgumentByName(alignment, paramNames, "mapper");
+  if (!mapperArg || mapperArg.expr.kind !== "VarRef") {
     throw new RuntimeError("list.map expects a function as second argument");
   }
   
-  const fnName = fnArg.name;
-  let resolvedFnName = fnName;
-  
-  // Resolve identifier if we have a symbol table
-  if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
-    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
-  }
-  
-  const fn = runtime.functions.get(resolvedFnName);
-  if (!fn) {
-    throw new RuntimeError(`Unknown function '${fnName}' in list.map`);
-  }
+  const fn = resolveFunctionReference(mapperArg.expr.name, runtime, "list.map");
   if (fn.params.length !== 1) {
     throw new RuntimeError("list.map expects a function that takes exactly one argument");
   }
@@ -743,32 +824,20 @@ function builtinListMap(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function builtinListFilter(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 2) {
-    throw new RuntimeError("list.filter expects exactly two arguments");
-  }
-  const list = evalExpr(expr.args[0]!, env, runtime);
-  const fnArg = expr.args[1]!;
+  const paramNames = getBuiltinParamNames("list.filter");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["predicate"] });
+  const list = expectValue(values, "list", expr.callee);
   
   if (list.kind !== "List") {
     throw new RuntimeError("list.filter expects a list as first argument");
   }
   
-  if (fnArg.kind !== "VarRef") {
+  const predicateArg = getArgumentByName(alignment, paramNames, "predicate");
+  if (!predicateArg || predicateArg.expr.kind !== "VarRef") {
     throw new RuntimeError("list.filter expects a function as second argument");
   }
   
-  const fnName = fnArg.name;
-  let resolvedFnName = fnName;
-  
-  if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
-    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
-  }
-  
-  const fn = runtime.functions.get(resolvedFnName);
-  if (!fn) {
-    throw new RuntimeError(`Unknown function '${fnName}' in list.filter`);
-  }
+  const fn = resolveFunctionReference(predicateArg.expr.name, runtime, "list.filter");
   if (fn.params.length !== 1) {
     throw new RuntimeError("list.filter expects a function that takes exactly one argument");
   }
@@ -787,33 +856,21 @@ function builtinListFilter(expr: ast.CallExpr, env: Env, runtime: Runtime): Valu
 }
 
 function builtinListFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 3) {
-    throw new RuntimeError("list.fold expects exactly three arguments");
-  }
-  const list = evalExpr(expr.args[0]!, env, runtime);
-  const initial = evalExpr(expr.args[1]!, env, runtime);
-  const fnArg = expr.args[2]!;
+  const paramNames = getBuiltinParamNames("list.fold");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["reducer"] });
+  const list = expectValue(values, "list", expr.callee);
+  const initial = expectValue(values, "initial", expr.callee);
   
   if (list.kind !== "List") {
     throw new RuntimeError("list.fold expects a list as first argument");
   }
   
-  if (fnArg.kind !== "VarRef") {
+  const reducerArg = getArgumentByName(alignment, paramNames, "reducer");
+  if (!reducerArg || reducerArg.expr.kind !== "VarRef") {
     throw new RuntimeError("list.fold expects a function as third argument");
   }
   
-  const fnName = fnArg.name;
-  let resolvedFnName = fnName;
-  
-  if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
-    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
-  }
-  
-  const fn = runtime.functions.get(resolvedFnName);
-  if (!fn) {
-    throw new RuntimeError(`Unknown function '${fnName}' in list.fold`);
-  }
+  const fn = resolveFunctionReference(reducerArg.expr.name, runtime, "list.fold");
   if (fn.params.length !== 2) {
     throw new RuntimeError("list.fold expects a function that takes exactly two arguments");
   }
@@ -831,11 +888,8 @@ function builtinListFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value 
 }
 
 function builtinJsonEncode(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("json.encode expects exactly 1 argument");
-  }
-  
-  const value = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("json.encode"), env, runtime);
+  const value = expectValue(values, "value", expr.callee);
   const jsValue = valueToJsValue(value);
   const jsonString = JSON.stringify(jsValue);
   
@@ -843,11 +897,8 @@ function builtinJsonEncode(expr: ast.CallExpr, env: Env, runtime: Runtime): Valu
 }
 
 function builtinJsonDecode(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("json.decode expects exactly 1 argument");
-  }
-  
-  const jsonStringValue = evalExpr(expr.args[0]!, env, runtime);
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("json.decode"), env, runtime);
+  const jsonStringValue = expectValue(values, "text", expr.callee);
   if (jsonStringValue.kind !== "String") {
     throw new RuntimeError("json.decode expects a string argument");
   }
@@ -935,18 +986,13 @@ function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
   if (!fn) {
     throw new RuntimeError(`Unknown function '${expr.callee}'`);
   }
-  if (fn.params.length !== expr.args.length) {
-    throw new RuntimeError(
-      `Function '${expr.callee}' expects ${fn.params.length} arguments but received ${expr.args.length}`,
-    );
-  }
+  const paramNames = fn.params.map((param) => param.name);
+  const { values } = bindCallArguments(expr, paramNames, env, runtime);
 
   const callEnv: Env = new Map();
-  for (let i = 0; i < fn.params.length; i += 1) {
-    const param = fn.params[i]!;
-    const argExpr = expr.args[i]!;
-    const argValue = evalExpr(argExpr, env, runtime);
-    callEnv.set(param.name, argValue);
+  for (const param of fn.params) {
+    const value = expectValue(values, param.name, expr.callee);
+    callEnv.set(param.name, value);
   }
 
   const result = evalBlock(fn.body, callEnv, runtime);

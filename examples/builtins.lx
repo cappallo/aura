@@ -15,10 +15,12 @@ fn double(x: Int) -> Int {
 test builtin_tests {
   test.assert_equal(str.len("hello"), 5);
   test.assert_equal(str.len(""), 0);
+  test.assert_equal(str.len(text = "named"), 5);
   
   test.assert_equal(str.slice("hello", 0, 5), "hello");
   test.assert_equal(str.slice("hello", 1, 4), "ell");
   test.assert_equal(str.slice("hello", 0, 0), "");
+  test.assert_equal(str.slice(text = "named", start = 1, end = 4), "ame");
   
   test.assert_equal(math.abs(-5), 5);
   test.assert_equal(math.abs(7), 7);
@@ -27,21 +29,31 @@ test builtin_tests {
   test.assert_equal(math.max(3, 8), 8);
   test.assert_equal(math.min(-1, -5), -5);
   test.assert_equal(math.max(-1, -5), -1);
+  test.assert_equal(math.max(right = 3, left = -10), 3);
+  test.assert_equal(math.min(left = -2, right = 5), -2);
   
   let numbers = [1, 2, 3];
   let doubled = list.map(numbers, double);
   test.assert_equal(list.len(doubled), 3);
   test.assert_equal(doubled, [2, 4, 6]);
+  let named_map = list.map(mapper = double, list = numbers);
+  test.assert_equal(named_map, [2, 4, 6]);
   
   let mixed = [-2, -1, 0, 1, 2];
   let positives = list.filter(mixed, is_positive);
   test.assert_equal(list.len(positives), 2);
   test.assert_equal(positives, [1, 2]);
+  let named_filter = list.filter(predicate = is_positive, list = mixed);
+  test.assert_equal(named_filter, [1, 2]);
   
   let values = [1, 2, 3, 4, 5];
   let sum = list.fold(values, 0, add);
   test.assert_equal(sum, 15);
+  let named_sum = list.fold(list = values, reducer = add, initial = 0);
+  test.assert_equal(named_sum, 15);
   
   let empty_sum = list.fold([], 0, add);
   test.assert_equal(empty_sum, 0);
+  test.assert_equal(add(acc = 2, x = 3), 5);
+  test.assert_equal(add(1, x = 4), 5);
 }

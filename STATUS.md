@@ -152,7 +152,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
 - ❌ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
-- ❌ Named arguments (THOUGHTS.md §1.3)
+- ✅ Named arguments (THOUGHTS.md §1.3)
 - ⚠️ Deterministic execution mode (timestamps in logs, but no seedable RNG yet - THOUGHTS.md §5.1)
 
 ### 8. Advanced Features
@@ -294,7 +294,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [ ] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [ ] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
-- [ ] Add named arguments support (THOUGHTS.md §1.3)
+- [x] Add named arguments support (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
 **Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Both `lx format` and `lx explain` commands are fully functional in the CLI.
@@ -352,7 +352,6 @@ With the core language, schemas, and primary LLM tooling complete, the next prio
    - AST input format for direct LLM generation
    - Patch-based editing with stable symbol IDs
    - Holes/partial code support
-   - Named arguments
 2. **Actor Model** (Priority 8, Phase 4) - Begin CONCURRENCY.md implementation with typed actors
 3. **Refactor Operations** (SPEC.md §10.1) - Implement programmatic refactoring tools
 
@@ -398,10 +397,9 @@ lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with 
 
 ### Language Features
 4. **No REPL** - Must write files to test code
-5. **No named arguments** - Only positional parameters supported, violating "explicit parameter names everywhere" principle (THOUGHTS.md §1.3)
-6. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
-7. **Limited standard library** - Basic operations now available but could be expanded further
-8. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
+5. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+6. **Limited standard library** - Basic operations now available but could be expanded further
+7. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 
@@ -413,7 +411,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 |-------------------------|--------|-------|
 | **§1.1 Regular, low-context syntax** | ✅ Good | Simple keywords, explicit syntax, no clever shortcuts |
 | **§1.2 AST-first design** | ⚠️ Partial | Has AST but no JSON input format for LLMs |
-| **§1.3 Redundancy allowed** | 🟡 Mixed | Verbose keywords (✅), but no named arguments (❌) |
+| **§1.3 Redundancy allowed** | ✅ Good | Verbose keywords plus named arguments for every call |
 | **§2.1 Pure-by-default, explicit effects** | ✅ Good | Effect system implemented and enforced |
 | **§2.2 Strong, local, simple types** | ✅ Good | Full type inference with location-based errors, now with JSON output |
 | **§2.3 Total/defined behavior (no UB)** | ✅ Good | All operations defined or rejected statically |
@@ -431,7 +429,6 @@ This section tracks how well the implementation follows the LLM-first design phi
 **Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), and canonical formatting (§6.1) are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
 - AST input format for direct LLM code generation (§1.2)
 - Patch-based editing tooling with stable symbol IDs (§6.1)
-- Named arguments for explicit parameter passing (§1.3)
 - Holes/partial code support (§8)
 
 **Impact:** The language core is solid (~82% complete), and the LLM developer experience layer has made significant progress (~50% complete), bringing overall progress to ~65%. Structured error and log output, combined with property-based testing, execution tracing, and canonical formatting, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
