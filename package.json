@@ -1,0 +1,26 @@
+{
+  "name": "lx",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/cli.js",
+  "bin": {
+    "lx": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "npm run gen:parser && tsc && node scripts/copy-parser.cjs",
+    "gen:parser": "peggy --cache --format commonjs --output src/parser.generated.js grammar/lx.pegjs",
+    "prepare": "npm run build",
+    "test": "npm run build && node dist/cli.js test examples/median.lx"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "peggy": "^5.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

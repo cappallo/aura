@@ -1,0 +1,491 @@
+{
+	function foldList(head, tail, valueIndex) {
+		if (head === undefined || head === null) {
+			return [];
+		}
+		return [head, ...tail.map((part) => part[valueIndex])];
+	}
+
+	function foldBinary(head, tail) {
+		return tail.reduce(
+			(lhs, part) => ({
+				kind: "BinaryExpr",
+				op: part[1],
+				left: lhs,
+				right: part[3],
+			}),
+			head,
+		);
+	}
+}
+
+start
+	= WSAny* module:Module WSAny* { return module; }
+
+Module
+	= "module" __ name:ModuleName Terminator+ imports:Import* decls:TopLevelDecl* {
+			return {
+				kind: "Module",
+				name,
+				imports,
+				decls,
+			};
+		}
+
+ModuleName
+	= head:Ident tail:("." Ident)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+Import
+	= "import" __ name:ModuleName alias:Alias? Terminator+ {
+			return {
+				kind: "ImportDecl",
+				moduleName: name,
+				alias,
+			};
+		}
+
+Alias
+	= __ "as" __ alias:Ident { return alias; }
+
+TopLevelDecl
+	= BlockGap? decl:TopLevelDeclCore { return decl; }
+
+TopLevelDeclCore
+	= EffectDecl
+	/ TypeDecl
+	/ FnDecl
+	/ TestDecl
+
+EffectDecl
+	= "effect" __ name:Ident Terminator+ {
+			return {
+				kind: "EffectDecl",
+				name,
+			};
+		}
+
+TypeDecl
+	= "type" __ name:Ident params:TypeParams? __ "=" __ sum:SumType Terminator+ {
+			return {
+				kind: "SumTypeDecl",
+				name,
+				typeParams: params || [],
+				variants: sum,
+			};
+		}
+	/ "type" __ name:Ident params:TypeParams? __ "=" __ alias:TypeExpr Terminator+ {
+			return {
+				kind: "AliasTypeDecl",
+				name,
+				typeParams: params || [],
+				target: alias,
+			};
+		}
+		/ "type" __ name:Ident params:TypeParams? __ "{" BlockGap fields:FieldDeclList? BlockGap "}" Terminator+ {
+			return {
+				kind: "RecordTypeDecl",
+				name,
+				typeParams: params || [],
+				fields: fields || [],
+			};
+		}
+
+TypeParams
+	= "<" _ head:Ident tail:(_ "," _ Ident)* _ ">" {
+			return foldList(head, tail, 3);
+		}
+
+SumType
+	= first:Variant rest:(__ "|" __ Variant)+ {
+			return [first, ...rest.map((part) => part[3])];
+		}
+
+Variant
+	= name:CtorName __ "{" BlockGap fields:FieldDeclList? BlockGap "}" {
+			return { name, fields: fields || [] };
+		}
+	/ name:CtorName {
+			return { name, fields: [] };
+		}
+
+FieldDeclList
+	= head:Field tail:(FieldSeparator Field)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+FieldSeparator
+	= (NL)+
+	/ _ "," _
+
+Field
+	= name:Ident _ ":" _ type:TypeExpr {
+			return { name, type };
+		}
+
+FnDecl
+	= "fn" __ name:Ident typeParams:TypeParams? _ "(" _ params:ParamList? _ ")" __ returnSpec:ReturnSpec _ body:Block {
+			return {
+				kind: "FnDecl",
+				name,
+				typeParams: typeParams || [],
+				params: params || [],
+				returnType: returnSpec.type,
+				effects: returnSpec.effects,
+				body,
+			};
+		}
+
+ReturnSpec
+	= "->" __ "[" __ effects:EffectList __ "]" __ type:TypeExpr {
+			return { type, effects };
+		}
+	/ "->" __ type:TypeExpr {
+			return { type, effects: [] };
+		}
+
+EffectList
+	= head:Ident tail:(__ "," __ Ident)* {
+			return foldList(head, tail, 3);
+		}
+
+ParamList
+	= head:Param tail:(__ "," __ Param)* {
+			return foldList(head, tail, 3);
+		}
+
+Param
+	= name:Ident _ ":" _ type:TypeExpr {
+			return { name, type };
+		}
+
+TestDecl
+	= "test" __ name:Ident _ body:Block {
+			return {
+				kind: "TestDecl",
+				name,
+				body,
+			};
+		}
+
+Block
+	= "{" BlockGap stmts:StmtList? BlockGap "}" {
+			return {
+				kind: "Block",
+				stmts: stmts || [],
+			};
+		}
+
+StmtList
+	= head:Stmt tail:((NL)* Stmt)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+Stmt
+	= LetStmt
+	/ ReturnStmt
+	/ MatchStmt
+	/ ExprStmt
+
+LetStmt
+	= "let" __ name:Ident __ "=" __ expr:Expr Terminator+ {
+			return {
+				kind: "LetStmt",
+				name,
+				expr,
+			};
+		}
+
+ReturnStmt
+	= "return" __ expr:Expr Terminator+ {
+			return {
+				kind: "ReturnStmt",
+				expr,
+			};
+		}
+
+ExprStmt
+	= expr:Expr Terminator+ {
+			return {
+				kind: "ExprStmt",
+				expr,
+			};
+		}
+
+MatchStmt
+	= "match" __ scrutinee:Expr __ "{" BlockGap cases:MatchCase* BlockGap "}" Terminator* {
+			return {
+				kind: "MatchStmt",
+				scrutinee,
+				cases,
+			};
+		}
+
+MatchCase
+	= "case" __ pattern:Pattern __ "=>" _ body:Block Terminator* {
+			return {
+				pattern,
+				body,
+			};
+		}
+
+Pattern
+	= "_" { return { kind: "WildcardPattern" }; }
+	/ ctor:CtorName __ "{" __ fields:PatternFieldList? __ "}" {
+			return {
+				kind: "CtorPattern",
+				ctorName: ctor,
+				fields: fields || [],
+			};
+		}
+	/ ctor:CtorName {
+			return {
+				kind: "CtorPattern",
+				ctorName: ctor,
+				fields: [],
+			};
+		}
+	/ name:Ident {
+			return {
+				kind: "VarPattern",
+				name,
+			};
+		}
+
+PatternFieldList
+	= head:PatternField tail:(__ "," __ PatternField)* {
+			return foldList(head, tail, 3);
+		}
+
+PatternField
+	= name:Ident _ ":" _ pattern:Pattern {
+			return { name, pattern };
+		}
+	/ name:Ident {
+			return { name, pattern: { kind: "VarPattern", name } };
+		}
+
+Expr
+	= IfExpr
+	/ LogicOrExpr
+
+IfExpr
+	= "if" __ cond:Expr __ thenBlock:Block elsePart:ElseClause? {
+			return {
+				kind: "IfExpr",
+				cond,
+				thenBranch: thenBlock,
+				elseBranch: elsePart || undefined,
+			};
+		}
+
+ElseClause
+	= __? "else" __ block:Block { return block; }
+
+LogicOrExpr
+	= head:LogicAndExpr tail:(__ "||" __ LogicAndExpr)* { return foldBinary(head, tail); }
+
+LogicAndExpr
+	= head:EqualityExpr tail:(__ "&&" __ EqualityExpr)* { return foldBinary(head, tail); }
+
+EqualityExpr
+	= head:RelationalExpr tail:(__ ("==" / "!=") __ RelationalExpr)* { return foldBinary(head, tail); }
+
+RelationalExpr
+	= head:AdditiveExpr tail:(__ ("<" / "<=" / ">" / ">=") __ AdditiveExpr)* { return foldBinary(head, tail); }
+
+AdditiveExpr
+	= head:MultiplicativeExpr tail:(__ ("+" / "-") __ MultiplicativeExpr)* { return foldBinary(head, tail); }
+
+MultiplicativeExpr
+	= head:UnaryExpr tail:(__ ("*" / "/") __ UnaryExpr)* { return foldBinary(head, tail); }
+
+UnaryExpr
+	= op:("-" / "!") __ expr:UnaryExpr {
+			return {
+				kind: "CallExpr",
+				callee: op === "-" ? "__negate" : "__not",
+				args: [expr],
+			};
+		}
+	/ PrimaryExpr
+
+PrimaryExpr
+	= base:BaseExpr tail:PostfixSegment* {
+			return tail.reduce(
+				(target, segment) => {
+					if (segment.kind === "field") {
+						return {
+							kind: "FieldAccessExpr",
+							target,
+							field: segment.field,
+						};
+					}
+					return {
+						kind: "IndexExpr",
+						target,
+						index: segment.index,
+					};
+				},
+				base,
+			);
+		}
+
+PostfixSegment
+	= "." field:Ident { return { kind: "field", field }; }
+	/ "[" _ index:Expr _ "]" { return { kind: "index", index }; }
+
+BaseExpr
+	= ListLiteral
+	/ RecordLiteral
+	/ CallExpr
+	/ IntLiteral
+	/ StringLiteral
+	/ BoolLiteral
+	/ VarExpr
+	/ ParenthesizedExpr
+
+ListLiteral
+	= "[" _ elements:ExprList? _ "]" {
+			return {
+				kind: "ListLiteral",
+				elements: elements || [],
+			};
+		}
+
+ExprList
+	= head:Expr tail:(_ "," _ Expr)* {
+			return foldList(head, tail, 3);
+		}
+
+RecordLiteral
+	= name:CtorName __ "{" BlockGap fields:RecordFieldList? BlockGap "}" {
+			return {
+				kind: "RecordExpr",
+				typeName: name,
+				fields: fields || [],
+			};
+		}
+
+RecordFieldList
+	= head:RecordField tail:(RecordFieldSeparator RecordField)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+RecordFieldSeparator
+	= (NL)+
+	/ _ "," _
+
+RecordField
+	= name:Ident _ ":" _ expr:Expr {
+			return { name, expr };
+		}
+
+CallExpr
+	= callee:Ident _ "(" _ args:ExprList? _ ")" {
+			return {
+				kind: "CallExpr",
+				callee,
+				args: args || [],
+			};
+		}
+
+IntLiteral
+	= value:Integer {
+			return {
+				kind: "IntLiteral",
+				value: parseInt(value, 10),
+			};
+		}
+
+StringLiteral
+	= '"' chars:DoubleStringCharacter* '"' {
+			return {
+				kind: "StringLiteral",
+				value: chars.join(""),
+			};
+		}
+
+DoubleStringCharacter
+	= !('"' / "\\") char:. { return char; }
+	/ "\\" esc:("\\" / '"' / "n" / "t") {
+			switch (esc) {
+				case "n":
+					return "\n";
+				case "t":
+					return "\t";
+				case "\\":
+					return "\\";
+				case '"':
+					return '"';
+				default:
+					return esc;
+			}
+		}
+
+BoolLiteral
+	= "true" { return { kind: "BoolLiteral", value: true }; }
+	/ "false" { return { kind: "BoolLiteral", value: false }; }
+
+VarExpr
+	= name:Ident {
+			return {
+				kind: "VarRef",
+				name,
+			};
+		}
+
+ParenthesizedExpr
+	= "(" _ expr:Expr _ ")" { return expr; }
+
+TypeExpr
+	= base:TypePrimary optional:("?" { return true; })? {
+			if (optional) {
+				return { kind: "OptionalType", inner: base };
+			}
+			return base;
+		}
+
+TypePrimary
+	= name:Ident typeArgs:TypeArgList? {
+			return { kind: "TypeName", name, typeArgs: typeArgs || [] };
+		}
+	/ "(" __ type:TypeExpr __ ")" { return type; }
+
+TypeArgList
+	= "<" _ head:TypeExpr tail:(_ "," _ TypeExpr)* _ ">" {
+			return foldList(head, tail, 3);
+		}
+
+BlockGap
+	= GapUnit*
+
+GapUnit
+	= NL
+	/ [ \t]+
+
+Integer
+	= digits:[0-9]+ { return digits.join(""); }
+
+Ident
+	= $([a-zA-Z_][a-zA-Z0-9_]*)
+
+CtorName
+	= $([A-Z][a-zA-Z0-9_]*)
+
+NL
+	= [\n\r]+
+
+_
+	= [ \t]*
+
+__
+	= [ \t]+
+
+WSAny
+	= [ \t\n\r]
+
+Terminator
+	= _? ";" _?
+	/ _? (NL)+ _?

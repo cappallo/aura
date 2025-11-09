@@ -1,0 +1,26 @@
+node_modules/
+dist/
+src/parser.generated.js
+
+# IDE and OS artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Test outputs
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
