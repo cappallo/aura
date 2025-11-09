@@ -10,7 +10,7 @@
     "build": "npm run gen:parser && tsc && node scripts/copy-parser.cjs",
     "gen:parser": "peggy --cache --format commonjs --output src/parser.generated.js grammar/lx.pegjs",
     "prepare": "npm run build",
-    "test": "npm run build && node dist/cli.js test examples/median.lx"
+  "test": "npm run build && node dist/cli.js test examples/median.lx && node dist/cli.js test examples/logging.lx"
   },
   "keywords": [],
   "author": "",

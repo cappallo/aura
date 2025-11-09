@@ -7,7 +7,7 @@ type Stats {
 }
 
 fn median(list: List<Int>) -> Int {
-  let n = length(list)
+  let n = list.len(list)
   if n == 0 {
     return 0
   }

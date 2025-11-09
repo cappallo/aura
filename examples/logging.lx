@@ -1,0 +1,13 @@
+module app.logging
+
+effect Log
+
+fn greet_with_log(name: String) -> [Log] String {
+  Log.debug(str.concat("Greeting ", name))
+  return str.concat("Hello, ", name)
+}
+
+test logging_examples {
+  let message = greet_with_log("Ada")
+  assert_equal(message, "Hello, Ada")
+}

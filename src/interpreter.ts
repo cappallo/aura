@@ -270,10 +270,14 @@ function binaryBoolOp(left: Value, right: Value, op: (a: boolean, b: boolean) =>
 
 function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   switch (expr.callee) {
-    case "length":
+    case "list.len":
       return builtinLength(expr, env, runtime);
     case "assert_equal":
       return builtinAssertEqual(expr, env, runtime);
+    case "str.concat":
+      return builtinStrConcat(expr, env, runtime);
+    case "Log.debug":
+      return builtinLogDebug(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -304,6 +308,32 @@ function builtinAssertEqual(expr: ast.CallExpr, env: Env, runtime: Runtime): Val
   if (!valueEquals(left, right)) {
     throw new RuntimeError("assert_equal failed");
   }
+  return { kind: "Unit" };
+}
+
+function builtinStrConcat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("str_concat expects exactly two arguments");
+  }
+  const left = evalExpr(expr.args[0]!, env, runtime);
+  const right = evalExpr(expr.args[1]!, env, runtime);
+  if (left.kind !== "String" || right.kind !== "String") {
+    throw new RuntimeError("str_concat expects two string arguments");
+  }
+  return { kind: "String", value: left.value + right.value };
+}
+
+function builtinLogDebug(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("Log.debug expects exactly one argument");
+  }
+  const message = evalExpr(expr.args[0]!, env, runtime);
+  if (message.kind !== "String") {
+    throw new RuntimeError("Log.debug expects a string message");
+  }
+  // Keep logging behavior intentionally simple; structured logging can evolve later.
+  // eslint-disable-next-line no-console
+  console.log(`[Log.debug] ${message.value}`);
   return { kind: "Unit" };
 }
 

@@ -1,0 +1,9 @@
+module app.simple_concat
+
+fn concat_test(a: String, b: String) -> String {
+  return str.concat(a, b)
+}
+
+test simple {
+  assert_equal(concat_test("Hello", "World"), "HelloWorld")
+}

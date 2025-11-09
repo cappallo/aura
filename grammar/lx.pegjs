@@ -138,20 +138,20 @@ FnDecl
 		}
 
 ReturnSpec
-	= "->" __ "[" __ effects:EffectList __ "]" __ type:TypeExpr {
-			return { type, effects };
+	= "->" __ "[" _ effects:EffectList _ "]" __ type:TypeExpr {
+            return { type, effects };
 		}
 	/ "->" __ type:TypeExpr {
 			return { type, effects: [] };
 		}
 
 EffectList
-	= head:Ident tail:(__ "," __ Ident)* {
-			return foldList(head, tail, 3);
+	= head:Ident tail:(_ "," _ Ident)* {
+            return foldList(head, tail, 3);
 		}
 
 ParamList
-	= head:Param tail:(__ "," __ Param)* {
+	= head:Param tail:(_ "," _ Param)* {
 			return foldList(head, tail, 3);
 		}
 
@@ -287,7 +287,10 @@ LogicOrExpr
 	= head:LogicAndExpr tail:(__ "||" __ LogicAndExpr)* { return foldBinary(head, tail); }
 
 LogicAndExpr
-	= head:EqualityExpr tail:(__ "&&" __ EqualityExpr)* { return foldBinary(head, tail); }
+	= head:ConcatExpr tail:(__ "&&" __ ConcatExpr)* { return foldBinary(head, tail); }
+
+ConcatExpr
+	= head:EqualityExpr tail:(__ "++" __ EqualityExpr)* { return foldBinary(head, tail); }
 
 EqualityExpr
 	= head:RelationalExpr tail:(__ ("==" / "!=") __ RelationalExpr)* { return foldBinary(head, tail); }
@@ -383,7 +386,7 @@ RecordField
 		}
 
 CallExpr
-	= callee:Ident _ "(" _ args:ExprList? _ ")" {
+	= callee:QualifiedIdent _ "(" _ args:ExprList? _ ")" {
 			return {
 				kind: "CallExpr",
 				callee,
@@ -470,6 +473,14 @@ Integer
 
 Ident
 	= $([a-zA-Z_][a-zA-Z0-9_]*)
+
+QualifiedIdent
+	= head:Ident tail:("." Ident)* {
+			if (tail.length === 0) {
+				return head;
+			}
+			return [head, ...tail.map((part) => part[1])].join(".");
+		}
 
 CtorName
 	= $([A-Z][a-zA-Z0-9_]*)

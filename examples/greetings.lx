@@ -1,0 +1,29 @@
+module app.greetings
+
+type Greeting {
+  message: String
+}
+
+fn greet(name: String) -> String {
+  let hello = str.concat("Hello, ", name)
+  return str.concat(hello, "!")
+}
+
+fn formal_greeting(title: String, lastName: String) -> Greeting {
+  let msg = str.concat(title, str.concat(" ", lastName))
+  return Greeting { message: msg }
+}
+
+fn shout(text: String) -> String {
+  return str.concat(text, "!!!")
+}
+
+test greeting_tests {
+  assert_equal(greet("Alice"), "Hello, Alice!")
+  assert_equal(greet("Bob"), "Hello, Bob!")
+  
+  let g = formal_greeting("Dr", "Smith")
+  assert_equal(g.message, "Dr Smith")
+  
+  assert_equal(shout("Hey"), "Hey!!!")
+}
