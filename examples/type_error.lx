@@ -1,0 +1,7 @@
+module examples.type_error
+
+fn bad_return(x: Int) -> Int {
+  let message = str.concat("value:", "oops")
+  return message
+}
+

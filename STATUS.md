@@ -162,13 +162,13 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 ### **Priority 2: Full Type Checking (§4)**
 **Status:** 🟡 Partial - only arity/effect checking  
 **Goal:** Implement Hindley-Milner type inference with ADTs
-- [ ] Add type environment to typechecker
-- [ ] Implement unification algorithm
-- [ ] Infer types for let-bound variables
-- [ ] Check function return types match declarations
-- [ ] Validate constructor field types
+- [x] Add type environment to typechecker
+- [x] Implement unification algorithm
+- [x] Infer types for let-bound variables
+- [x] Check function return types match declarations
+- [x] Validate constructor field types
 - [ ] Add proper type error messages with locations
-- [ ] Test with examples that should fail type checking
+- [x] Test with examples that should fail type checking
 
 **Why second:** Critical for catching bugs; enables more sophisticated features.
 

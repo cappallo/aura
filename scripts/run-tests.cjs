@@ -29,3 +29,9 @@ runExpectFailure(
   "node",
   [cliPath, "run", "examples/contracts.lx", "app.contracts.clamp", "0", "5", "3"],
 );
+
+runExpectFailure(
+  "Expected type checker failure for incorrect return type",
+  "node",
+  [cliPath, "check", "examples/type_error.lx"],
+);
