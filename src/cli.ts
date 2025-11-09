@@ -100,13 +100,25 @@ function handleCheck(args: string[]) {
   console.log("Typecheck succeeded");
 }
 
+function formatError(error: import("./typecheck").TypeCheckError): string {
+  let msg = "Type error: ";
+  if (error.filePath) {
+    msg += `${error.filePath}:`;
+  }
+  if (error.loc) {
+    msg += `${error.loc.start.line}:${error.loc.start.column}: `;
+  }
+  msg += error.message;
+  return msg;
+}
+
 function loadModule(filePath: string) {
   const absolutePath = path.resolve(process.cwd(), filePath);
   const module = parseModuleFromFile(absolutePath);
   const errors = typecheckModule(module);
   if (errors.length > 0) {
     for (const error of errors) {
-      console.error(`Type error: ${error.message}`);
+      console.error(formatError(error));
     }
     process.exit(1);
   }
@@ -129,7 +141,7 @@ function loadModuleWithDependencies(filePath: string): LoadResult {
     const errors = typecheckModule(module);
     if (errors.length > 0) {
       for (const error of errors) {
-        console.error(`Type error: ${error.message}`);
+        console.error(formatError(error));
       }
       process.exit(1);
     }
@@ -143,7 +155,7 @@ function loadModuleWithDependencies(filePath: string): LoadResult {
   
   if (errors.length > 0) {
     for (const error of errors) {
-      console.error(`Type error: ${error.message}`);
+      console.error(formatError(error));
     }
     process.exit(1);
   }

@@ -13,6 +13,7 @@
 				op: part[1],
 				left: lhs,
 				right: part[3],
+				loc: lhs.loc || undefined,
 			}),
 			head,
 		);
@@ -227,6 +228,7 @@ LetStmt
 				kind: "LetStmt",
 				name,
 				expr,
+				loc: location(),
 			};
 		}
 
@@ -235,6 +237,7 @@ ReturnStmt
 			return {
 				kind: "ReturnStmt",
 				expr,
+				loc: location(),
 			};
 		}
 
@@ -243,6 +246,7 @@ ExprStmt
 			return {
 				kind: "ExprStmt",
 				expr,
+				loc: location(),
 			};
 		}
 
@@ -310,6 +314,7 @@ IfExpr
 				cond,
 				thenBranch: thenBlock,
 				elseBranch: elsePart || undefined,
+				loc: location(),
 			};
 		}
 
@@ -343,6 +348,7 @@ UnaryExpr
 				kind: "CallExpr",
 				callee: op === "-" ? "__negate" : "__not",
 				args: [expr],
+				loc: location(),
 			};
 		}
 	/ PrimaryExpr
@@ -356,12 +362,14 @@ PrimaryExpr
 							kind: "FieldAccessExpr",
 							target,
 							field: segment.field,
+							loc: target.loc,
 						};
 					}
 					return {
 						kind: "IndexExpr",
 						target,
 						index: segment.index,
+						loc: target.loc,
 					};
 				},
 				base,
@@ -387,6 +395,7 @@ ListLiteral
 			return {
 				kind: "ListLiteral",
 				elements: elements || [],
+				loc: location(),
 			};
 		}
 
@@ -401,6 +410,7 @@ RecordLiteral
 				kind: "RecordExpr",
 				typeName: name,
 				fields: fields || [],
+				loc: location(),
 			};
 		}
 
@@ -425,14 +435,16 @@ CallExpr
 				kind: "CallExpr",
 				callee,
 				args: args || [],
+				loc: location(),
 			};
 		}
 
 IntLiteral
-	= value:Integer {
+	= digits:Integer {
 			return {
 				kind: "IntLiteral",
-				value: parseInt(value, 10),
+				value: parseInt(digits, 10),
+				loc: location(),
 			};
 		}
 
@@ -441,6 +453,7 @@ StringLiteral
 			return {
 				kind: "StringLiteral",
 				value: chars.join(""),
+				loc: location(),
 			};
 		}
 
@@ -462,14 +475,15 @@ DoubleStringCharacter
 		}
 
 BoolLiteral
-	= "true" { return { kind: "BoolLiteral", value: true }; }
-	/ "false" { return { kind: "BoolLiteral", value: false }; }
+	= "true" { return { kind: "BoolLiteral", value: true, loc: location() }; }
+	/ "false" { return { kind: "BoolLiteral", value: false, loc: location() }; }
 
 VarExpr
 	= name:Ident {
 			return {
 				kind: "VarRef",
 				name,
+				loc: location(),
 			};
 		}
 

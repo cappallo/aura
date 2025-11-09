@@ -1,0 +1,9 @@
+module examples.test_location_error
+
+fn use_unknown_var() -> Int {
+  return unknown_variable
+}
+
+fn call_bad_function() -> Int {
+  return str.concat("foo", "bar")
+}

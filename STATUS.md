@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~35% (Core v0.1 + Module Resolution)
+**Overall Progress:** ~40% (Core v0.1 + Module Resolution + Type Inference)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -23,6 +23,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Pattern matching**: Full support with exhaustiveness checking
 - ✅ **Effect declarations**: `effect` keyword parsed and tracked
 - ✅ **Effect checking**: Functions declare effects (`[Db, Log]`), typechecker enforces subset rules
+- ✅ **Type inference**: Full Hindley-Milner type inference with unification algorithm
+- ✅ **Error locations**: Type errors include exact line and column numbers with file paths
 
 ### 3. Functions & Expressions
 - ✅ Pure functions with explicit signatures
@@ -59,8 +61,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## ⚠️ Partially Implemented
 
 ### Type System
-- ⚠️ **Type inference**: Only local within expressions; no Hindley-Milner inference yet
-- ⚠️ **Type checking**: Arity and effect checking only; no actual type unification or type mismatch detection
+- ✅ **Type inference**: Full Hindley-Milner type inference with unification
+- ✅ **Type checking**: Complete type checking with detailed error messages and source locations
 
 ### Contracts
 - ⚠️ **Contract language**: Pure expressions supported, but no SMT solving or static verification (runtime only)
@@ -121,7 +123,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §3.2 | Modules & imports | ✅ Complete |
 | §3.3 | Types (Product/Sum/Alias) | ✅ Complete |
 | §3.4 | Functions & effects | ✅ Complete |
-| §4 | Type system | 🟡 Basics only |
+| §4 | Type system | ✅ Complete |
 | §5 | Effect system | 🟡 Declarations + checking, no polymorphism |
 | §6 | Actors | ❌ Not started |
 | §7.1-7.2 | Contracts | 🟡 Runtime only |
@@ -160,17 +162,17 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Completed:** Module system is now fully functional with support for cross-module references!
 
 ### **Priority 2: Full Type Checking (§4)**
-**Status:** 🟡 Partial - only arity/effect checking  
+**Status:** ✅ Complete  
 **Goal:** Implement Hindley-Milner type inference with ADTs
 - [x] Add type environment to typechecker
 - [x] Implement unification algorithm
 - [x] Infer types for let-bound variables
 - [x] Check function return types match declarations
 - [x] Validate constructor field types
-- [ ] Add proper type error messages with locations
+- [x] Add proper type error messages with locations
 - [x] Test with examples that should fail type checking
 
-**Why second:** Critical for catching bugs; enables more sophisticated features.
+**Completed:** Full type inference with Hindley-Milner algorithm is now working, with detailed error messages showing exact source locations!
 
 ### **Priority 3: Property-Based Tests (§7.4)**
 **Status:** 🔴 Not started  
@@ -208,11 +210,11 @@ Phase 1 (Current): Core v0.1 ✅
 ├─ Tests and contracts (runtime)
 └─ CLI infrastructure
 
-Phase 2 (Current): Foundations 🔄
+Phase 2 (Current): Foundations ✅
 ├─ Module resolution → ✅ Complete
-├─ Full type inference → Priority 2 (NEXT)
-├─ Better error messages
-└─ Standard library expansion
+├─ Full type inference → ✅ Complete
+├─ Better error messages → ✅ Complete
+└─ Standard library expansion → In Progress
 
 Phase 3 (Near-term): Testing & I/O
 ├─ Property-based tests → Priority 3
@@ -263,10 +265,9 @@ lx check <file.lx>                        # Type check only
 
 ## 🐛 Known Issues
 
-1. **Type checking** is minimal - many type errors only caught at runtime
-2. **Error messages** lack source location information
-3. **No REPL** - must write files to test code
-4. **Limited builtins** - many basic operations missing (string manipulation, math functions, etc.)
+1. **No REPL** - must write files to test code
+2. **Limited builtins** - many basic operations missing (string manipulation, math functions, etc.)
+3. **No standard library** - only a handful of built-in functions available
 
 ---
 

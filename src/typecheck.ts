@@ -4,6 +4,8 @@ import { resolveIdentifier } from "./loader";
 
 export type TypeCheckError = {
   message: string;
+  loc?: ast.SourceLocation;
+  filePath?: string;
 };
 
 type FnSignature = {
@@ -103,7 +105,19 @@ type InferState = {
   ctx: TypecheckContext;
   currentFunction: ast.FnDecl;
   expectedReturnType: Type;
+  currentFilePath?: string;
 };
+
+function makeError(message: string, loc?: ast.SourceLocation, filePath?: string): TypeCheckError {
+  const error: TypeCheckError = { message };
+  if (loc !== undefined) error.loc = loc;
+  if (filePath !== undefined) error.filePath = filePath;
+  return error;
+}
+
+function formatLocation(loc: ast.SourceLocation): string {
+  return `line ${loc.start.line}, column ${loc.start.column}`;
+}
 
 const INT_TYPE: TypeConstructor = { kind: "Constructor", name: "Int", args: [] };
 const BOOL_TYPE: TypeConstructor = { kind: "Constructor", name: "Bool", args: [] };
@@ -304,6 +318,7 @@ export function typecheckModules(
 
   for (const resolvedModule of modules) {
     const module = resolvedModule.ast;
+    const filePath = resolvedModule.filePath;
     const modulePrefix = module.name.join(".");
     const typeInfo = moduleTypeCache.get(module);
     const moduleFunctions = new Map(globalFunctions);
@@ -359,7 +374,7 @@ export function typecheckModules(
 
     for (const decl of module.decls) {
       if (decl.kind === "FnDecl") {
-        checkFunction(decl, ctx, errors);
+        checkFunction(decl, ctx, errors, filePath);
       }
     }
 
@@ -494,18 +509,18 @@ function collectModuleTypeInfo(module: ast.Module): IndexedTypeInfo {
   };
 }
 
-function checkFunction(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[]) {
-  verifyDeclaredEffects(fn, ctx, errors);
-  typeCheckFunctionBody(fn, ctx, errors);
+function checkFunction(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string) {
+  verifyDeclaredEffects(fn, ctx, errors, filePath);
+  typeCheckFunctionBody(fn, ctx, errors, filePath);
 }
 
-function verifyDeclaredEffects(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[]) {
+function verifyDeclaredEffects(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string) {
   if (fn.effects.length === 0) {
     return;
   }
   for (const effect of fn.effects) {
     if (!ctx.declaredEffects.has(effect)) {
-      errors.push({ message: `Function '${fn.name}' declares unknown effect '${effect}'` });
+      errors.push(makeError(`Function '${fn.name}' declares unknown effect '${effect}'`, undefined, filePath));
     }
   }
 }
@@ -526,7 +541,7 @@ type BlockOptions = {
   cloneEnv?: boolean;
 };
 
-function typeCheckFunctionBody(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[]): void {
+function typeCheckFunctionBody(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string): void {
   const state: InferState = {
     nextTypeVarId: 0,
     substitutions: new Map(),
@@ -535,6 +550,9 @@ function typeCheckFunctionBody(fn: ast.FnDecl, ctx: TypecheckContext, errors: Ty
     currentFunction: fn,
     expectedReturnType: UNIT_TYPE,
   };
+  if (filePath !== undefined) {
+    state.currentFilePath = filePath;
+  }
 
   const typeParamScope = new Map<string, Type>();
   for (const paramName of fn.typeParams) {
@@ -618,7 +636,7 @@ function inferStmt(
     }
     case "ReturnStmt": {
       const exprType = inferExpr(stmt.expr, env, state);
-      unify(exprType, expectedReturnType, state, `Return type mismatch in function '${state.currentFunction.name}'`);
+      unify(exprType, expectedReturnType, state, `Return type mismatch in function '${state.currentFunction.name}'`, stmt.loc);
       return { valueType: exprType, returned: true };
     }
     case "ExprStmt": {
@@ -693,9 +711,11 @@ function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
     case "VarRef": {
       const binding = env.get(expr.name);
       if (!binding) {
-        state.errors.push({
-          message: `Unknown variable '${expr.name}' in function '${state.currentFunction.name}'`,
-        });
+        state.errors.push(makeError(
+          `Unknown variable '${expr.name}' in function '${state.currentFunction.name}'`,
+          expr.loc,
+          state.currentFilePath
+        ));
         return freshTypeVar(expr.name, false, state);
       }
       return applySubstitution(binding, state);
@@ -792,6 +812,7 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
         expectedParam,
         state,
         `Argument ${index + 1} of builtin '${expr.callee}' has incompatible type`,
+        arg.loc,
       );
     });
     return applySubstitution(instantiated.returnType, state);
@@ -805,14 +826,16 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
 
   const signature = ctx.functions.get(resolvedName) ?? ctx.functions.get(expr.callee);
   if (!signature) {
-    state.errors.push({ message: `Unknown function '${expr.callee}'` });
+    state.errors.push(makeError(`Unknown function '${expr.callee}'`, expr.loc, state.currentFilePath));
     return freshTypeVar("UnknownCall", false, state);
   }
 
   if (signature.paramCount !== expr.args.length) {
-    state.errors.push({
-      message: `Function '${expr.callee}' expects ${signature.paramCount} arguments but got ${expr.args.length}`,
-    });
+    state.errors.push(makeError(
+      `Function '${expr.callee}' expects ${signature.paramCount} arguments but got ${expr.args.length}`,
+      expr.loc,
+      state.currentFilePath
+    ));
   }
 
   verifyEffectSubset(signature.effects, state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
@@ -832,6 +855,7 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
       expectedParam,
       state,
       `Argument ${i + 1} of function '${expr.callee}' has incompatible type`,
+      argExpr.loc,
     );
   }
 
@@ -1285,7 +1309,7 @@ function occursInType(typeVar: TypeVar, type: Type, state: InferState): boolean 
   return false;
 }
 
-function unify(left: Type, right: Type, state: InferState, context?: string): void {
+function unify(left: Type, right: Type, state: InferState, context?: string, loc?: ast.SourceLocation): void {
   const a = prune(left, state);
   const b = prune(right, state);
 
@@ -1298,11 +1322,11 @@ function unify(left: Type, right: Type, state: InferState, context?: string): vo
       return;
     }
     if (a.rigid) {
-      reportUnificationError(a, b, state, context ?? "Cannot unify rigid type variable");
+      reportUnificationError(a, b, state, context ?? "Cannot unify rigid type variable", loc);
       return;
     }
     if (occursInType(a, b, state)) {
-      reportUnificationError(a, b, state, context ?? "Occurs check failed");
+      reportUnificationError(a, b, state, context ?? "Occurs check failed", loc);
       return;
     }
     state.substitutions.set(a.id, b);
@@ -1310,40 +1334,40 @@ function unify(left: Type, right: Type, state: InferState, context?: string): vo
   }
 
   if (b.kind === "Var") {
-    unify(b, a, state, context);
+    unify(b, a, state, context, loc);
     return;
   }
 
   if (a.kind === "Constructor" && b.kind === "Constructor") {
     if (a.name !== b.name || a.args.length !== b.args.length) {
-      reportUnificationError(a, b, state, context ?? "Type constructor mismatch");
+      reportUnificationError(a, b, state, context ?? "Type constructor mismatch", loc);
       return;
     }
     for (let i = 0; i < a.args.length; i += 1) {
-      unify(a.args[i]!, b.args[i]!, state, context);
+      unify(a.args[i]!, b.args[i]!, state, context, loc);
     }
     return;
   }
 
   if (a.kind === "Function" && b.kind === "Function") {
     if (a.params.length !== b.params.length) {
-      reportUnificationError(a, b, state, context ?? "Function arity mismatch");
+      reportUnificationError(a, b, state, context ?? "Function arity mismatch", loc);
       return;
     }
     for (let i = 0; i < a.params.length; i += 1) {
-      unify(a.params[i]!, b.params[i]!, state, context);
+      unify(a.params[i]!, b.params[i]!, state, context, loc);
     }
-    unify(a.returnType, b.returnType, state, context);
+    unify(a.returnType, b.returnType, state, context, loc);
     return;
   }
 
-  reportUnificationError(a, b, state, context ?? "Type mismatch");
+  reportUnificationError(a, b, state, context ?? "Type mismatch", loc);
 }
 
-function reportUnificationError(left: Type, right: Type, state: InferState, context: string): void {
+function reportUnificationError(left: Type, right: Type, state: InferState, context: string, loc?: ast.SourceLocation): void {
   const leftStr = typeToString(applySubstitution(left, state));
   const rightStr = typeToString(applySubstitution(right, state));
-  state.errors.push({ message: `${context}: ${leftStr} vs ${rightStr}` });
+  state.errors.push(makeError(`${context}: ${leftStr} vs ${rightStr}`, loc, state.currentFilePath));
 }
 
 function typeToString(type: Type): string {

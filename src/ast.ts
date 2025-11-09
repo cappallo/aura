@@ -1,5 +1,10 @@
 export type Identifier = string;
 
+export type SourceLocation = {
+  start: { line: number; column: number; offset: number };
+  end: { line: number; column: number; offset: number };
+};
+
 export type Module = {
   kind: "Module";
   name: string[];
@@ -88,16 +93,19 @@ export type LetStmt = {
   kind: "LetStmt";
   name: string;
   expr: Expr;
+  loc?: SourceLocation;
 };
 
 export type ReturnStmt = {
   kind: "ReturnStmt";
   expr: Expr;
+  loc?: SourceLocation;
 };
 
 export type ExprStmt = {
   kind: "ExprStmt";
   expr: Expr;
+  loc?: SourceLocation;
 };
 
 export type MatchStmt = {
@@ -137,26 +145,31 @@ export type Expr =
 export type IntLiteral = {
   kind: "IntLiteral";
   value: number;
+  loc?: SourceLocation;
 };
 
 export type BoolLiteral = {
   kind: "BoolLiteral";
   value: boolean;
+  loc?: SourceLocation;
 };
 
 export type StringLiteral = {
   kind: "StringLiteral";
   value: string;
+  loc?: SourceLocation;
 };
 
 export type VarRef = {
   kind: "VarRef";
   name: string;
+  loc?: SourceLocation;
 };
 
 export type ListLiteral = {
   kind: "ListLiteral";
   elements: Expr[];
+  loc?: SourceLocation;
 };
 
 export type BinaryExpr = {
@@ -164,30 +177,35 @@ export type BinaryExpr = {
   op: string;
   left: Expr;
   right: Expr;
+  loc?: SourceLocation;
 };
 
 export type CallExpr = {
   kind: "CallExpr";
   callee: string;
   args: Expr[];
+  loc?: SourceLocation;
 };
 
 export type RecordExpr = {
   kind: "RecordExpr";
   typeName: string;
   fields: { name: string; expr: Expr }[];
+  loc?: SourceLocation;
 };
 
 export type FieldAccessExpr = {
   kind: "FieldAccessExpr";
   target: Expr;
   field: string;
+  loc?: SourceLocation;
 };
 
 export type IndexExpr = {
   kind: "IndexExpr";
   target: Expr;
   index: Expr;
+  loc?: SourceLocation;
 };
 
 export type IfExpr = {
@@ -195,6 +213,7 @@ export type IfExpr = {
   cond: Expr;
   thenBranch: Block;
   elseBranch?: Block;
+  loc?: SourceLocation;
 };
 
 export type TestDecl = {
