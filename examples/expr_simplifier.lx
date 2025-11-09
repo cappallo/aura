@@ -1,0 +1,381 @@
+module examples.expr_simplifier
+
+effect Log
+
+type Expr = Const { value: Int } | Var { name: String } | Add { left: Expr, right: Expr } | Mul { left: Expr, right: Expr }
+
+type EnvEntry = Bound { name: String, value: Int } | Absent { name: String }
+
+type RandomStep {
+  value: Int
+  seed: Int
+}
+
+type RandomExprResult {
+  expr: Expr
+  seed: Int
+}
+
+type RandomEnvEntryResult {
+  entry: EnvEntry
+  seed: Int
+}
+
+type RandomEnvResult {
+  entries: List<EnvEntry>
+  seed: Int
+}
+
+type TrialResult = TrialsPassed { seed: Int } | TrialsFailed {
+  iteration: Int
+  expr: Expr
+  simplified: Expr
+  env: List<EnvEntry>
+  original_result: Int
+  simplified_result: Int
+}
+
+type HarnessSummary {
+  iterations: Int
+  final_seed: Int
+}
+
+type HarnessFailureLog {
+  iteration: Int
+  expr: Expr
+  simplified_expr: Expr
+  env: List<EnvEntry>
+  original_result: Int
+  simplified_result: Int
+}
+
+fn eval_expr(expr: Expr, env: List<EnvEntry>) -> Int {
+  match expr {
+    case Const { value: v } => {
+      v
+    }
+    case Var { name: n } => {
+      lookup_env(env, n)
+    }
+    case Add { left: l , right: r } => {
+      eval_expr(l, env) + eval_expr(r, env)
+    }
+    case Mul { left: l , right: r } => {
+      eval_expr(l, env) * eval_expr(r, env)
+    }
+  }
+}
+
+fn lookup_env(env: List<EnvEntry>, name: String) -> Int {
+  lookup_from(env, name, 0)
+}
+
+fn lookup_from(env: List<EnvEntry>, name: String, index: Int) -> Int {
+  let length = list.len(env)
+  if index >= length {
+    0
+  } else {
+    let entry = env[index]
+    match entry {
+      case Bound { name: entry_name , value: entry_value } => {
+        if entry_name == name {
+          entry_value
+        } else {
+          lookup_from(env, name, index + 1)
+        }
+      }
+      case Absent { name: _ } => {
+        lookup_from(env, name, index + 1)
+      }
+    }
+  }
+}
+
+fn simplify(expr: Expr) -> Expr {
+  match expr {
+    case Const { value: _ } => {
+      expr
+    }
+    case Var { name: _ } => {
+      expr
+    }
+    case Add { left: l , right: r } => {
+      let left_simple = simplify(l)
+      let right_simple = simplify(r)
+      simplify_add_terms(left_simple, right_simple)
+    }
+    case Mul { left: l , right: r } => {
+      let left_simple = simplify(l)
+      let right_simple = simplify(r)
+      simplify_mul_terms(left_simple, right_simple)
+    }
+  }
+}
+
+fn simplify_add_terms(left: Expr, right: Expr) -> Expr {
+  if is_zero(left) {
+    right
+  } else {
+    if is_zero(right) {
+      left
+    } else {
+      match left {
+        case Const { value: left_value } => {
+          match right {
+            case Const { value: right_value } => {
+              Const { value: left_value + right_value }
+            }
+            case _ => {
+              Add { left: left, right: right }
+            }
+          }
+        }
+        case _ => {
+          Add { left: left, right: right }
+        }
+      }
+    }
+  }
+}
+
+fn simplify_mul_terms(left: Expr, right: Expr) -> Expr {
+  if is_zero(left) || is_zero(right) {
+    Const { value: 0 }
+  } else {
+    if is_one(left) {
+      right
+    } else {
+      if is_one(right) {
+        left
+      } else {
+        match left {
+          case Const { value: left_value } => {
+            match right {
+              case Const { value: right_value } => {
+                Const { value: left_value * right_value }
+              }
+              case _ => {
+                Mul { left: left, right: right }
+              }
+            }
+          }
+          case _ => {
+            Mul { left: left, right: right }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn is_zero(expr: Expr) -> Bool {
+  match expr {
+    case Const { value: v } => {
+      v == 0
+    }
+    case _ => {
+      false
+    }
+  }
+}
+
+fn is_one(expr: Expr) -> Bool {
+  match expr {
+    case Const { value: v } => {
+      v == 1
+    }
+    case _ => {
+      false
+    }
+  }
+}
+
+fn next_random(seed: Int) -> RandomStep {
+  let raw = (seed * 1103515245) + 12345
+  RandomStep { value: mod_positive(raw, 2147483647), seed: mod_positive(raw, 2147483647) }
+}
+
+fn mod_positive(value: Int, modulus: Int) -> Int {
+  if modulus == 0 {
+    0
+  } else {
+    let positive_value = if value < 0 {
+      -value
+    } else {
+      value
+    }
+    let positive_modulus = if modulus < 0 {
+      -modulus
+    } else {
+      modulus
+    }
+    let quotient = positive_value / positive_modulus
+    positive_value - (quotient * positive_modulus)
+  }
+}
+
+fn random_bool(value: Int) -> Bool {
+  let remainder = mod_positive(value, 2)
+  remainder == 0
+}
+
+fn random_int(value: Int, min: Int, max: Int) -> Int {
+  let span = (max - min) + 1
+  if span <= 0 {
+    min
+  } else {
+    let offset = mod_positive(value, span)
+    min + offset
+  }
+}
+
+fn random_expr(seed: Int, depth: Int) -> RandomExprResult {
+  if depth <= 0 {
+    random_leaf(seed)
+  } else {
+    let step = next_random(seed)
+    let choice = mod_positive(step.value, 3)
+    if choice == 0 {
+      random_leaf(step.seed)
+    } else {
+      let next_depth = depth - 1
+      let left = random_expr(step.seed, next_depth)
+      let right = random_expr(left.seed, next_depth)
+      let expr = if choice == 1 {
+        Add { left: left.expr, right: right.expr }
+      } else {
+        Mul { left: left.expr, right: right.expr }
+      }
+      RandomExprResult { expr: expr, seed: right.seed }
+    }
+  }
+}
+
+fn random_leaf(seed: Int) -> RandomExprResult {
+  let step = next_random(seed)
+  let choice = mod_positive(step.value, 2)
+  if choice == 0 {
+    let value_step = next_random(step.seed)
+    let value = random_int(value_step.value, -5, 5)
+    RandomExprResult { expr: Const { value: value }, seed: value_step.seed }
+  } else {
+    let name_step = next_random(step.seed)
+    let name = pick_variable_name(name_step.value)
+    RandomExprResult { expr: Var { name: name }, seed: name_step.seed }
+  }
+}
+
+fn pick_variable_name(source: Int) -> String {
+  let names = variable_names()
+  let length = list.len(names)
+  if length == 0 {
+    "x"
+  } else {
+    let index = mod_positive(source, length)
+    names[index]
+  }
+}
+
+fn variable_names() -> List<String> {
+  ["a", "b", "c", "d"]
+}
+
+fn random_env(seed: Int) -> RandomEnvResult {
+  let names = variable_names()
+  let first = random_env_entry(seed, names[0])
+  let second = random_env_entry(first.seed, names[1])
+  let third = random_env_entry(second.seed, names[2])
+  let fourth = random_env_entry(third.seed, names[3])
+  RandomEnvResult { entries: [first.entry, second.entry, third.entry, fourth.entry], seed: fourth.seed }
+}
+
+fn random_env_entry(seed: Int, name: String) -> RandomEnvEntryResult {
+  let include_step = next_random(seed)
+  let include = random_bool(include_step.value)
+  let value_step = next_random(include_step.seed)
+  let value = random_int(value_step.value, -8, 8)
+  if include {
+    RandomEnvEntryResult { entry: Bound { name: name, value: value }, seed: value_step.seed }
+  } else {
+    RandomEnvEntryResult { entry: Absent { name: name }, seed: value_step.seed }
+  }
+}
+
+fn run_trials(iterations: Int, seed: Int) -> TrialResult {
+  run_trials_loop(iterations, 0, seed)
+}
+
+fn run_trials_loop(limit: Int, completed: Int, seed: Int) -> TrialResult {
+  if completed >= limit {
+    TrialsPassed { seed: seed }
+  } else {
+    let expr_result = random_expr(seed, 4)
+    let env_result = random_env(expr_result.seed)
+    let original_value = eval_expr(expr_result.expr, env_result.entries)
+    let simplified_expr = simplify(expr_result.expr)
+    let simplified_value = eval_expr(simplified_expr, env_result.entries)
+    if original_value != simplified_value {
+      TrialsFailed {
+        iteration: completed + 1,
+        expr: expr_result.expr,
+        simplified: simplified_expr,
+        env: env_result.entries,
+        original_result: original_value,
+        simplified_result: simplified_value
+      }
+    } else {
+      run_trials_loop(limit, completed + 1, env_result.seed)
+    }
+  }
+}
+
+fn run_randomized_simplifier(iterations: Int, seed: Int) -> [Log] Bool {
+  if iterations <= 0 {
+    Log.debug("simplifier_no_iterations", HarnessSummary { iterations: 0, final_seed: seed })
+    true
+  } else {
+    let result = run_trials(iterations, seed)
+    match result {
+      case TrialsPassed { seed: final_seed } => {
+        Log.debug("simplifier_success", HarnessSummary { iterations: iterations, final_seed: final_seed })
+        true
+      }
+      case TrialsFailed { iteration: iteration , expr: expr_value , simplified: simplified_expr , env: env_entries , original_result: original_value , simplified_result: simplified_value } => {
+        Log.debug(
+          "simplifier_failure",
+          HarnessFailureLog {
+            iteration: iteration,
+            expr: expr_value,
+            simplified_expr: simplified_expr,
+            env: env_entries,
+            original_result: original_value,
+            simplified_result: simplified_value
+          }
+        )
+        false
+      }
+    }
+  }
+}
+
+test simplify_basic_rules {
+  let env = [
+    Bound { name: "x", value: 3 },
+    Absent { name: "y" }
+  ]
+  let expr = Add { left: Const { value: 0 }, right: Var { name: "x" } }
+  let simplified = simplify(expr)
+  test.assert_equal(eval_expr(simplified, env), 3)
+  let mul_expr = Mul { left: Var { name: "x" }, right: Const { value: 0 } }
+  let mul_simplified = simplify(mul_expr)
+  test.assert_equal(eval_expr(mul_simplified, env), 0)
+}
+
+test eval_missing_variable_defaults_to_zero {
+  let env = [
+    Bound { name: "a", value: 4 },
+    Absent { name: "missing" }
+  ]
+  let expr = Add { left: Var { name: "a" }, right: Var { name: "missing" } }
+  test.assert_equal(eval_expr(expr, env), 4)
+}
