@@ -149,7 +149,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Canonical code formatter/pretty-printer** (`lx format` command, `src/formatter.ts` - THOUGHTS.md §6.1)
 - ✅ **Execution tracing/explain** (`lx explain` command with step-by-step traces - THOUGHTS.md §5.2)
 - ✅ **StructuredTrace type** in `src/structured.ts` with full trace collection/emission
-- ❌ AST input format for direct LLM generation (THOUGHTS.md §1.2)
+- ✅ AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
 - ❌ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
 - ✅ Named arguments (THOUGHTS.md §1.3)
@@ -291,7 +291,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Emit structured trace output (StructuredTrace type already defined)
 - [x] Add `lx format` command for deterministic code formatting
 - [x] Add `lx explain` command with text and JSON output
-- [ ] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
+- [x] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [ ] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
 - [x] Add named arguments support (THOUGHTS.md §1.3)
@@ -324,7 +324,7 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 ├─ Property test shrinking → ✅ Complete (Priority 3)
 ├─ Schemas & type generation → ✅ Complete (Priority 6)
 ├─ JSON codec generation → ✅ Complete (Priority 6)
-└─ AST input format / patch editing → ❌ Pending (Priority 7 enhancements)
+└─ Patch editing & hole tooling → ❌ Pending (Priority 7 enhancements)
 
 Phase 4 (Mid-term): Concurrency & Tools
 ├─ Actor model implementation (CONCURRENCY.md) → Priority 8
@@ -349,7 +349,6 @@ Phase 5 (Long-term): Evolution
 With the core language, schemas, and primary LLM tooling complete, the next priorities are:
 
 1. **LLM Tooling Enhancements** (Priority 7 completion):
-   - AST input format for direct LLM generation
    - Patch-based editing with stable symbol IDs
    - Holes/partial code support
 2. **Actor Model** (Priority 8, Phase 4) - Begin CONCURRENCY.md implementation with typed actors
@@ -391,15 +390,14 @@ lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with 
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **No AST input format** - LLMs cannot directly generate AST despite "AST-first" design principle (THOUGHTS.md §1.2)
-2. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
-3. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
+1. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
+2. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
 
 ### Language Features
-4. **No REPL** - Must write files to test code
-5. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
-6. **Limited standard library** - Basic operations now available but could be expanded further
-7. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
+3. **No REPL** - Must write files to test code
+4. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+5. **Limited standard library** - Basic operations now available but could be expanded further
+6. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 
@@ -427,7 +425,6 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
 
 **Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), and canonical formatting (§6.1) are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
-- AST input format for direct LLM code generation (§1.2)
 - Patch-based editing tooling with stable symbol IDs (§6.1)
 - Holes/partial code support (§8)
 

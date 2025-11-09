@@ -1,0 +1,73 @@
+{
+  "kind": "Module",
+  "name": ["app", "ast_demo"],
+  "imports": [],
+  "decls": [
+    {
+      "kind": "FnDecl",
+      "name": "add",
+      "typeParams": [],
+      "params": [
+        {
+          "name": "a",
+          "type": { "kind": "TypeName", "name": "Int", "typeArgs": [] }
+        },
+        {
+          "name": "b",
+          "type": { "kind": "TypeName", "name": "Int", "typeArgs": [] }
+        }
+      ],
+      "returnType": { "kind": "TypeName", "name": "Int", "typeArgs": [] },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "stmts": [
+          {
+            "kind": "ReturnStmt",
+            "expr": {
+              "kind": "BinaryExpr",
+              "op": "+",
+              "left": { "kind": "VarRef", "name": "a" },
+              "right": { "kind": "VarRef", "name": "b" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "TestDecl",
+      "name": "adds_numbers",
+      "body": {
+        "kind": "Block",
+        "stmts": [
+          {
+            "kind": "ExprStmt",
+            "expr": {
+              "kind": "CallExpr",
+              "callee": "test.assert_equal",
+              "args": [
+                {
+                  "kind": "NamedArg",
+                  "name": "expected",
+                  "expr": { "kind": "IntLiteral", "value": 5 }
+                },
+                {
+                  "kind": "NamedArg",
+                  "name": "actual",
+                  "expr": {
+                    "kind": "CallExpr",
+                    "callee": "add",
+                    "args": [
+                      { "kind": "PositionalArg", "expr": { "kind": "IntLiteral", "value": 2 } },
+                      { "kind": "PositionalArg", "expr": { "kind": "IntLiteral", "value": 3 } }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -20,16 +20,18 @@ After `npm install`, the `prepare` script builds the project automatically and g
 ### CLI usage
 
 ```
-lx [--format=json|text] run <file.lx> <module.fn> [args...]
-lx [--format=json|text] test <file.lx>
-lx [--format=json|text] check <file.lx>
+lx run [--format=json|text] [--input=source|ast] <file> <module.fn> [args...]
+lx test [--format=json|text] [--input=source|ast] <file>
+lx check [--format=json|text] [--input=source|ast] <file>
 lx format <file.lx>
-lx [--format=json|text] explain <file.lx> <module.fn> [args...]
+lx explain [--format=json|text] [--input=source|ast] <file> <module.fn> [args...]
 ```
 
 Arguments to `lx run` and `lx explain` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
 
 **Structured output:** Use `--format=json` to get machine-readable JSON output (errors, logs, results) suitable for LLM consumption. Default is `--format=text` for human-readable output.
+
+**AST input:** Use `--input=ast` to treat the file as JSON that already matches the Lx AST schema. This lets LLMs emit structured modules that can be executed directly without going through the parser. See `examples/ast_demo.json` for a complete sample.
 
 **LLM-friendly tools:**
 - `lx format` - Produces deterministic, canonical formatting from AST
@@ -51,6 +53,10 @@ lx explain examples/median.lx median '[2,4,6,8]'
 
 # Get execution trace as JSON
 lx explain --format=json examples/median.lx median '[2,4,6,8]'
+
+# Run a JSON AST module
+lx test --input=ast examples/ast_demo.json
+lx run --input=ast examples/ast_demo.json app.ast_demo.add 2 3
 ```
 
 ## Documentation

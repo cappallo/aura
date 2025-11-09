@@ -3,6 +3,7 @@
 import path from "path";
 import process from "process";
 import { parseModuleFromFile } from "./parser";
+import { parseModuleFromAstFile } from "./ast_json";
 import { typecheckModule, typecheckModules } from "./typecheck";
 import { buildRuntime, buildMultiModuleRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
 import { loadModules, buildSymbolTable, generateTypesFromSchemas } from "./loader";
@@ -11,8 +12,11 @@ import { StructuredOutput, formatStructuredOutput } from "./structured";
 
 export type OutputFormat = "text" | "json";
 
+export type InputFormat = "source" | "ast";
+
 export type CliContext = {
   format: OutputFormat;
+  input: InputFormat;
 };
 
 function main() {
@@ -25,8 +29,8 @@ function main() {
 
   try {
     // Parse global flags
-    const { args, format } = parseGlobalFlags(rest);
-    const ctx: CliContext = { format };
+    const { args, format, input } = parseGlobalFlags(rest);
+    const ctx: CliContext = { format, input };
 
     switch (command) {
       case "run":
@@ -49,8 +53,9 @@ function main() {
   }
 }
 
-function parseGlobalFlags(args: string[]): { args: string[]; format: OutputFormat } {
+function parseGlobalFlags(args: string[]): { args: string[]; format: OutputFormat; input: InputFormat } {
   let format: OutputFormat = "text";
+  let input: InputFormat = "source";
   const remaining: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -74,18 +79,33 @@ function parseGlobalFlags(args: string[]): { args: string[]; format: OutputForma
         console.error(`Invalid format: ${formatValue}. Must be 'text' or 'json'.`);
         process.exit(1);
       }
+    } else if (arg === "--input" && i + 1 < args.length) {
+      const value = args[i + 1]!;
+      input = parseInputFormat(value);
+      i += 1;
+    } else if (arg.startsWith("--input=")) {
+      const value = arg.substring(8);
+      input = parseInputFormat(value);
     } else {
       remaining.push(arg);
     }
   }
 
-  return { args: remaining, format };
+  return { args: remaining, format, input };
+}
+
+function parseInputFormat(value: string): InputFormat {
+  if (value === "source" || value === "ast") {
+    return value;
+  }
+  console.error(`Invalid input format: ${value}. Must be 'source' or 'ast'.`);
+  process.exit(1);
 }
 
 function handleRun(args: string[], ctx: CliContext) {
   const [filePath, fnName, ...fnArgs] = args;
   if (!filePath || !fnName) {
-    console.error("Usage: lx run [--format=json|text] <file.lx> <module.fnName> [args...]");
+    console.error("Usage: lx run [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
     process.exit(1);
   }
 
@@ -132,7 +152,7 @@ function handleRun(args: string[], ctx: CliContext) {
 function handleTest(args: string[], ctx: CliContext) {
   const [filePath] = args;
   if (!filePath) {
-    console.error("Usage: lx test [--format=json|text] <file.lx>");
+    console.error("Usage: lx test [--format=json|text] [--input=source|ast] <file>");
     process.exit(1);
   }
 
@@ -208,7 +228,7 @@ function handleTest(args: string[], ctx: CliContext) {
 function handleCheck(args: string[], ctx: CliContext) {
   const [filePath] = args;
   if (!filePath) {
-    console.error("Usage: lx check [--format=json|text] <file.lx>");
+    console.error("Usage: lx check [--format=json|text] [--input=source|ast] <file>");
     process.exit(1);
   }
 
@@ -259,7 +279,7 @@ function handleFormat(args: string[], ctx: CliContext) {
 function handleExplain(args: string[], ctx: CliContext) {
   const [filePath, fnName, ...fnArgs] = args;
   if (!filePath || !fnName) {
-    console.error("Usage: lx explain [--format=json|text] <file.lx> <module.fnName> [args...]");
+    console.error("Usage: lx explain [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
     process.exit(1);
   }
 
@@ -398,10 +418,21 @@ type LoadResult = {
 
 function loadModuleWithDependencies(filePath: string, ctx: CliContext): LoadResult {
   const absolutePath = path.resolve(process.cwd(), filePath);
-  const module = parseModuleFromFile(absolutePath);
+  const module =
+    ctx.input === "ast"
+      ? parseModuleFromAstFile(absolutePath)
+      : parseModuleFromFile(absolutePath);
+
+  if (ctx.input === "ast" && module.imports.length > 0) {
+    const error = convertToStructuredError({
+      message: "AST input currently supports single modules without imports",
+      filePath: absolutePath,
+    });
+    return { module, errors: [error] };
+  }
   
   // Check if module has imports
-  if (module.imports.length === 0) {
+  if (module.imports.length === 0 || ctx.input === "ast") {
     // No imports - use single-module typecheck, but still generate types from schemas
     const modules = [{ moduleName: module.name, filePath: absolutePath, ast: module }];
     const symbolTable = buildSymbolTable(modules);
@@ -473,15 +504,17 @@ function handleFatal(error: unknown) {
 
 function printUsage() {
   console.log("Usage:");
-  console.log("  lx [--format=json|text] run <file.lx> <module.fnName> [args...]");
-  console.log("  lx [--format=json|text] test <file.lx>");
-  console.log("  lx [--format=json|text] check <file.lx>");
+  console.log("  lx run [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
+  console.log("  lx test [--format=json|text] [--input=source|ast] <file>");
+  console.log("  lx check [--format=json|text] [--input=source|ast] <file>");
   console.log("  lx format <file.lx>");
-  console.log("  lx [--format=json|text] explain <file.lx> <module.fnName> [args...]");
+  console.log("  lx explain [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
   console.log("");
   console.log("Options:");
   console.log("  --format=json    Output structured JSON for LLM consumption");
   console.log("  --format=text    Output human-readable text (default)");
+  console.log("  --input=source   Treat input file as .lx source (default)");
+  console.log("  --input=ast      Treat input file as JSON AST");
 }
 
 main();

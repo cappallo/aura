@@ -26,6 +26,8 @@ runCommand("node", [cliPath, "test", "examples/contracts.lx"]);
 runCommand("node", [cliPath, "test", "examples/builtins.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
 runCommand("node", [cliPath, "test", "examples/comments.lx"]);
+runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
+runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
 
 runExpectFailure(
   "Expected contract failure when clamp is called with min > max",
