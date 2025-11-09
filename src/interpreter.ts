@@ -11,7 +11,13 @@ export type Value =
 export type Runtime = {
   module: ast.Module;
   functions: Map<string, ast.FnDecl>;
+  contracts: Map<string, FnContract>;
   tests: ast.TestDecl[];
+};
+
+type FnContract = {
+  requires: ast.Expr[];
+  ensures: ast.Expr[];
 };
 
 type Env = Map<string, Value>;
@@ -30,17 +36,23 @@ type TestOutcome = {
 
 export function buildRuntime(module: ast.Module): Runtime {
   const functions = new Map<string, ast.FnDecl>();
+  const contracts = new Map<string, FnContract>();
   const tests: ast.TestDecl[] = [];
 
   for (const decl of module.decls) {
     if (decl.kind === "FnDecl") {
       functions.set(decl.name, decl);
+    } else if (decl.kind === "FnContractDecl") {
+      contracts.set(decl.name, {
+        requires: decl.requires,
+        ensures: decl.ensures,
+      });
     } else if (decl.kind === "TestDecl") {
       tests.push(decl);
     }
   }
 
-  return { module, functions, tests };
+  return { module, functions, contracts, tests };
 }
 
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
@@ -54,15 +66,30 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
     );
   }
 
-  const env: Env = new Map();
+  const paramEnv: Env = new Map();
   for (let i = 0; i < fn.params.length; i += 1) {
     const param = fn.params[i]!;
     const arg = args[i]!;
-    env.set(param.name, arg);
+    paramEnv.set(param.name, arg);
   }
 
-  const result = evalBlock(fn.body, env, runtime);
-  return result.type === "return" ? result.value : result.value;
+  const contract = runtime.contracts.get(name) ?? null;
+
+  if (contract) {
+    enforceContractClauses(contract.requires, paramEnv, runtime, name, "requires");
+  }
+
+  const executionEnv: Env = new Map(paramEnv);
+  const result = evalBlock(fn.body, executionEnv, runtime);
+  const returnValue = result.value;
+
+  if (contract) {
+    const ensuresEnv: Env = new Map(paramEnv);
+    ensuresEnv.set("result", returnValue);
+    enforceContractClauses(contract.ensures, ensuresEnv, runtime, name, "ensures");
+  }
+
+  return returnValue;
 }
 
 export function runTests(runtime: Runtime): TestOutcome[] {
@@ -440,6 +467,24 @@ function evalIfExpr(expr: ast.IfExpr, env: Env, runtime: Runtime): Value {
     return result.value;
   }
   return { kind: "Unit" };
+}
+
+function enforceContractClauses(
+  clauses: ast.Expr[],
+  env: Env,
+  runtime: Runtime,
+  fnName: string,
+  clauseType: "requires" | "ensures",
+) {
+  for (const clause of clauses) {
+    const value = evalExpr(clause, env, runtime);
+    if (value.kind !== "Bool") {
+      throw new RuntimeError(`Contract ${clauseType} clause for '${fnName}' must evaluate to a boolean value`);
+    }
+    if (!value.value) {
+      throw new RuntimeError(`Contract ${clauseType} clause failed for '${fnName}'`);
+    }
+  }
 }
 
 function valueEquals(a: Value, b: Value): boolean {

@@ -17,6 +17,7 @@ export type TopLevelDecl =
   | EffectDecl
   | TypeDecl
   | FnDecl
+  | FnContractDecl
   | TestDecl;
 
 export type EffectDecl = {
@@ -200,4 +201,13 @@ export type TestDecl = {
   kind: "TestDecl";
   name: string;
   body: Block;
+};
+
+export type FnContractDecl = {
+  kind: "FnContractDecl";
+  name: string;
+  params: Param[];
+  returnType: TypeExpr | null;
+  requires: Expr[];
+  ensures: Expr[];
 };

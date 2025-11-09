@@ -7,6 +7,7 @@ export type TypeCheckError = {
 type FnSignature = {
   name: string;
   paramCount: number;
+  paramNames: string[];
   effects: Set<string>;
 };
 
@@ -38,6 +39,12 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
     }
   }
 
+  for (const decl of module.decls) {
+    if (decl.kind === "FnContractDecl") {
+      checkContract(decl, ctx, errors);
+    }
+  }
+
   return errors;
 }
 
@@ -48,6 +55,7 @@ function collectFunctions(decls: ast.TopLevelDecl[]): Map<string, FnSignature> {
       map.set(decl.name, {
         name: decl.name,
         paramCount: decl.params.length,
+        paramNames: decl.params.map((param) => param.name),
         effects: new Set(decl.effects),
       });
     }
@@ -99,6 +107,125 @@ function checkStmt(stmt: ast.Stmt, fn: ast.FnDecl, ctx: TypecheckContext, errors
       for (const matchCase of stmt.cases) {
         for (const caseStmt of matchCase.body.stmts) {
           checkStmt(caseStmt, fn, ctx, errors);
+        }
+      }
+      return;
+  }
+}
+
+function checkContract(contract: ast.FnContractDecl, ctx: TypecheckContext, errors: TypeCheckError[]) {
+  const signature = ctx.functions.get(contract.name);
+  if (!signature) {
+    errors.push({ message: `Contract declared for unknown function '${contract.name}'` });
+    return;
+  }
+
+  if (contract.params.length !== signature.paramCount) {
+    errors.push({
+      message: `Contract for '${contract.name}' has ${contract.params.length} parameters but function expects ${signature.paramCount}`,
+    });
+  } else {
+    for (let i = 0; i < contract.params.length; i += 1) {
+      const contractParam = contract.params[i]!;
+      const expectedName = signature.paramNames[i]!;
+      if (contractParam.name !== expectedName) {
+        errors.push({
+          message: `Contract for '${contract.name}' parameter '${contractParam.name}' does not match function parameter '${expectedName}'`,
+        });
+      }
+    }
+  }
+
+  for (const expr of contract.requires) {
+    checkContractExpr(expr, ctx, errors, contract.name);
+  }
+
+  for (const expr of contract.ensures) {
+    checkContractExpr(expr, ctx, errors, contract.name);
+  }
+}
+
+function checkContractExpr(
+  expr: ast.Expr,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  contractName: string,
+) {
+  switch (expr.kind) {
+    case "IntLiteral":
+    case "BoolLiteral":
+    case "StringLiteral":
+    case "VarRef":
+      return;
+    case "ListLiteral": {
+      for (const element of expr.elements) {
+        checkContractExpr(element, ctx, errors, contractName);
+      }
+      return;
+    }
+    case "BinaryExpr": {
+      checkContractExpr(expr.left, ctx, errors, contractName);
+      checkContractExpr(expr.right, ctx, errors, contractName);
+      return;
+    }
+    case "CallExpr": {
+      checkContractCall(expr, ctx, errors, contractName);
+      for (const arg of expr.args) {
+        checkContractExpr(arg, ctx, errors, contractName);
+      }
+      return;
+    }
+    case "RecordExpr": {
+      for (const field of expr.fields) {
+        checkContractExpr(field.expr, ctx, errors, contractName);
+      }
+      return;
+    }
+    case "FieldAccessExpr": {
+      checkContractExpr(expr.target, ctx, errors, contractName);
+      return;
+    }
+    case "IndexExpr": {
+      checkContractExpr(expr.target, ctx, errors, contractName);
+      checkContractExpr(expr.index, ctx, errors, contractName);
+      return;
+    }
+    case "IfExpr": {
+      checkContractExpr(expr.cond, ctx, errors, contractName);
+      for (const stmt of expr.thenBranch.stmts) {
+        checkContractStmt(stmt, ctx, errors, contractName);
+      }
+      if (expr.elseBranch) {
+        for (const stmt of expr.elseBranch.stmts) {
+          checkContractStmt(stmt, ctx, errors, contractName);
+        }
+      }
+      return;
+    }
+  }
+}
+
+function checkContractStmt(
+  stmt: ast.Stmt,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  contractName: string,
+) {
+  switch (stmt.kind) {
+    case "LetStmt":
+      checkContractExpr(stmt.expr, ctx, errors, contractName);
+      return;
+    case "ReturnStmt":
+      checkContractExpr(stmt.expr, ctx, errors, contractName);
+      return;
+    case "ExprStmt":
+      checkContractExpr(stmt.expr, ctx, errors, contractName);
+      return;
+    case "MatchStmt":
+      checkContractExpr(stmt.scrutinee, ctx, errors, contractName);
+      for (const matchCase of stmt.cases) {
+        for (const caseStmt of matchCase.body.stmts) {
+          checkContractStmt(caseStmt, ctx, errors, contractName);
         }
       }
       return;
@@ -185,6 +312,46 @@ function checkCall(expr: ast.CallExpr, fn: ast.FnDecl, ctx: TypecheckContext, er
   }
 
   verifyEffectSubset(signature.effects, fn.effects, expr.callee, fn.name, errors);
+}
+
+function checkContractCall(
+  expr: ast.CallExpr,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  contractName: string,
+) {
+  const builtin = BUILTIN_FUNCTIONS[expr.callee];
+  if (builtin) {
+    if (builtin.arity !== null && builtin.arity !== expr.args.length) {
+      errors.push({
+        message: `Builtin '${expr.callee}' expects ${builtin.arity} arguments but got ${expr.args.length}`,
+      });
+    }
+    if (builtin.effects.size > 0) {
+      errors.push({
+        message: `Contract for '${contractName}' cannot call effectful builtin '${expr.callee}'`,
+      });
+    }
+    return;
+  }
+
+  const signature = ctx.functions.get(expr.callee);
+  if (!signature) {
+    errors.push({ message: `Contract for '${contractName}' references unknown function '${expr.callee}'` });
+    return;
+  }
+
+  if (signature.paramCount !== expr.args.length) {
+    errors.push({
+      message: `Function '${expr.callee}' expects ${signature.paramCount} arguments but got ${expr.args.length}`,
+    });
+  }
+
+  if (signature.effects.size > 0) {
+    errors.push({
+      message: `Contract for '${contractName}' cannot call effectful function '${expr.callee}'`,
+    });
+  }
 }
 
 function verifyEffectSubset(

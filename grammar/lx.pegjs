@@ -56,6 +56,7 @@ TopLevelDeclCore
 	= EffectDecl
 	/ TypeDecl
 	/ FnDecl
+	/ ContractDecl
 	/ TestDecl
 
 EffectDecl
@@ -135,6 +136,37 @@ FnDecl
 				effects: returnSpec.effects,
 				body,
 			};
+		}
+
+ContractDecl
+	= "contract" __ "fn" __ name:Ident _ "(" _ params:ParamList? _ ")" returnType:ContractReturnType? _ "{" BlockGap clauses:ContractClauseList? BlockGap "}" Terminator* {
+			const allClauses = clauses || [];
+			const requires = allClauses.filter((clause) => clause.kind === "Requires").map((clause) => clause.expr);
+			const ensures = allClauses.filter((clause) => clause.kind === "Ensures").map((clause) => clause.expr);
+			return {
+				kind: "FnContractDecl",
+				name,
+				params: params || [],
+				returnType: returnType || null,
+				requires,
+				ensures,
+			};
+		}
+
+ContractReturnType
+	= __ "->" __ type:TypeExpr { return type; }
+
+ContractClauseList
+	= head:ContractClause tail:(BlockGap ContractClause)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+ContractClause
+	= "requires" __ expr:Expr Terminator+ {
+			return { kind: "Requires", expr };
+		}
+	/ "ensures" __ expr:Expr Terminator+ {
+			return { kind: "Ensures", expr };
 		}
 
 ReturnSpec
@@ -296,7 +328,7 @@ EqualityExpr
 	= head:RelationalExpr tail:(__ ("==" / "!=") __ RelationalExpr)* { return foldBinary(head, tail); }
 
 RelationalExpr
-	= head:AdditiveExpr tail:(__ ("<" / "<=" / ">" / ">=") __ AdditiveExpr)* { return foldBinary(head, tail); }
+	= head:AdditiveExpr tail:(__ ("<=" / "<" / ">=" / ">") __ AdditiveExpr)* { return foldBinary(head, tail); }
 
 AdditiveExpr
 	= head:MultiplicativeExpr tail:(__ ("+" / "-") __ MultiplicativeExpr)* { return foldBinary(head, tail); }
@@ -305,7 +337,7 @@ MultiplicativeExpr
 	= head:UnaryExpr tail:(__ ("*" / "/") __ UnaryExpr)* { return foldBinary(head, tail); }
 
 UnaryExpr
-	= op:("-" / "!") __ expr:UnaryExpr {
+	= op:("-" / "!") _ expr:UnaryExpr {
 			return {
 				kind: "CallExpr",
 				callee: op === "-" ? "__negate" : "__not",

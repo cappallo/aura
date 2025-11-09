@@ -1,0 +1,27 @@
+module app.contracts
+
+contract fn clamp(value: Int, min: Int, max: Int) -> Int {
+  requires min <= max
+  ensures result >= min
+  ensures result <= max
+}
+
+fn clamp(value: Int, min: Int, max: Int) -> Int {
+  let lower = if value < min {
+    min
+  } else {
+    value
+  }
+  let bounded = if lower > max {
+    max
+  } else {
+    lower
+  }
+  return bounded
+}
+
+test clamp_examples {
+  test.assert_equal(clamp(5, 0, 10), 5)
+  test.assert_equal(clamp(-3, 0, 10), 0)
+  test.assert_equal(clamp(20, 0, 10), 10)
+}
