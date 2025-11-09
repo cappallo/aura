@@ -2,9 +2,18 @@ module app.logging
 
 effect Log
 
+type GreetingLog {
+  level: String
+  name: String
+  message: String
+}
+
 fn greet_with_log(name: String) -> [Log] String {
-  Log.debug(str.concat("Greeting ", name))
-  return str.concat("Hello, ", name)
+  let message = str.concat("Hello, ", name)
+  let debug_payload = GreetingLog { level: "debug", name: name, message: message }
+  Log.debug("greet_with_log", debug_payload)
+  Log.trace("greet_with_log", GreetingLog { level: "trace", name: name, message: message })
+  return message
 }
 
 test logging_examples {

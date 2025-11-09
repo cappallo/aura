@@ -304,7 +304,9 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
     case "str.concat":
       return builtinStrConcat(expr, env, runtime);
     case "Log.debug":
-      return builtinLogDebug(expr, env, runtime);
+      return builtinLog("debug", expr, env, runtime);
+    case "Log.trace":
+      return builtinLog("trace", expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -350,17 +352,23 @@ function builtinStrConcat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
   return { kind: "String", value: left.value + right.value };
 }
 
-function builtinLogDebug(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  if (expr.args.length !== 1) {
-    throw new RuntimeError("Log.debug expects exactly one argument");
+function builtinLog(level: "debug" | "trace", expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError(`Log.${level} expects exactly two arguments`);
   }
-  const message = evalExpr(expr.args[0]!, env, runtime);
-  if (message.kind !== "String") {
-    throw new RuntimeError("Log.debug expects a string message");
+  const labelValue = evalExpr(expr.args[0]!, env, runtime);
+  if (labelValue.kind !== "String") {
+    throw new RuntimeError(`Log.${level} expects the first argument to be a string label`);
   }
-  // Keep logging behavior intentionally simple; structured logging can evolve later.
+  const payloadValue = evalExpr(expr.args[1]!, env, runtime);
+  if (payloadValue.kind !== "Ctor") {
+    throw new RuntimeError(`Log.${level} expects the payload to be a record value`);
+  }
+
+  const serializedPayload = JSON.stringify(prettyValue(payloadValue));
   // eslint-disable-next-line no-console
-  console.log(`[Log.debug] ${message.value}`);
+  console.log(`[Log.${level}] ${labelValue.value} ${serializedPayload}`);
+
   return { kind: "Unit" };
 }
 

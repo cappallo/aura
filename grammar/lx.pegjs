@@ -120,8 +120,9 @@ FieldSeparator
 	= (NL)+
 	/ _ "," _
 
+
 Field
-	= name:Ident _ ":" _ type:TypeExpr {
+	= _? name:Ident _ ":" _ type:TypeExpr {
 			return { name, type };
 		}
 
@@ -412,8 +413,9 @@ RecordFieldSeparator
 	= (NL)+
 	/ _ "," _
 
+
 RecordField
-	= name:Ident _ ":" _ expr:Expr {
+	= _? name:Ident _ ":" _ expr:Expr {
 			return { name, expr };
 		}
 

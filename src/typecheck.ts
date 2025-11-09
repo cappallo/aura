@@ -22,7 +22,8 @@ const BUILTIN_FUNCTIONS: Record<string, { arity: number | null; effects: Set<str
   "str.concat": { arity: 2, effects: new Set() },
   __negate: { arity: 1, effects: new Set() },
   __not: { arity: 1, effects: new Set() },
-  "Log.debug": { arity: 1, effects: new Set(["Log"]) },
+  "Log.debug": { arity: 2, effects: new Set(["Log"]) },
+  "Log.trace": { arity: 2, effects: new Set(["Log"]) },
 };
 
 export function typecheckModule(module: ast.Module): TypeCheckError[] {
