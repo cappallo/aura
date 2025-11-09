@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~48% (Core v0.1 + Module Resolution + Type Inference + Property Runtime + Extended Builtins)
+**Overall Progress:** ~40% (Core language ~75% complete, LLM-first tooling ~5% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -59,7 +59,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ### 6. Testing
 - ✅ `test` blocks with assertions
 - ✅ Test runner (`lx test`) with success/failure reporting
-- ✅ Example tests in 12 example files
+- ✅ Example tests in 14 example files
 
 ---
 
@@ -117,11 +117,22 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Multi-file typechecking**: Full type checking across module boundaries
 - ✅ **Multi-file interpreter**: Runtime function calls across modules
 
-### 7. Advanced Features
-- ❌ Effect polymorphism (effect row variables)
-- ❌ Explain/tracing tooling API
+### 7. LLM-First Tooling (THOUGHTS.md)
+- ❌ Comments and doc strings (`//`, `/* */`, `/// spec:`)
+- ❌ Structured error output (JSON format for LLM consumption)
 - ❌ Structured logging output (logs currently printed to console)
-- ❌ Standard library beyond builtins
+- ❌ Explain/tracing tooling API
+- ❌ Canonical code formatter/pretty-printer
+- ❌ AST input format for direct LLM generation
+- ❌ Patch-based editing with stable symbol IDs
+- ❌ Holes/partial code support (`hole("name")`)
+- ❌ Named arguments
+- ❌ Deterministic execution mode (seedable RNG)
+
+### 8. Advanced Features
+- ❌ Effect polymorphism (effect row variables)
+- ❌ Standard library beyond basic builtins
+- ❌ Standard library versioning
 
 ---
 
@@ -198,7 +209,31 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 
 **Why third:** High value for LLM workflow; complements existing test infrastructure.
 
-### **Priority 4: Schemas (§8.1-8.2)**
+### **Priority 4: Comments & Documentation (THOUGHTS.md §3.1)**
+**Status:** 🔴 Not started - **CRITICAL for LLM-first design**  
+**Goal:** Enable natural-language specs and inline documentation
+- [ ] Add line comment support (`//`) to grammar
+- [ ] Add block comment support (`/* */`) to grammar
+- [ ] Implement structured doc comments (`/// spec:`) in grammar
+- [ ] Preserve doc comments in AST for tooling
+- [ ] Parse structured spec format (description, inputs, outputs, laws)
+- [ ] Add example with commented code to demonstrate
+
+**Why fourth:** Violates core design principle (THOUGHTS.md §3.1: "comments, specs, and tests as first-class citizens"). Essential for LLM code generation and understanding.
+
+### **Priority 5: Structured Error Output (THOUGHTS.md §2.2, §5.1)**
+**Status:** 🔴 Not started - **HIGH priority for LLM workflow**  
+**Goal:** Machine-readable errors and logs for LLM consumption
+- [ ] Refactor error types to support JSON serialization
+- [ ] Add `--format=json` CLI flag for structured output
+- [ ] Emit errors as JSON with hints and structured locations
+- [ ] Update structured logging (`Log.debug`) to emit JSON instead of console
+- [ ] Add deterministic execution mode with seedable RNG
+- [ ] Test round-trip: error → LLM → fix → compile
+
+**Why fifth:** Enables tight LLM feedback loop per THOUGHTS.md design philosophy.
+
+### **Priority 6: Schemas (§8.1-8.2)**
 **Status:** 🔴 Not started  
 **Goal:** External data shape declarations with versioning
 - [ ] Extend AST for `schema` declarations
@@ -208,7 +243,19 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [ ] Add validation functions
 - [ ] Test schema evolution scenarios
 
-**Why fourth:** Enables real I/O; critical for practical programs.
+**Why sixth:** Enables real I/O; critical for practical programs.
+
+### **Priority 7: LLM Tooling (THOUGHTS.md §5.2, §6.1)**
+**Status:** 🔴 Not started - **MEDIUM priority**  
+**Goal:** Execution tracing, formatting, and patch-based editing
+- [ ] Implement canonical code formatter/pretty-printer
+- [ ] Add `explain fn(args)` execution tracing
+- [ ] Design JSON AST input format for direct LLM generation
+- [ ] Implement patch-based editing (replace function body by stable ID)
+- [ ] Add `hole("name")` expressions for partial code
+- [ ] Create tooling commands for guided refactors
+
+**Why seventh:** Completes the LLM-first developer experience.
 
 ---
 
@@ -227,11 +274,13 @@ Phase 2 (Current): Foundations ✅
 ├─ Better error messages → ✅ Complete
 └─ Standard library expansion → ✅ Basic builtins complete
 
-Phase 3 (Near-term): Testing & I/O
-├─ Property-based tests → Priority 3
-├─ Schemas → Priority 4
+Phase 3 (Near-term): LLM-First Tooling & I/O
+├─ Comments & doc strings → Priority 4 (CRITICAL)
+├─ Structured errors/logging → Priority 5
+├─ Property test shrinking → Priority 3
+├─ Schemas → Priority 6
 ├─ JSON codec generation
-└─ Structured tracing API
+└─ LLM tooling (formatting, tracing) → Priority 7
 
 Phase 4 (Mid-term): Concurrency & Tools
 ├─ Actor model implementation
@@ -321,10 +370,12 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
 
 **Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles, but **critical tooling and developer experience features are missing**, especially:
-- Comments and documentation (§3.1) - **CRITICAL**
-- Structured errors/logging for LLM consumption (§2.2, §5.1)
-- Execution tracing and explain hooks (§5.2)
-- Canonical formatting and patch-based editing (§6.1)
+- Comments and documentation (§3.1) - **CRITICAL** → Priority 4
+- Structured errors/logging for LLM consumption (§2.2, §5.1) - **HIGH** → Priority 5
+- Execution tracing and explain hooks (§5.2) → Priority 7
+- Canonical formatting and patch-based editing (§6.1) → Priority 7
+
+**Impact:** Without these tooling features, Lx cannot fully realize its LLM-first design vision. The language core is solid (~75% complete), but the LLM developer experience layer is barely started (~5% complete), bringing overall progress to ~40%.
 
 ---
 
