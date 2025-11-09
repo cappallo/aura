@@ -1,0 +1,13 @@
+module examples.error_example
+
+/// This file intentionally contains a type error
+/// to demonstrate structured error output with --format=json
+
+fn add_numbers(x: Int, y: Int) -> Int {
+  return x + y
+}
+
+fn broken_function() -> Int {
+  // This should cause a type error: passing a string to a function expecting Int
+  return add_numbers(5, "hello")
+}

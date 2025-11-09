@@ -1,4 +1,5 @@
 import * as ast from "./ast";
+import { StructuredLog } from "./structured";
 
 export type Value =
   | { kind: "Int"; value: number }
@@ -17,6 +18,9 @@ export type Runtime = {
   typeDecls: Map<string, ast.TypeDecl>;
   // For multi-module support
   symbolTable?: import("./loader").SymbolTable;
+  // Structured logging support
+  outputFormat?: "text" | "json";
+  logs?: StructuredLog[];
 };
 
 type FnContract = {
@@ -44,7 +48,7 @@ const MAX_GENERATION_ATTEMPTS = 100;
 const MAX_GENERATION_DEPTH = 4;
 const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
-export function buildRuntime(module: ast.Module): Runtime {
+export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json"): Runtime {
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
   const tests: ast.TestDecl[] = [];
@@ -72,7 +76,21 @@ export function buildRuntime(module: ast.Module): Runtime {
     }
   }
 
-  return { module, functions, contracts, tests, properties, typeDecls };
+  const runtime: Runtime = { 
+    module, 
+    functions, 
+    contracts, 
+    tests, 
+    properties, 
+    typeDecls,
+  };
+  if (outputFormat !== undefined) {
+    runtime.outputFormat = outputFormat;
+    if (outputFormat === "json") {
+      runtime.logs = [];
+    }
+  }
+  return runtime;
 }
 
 /**
@@ -80,7 +98,8 @@ export function buildRuntime(module: ast.Module): Runtime {
  */
 export function buildMultiModuleRuntime(
   modules: import("./loader").ResolvedModule[],
-  symbolTable: import("./loader").SymbolTable
+  symbolTable: import("./loader").SymbolTable,
+  outputFormat?: "text" | "json"
 ): Runtime {
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
@@ -139,7 +158,7 @@ export function buildMultiModuleRuntime(
     }
   }
   
-  return {
+  const runtime: Runtime = {
     module: primaryModule,
     functions,
     contracts,
@@ -148,6 +167,13 @@ export function buildMultiModuleRuntime(
     typeDecls,
     symbolTable,
   };
+  if (outputFormat !== undefined) {
+    runtime.outputFormat = outputFormat;
+    if (outputFormat === "json") {
+      runtime.logs = [];
+    }
+  }
+  return runtime;
 }
 
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
@@ -504,9 +530,25 @@ function builtinLog(level: "debug" | "trace", expr: ast.CallExpr, env: Env, runt
     throw new RuntimeError(`Log.${level} expects the payload to be a record value`);
   }
 
-  const serializedPayload = JSON.stringify(prettyValue(payloadValue));
-  // eslint-disable-next-line no-console
-  console.log(`[Log.${level}] ${labelValue.value} ${serializedPayload}`);
+  const payloadPretty = prettyValue(payloadValue);
+  
+  // Structured logging support
+  if (runtime.outputFormat === "json" && runtime.logs) {
+    const { createLog } = require("./structured");
+    const log = createLog(
+      level,
+      labelValue.value,
+      payloadPretty as Record<string, any>,
+      undefined,
+      new Date().toISOString()
+    );
+    runtime.logs.push(log);
+  } else {
+    // Text output (default)
+    const serializedPayload = JSON.stringify(payloadPretty);
+    // eslint-disable-next-line no-console
+    console.log(`[Log.${level}] ${labelValue.value} ${serializedPayload}`);
+  }
 
   return { kind: "Unit" };
 }

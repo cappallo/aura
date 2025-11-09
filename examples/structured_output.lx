@@ -1,0 +1,36 @@
+module examples.structured_output
+
+effect Log
+
+/// A simple function that demonstrates structured logging
+/// with the new --format=json CLI flag
+fn compute(x: Int) -> [Log] Int {
+  Log.debug("compute_start", ComputeStart { input: x })
+  
+  let result = x * 2
+  
+  Log.trace("intermediate", Intermediate { value: result })
+  
+  let final = result + 10
+  
+  Log.debug("compute_end", ComputeEnd { output: final })
+  
+  return final
+}
+
+type ComputeStart {
+  input: Int
+}
+
+type Intermediate {
+  value: Int
+}
+
+type ComputeEnd {
+  output: Int
+}
+
+test structured_output_tests {
+  test.assert_equal(compute(5), 20)
+  test.assert_equal(compute(10), 30)
+}

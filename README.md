@@ -20,12 +20,23 @@ After `npm install`, the `prepare` script builds the project automatically and g
 ### CLI usage
 
 ```
-lx run <file.lx> <module.fn> [json-arg ...]
-lx test <file.lx>
-lx check <file.lx>
+lx [--format=json|text] run <file.lx> <module.fn> [json-arg ...]
+lx [--format=json|text] test <file.lx>
+lx [--format=json|text] check <file.lx>
 ```
 
 Arguments to `lx run` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
+
+**Structured output:** Use `--format=json` to get machine-readable JSON output (errors, logs, results) suitable for LLM consumption. Default is `--format=text` for human-readable output.
+
+Examples:
+```bash
+# Run with JSON output
+lx run --format=json examples/structured_output.lx examples.structured_output.compute 5
+
+# Check for type errors with structured output
+lx check --format=json examples/error_example.lx
+```
 
 ## Development workflow
 
