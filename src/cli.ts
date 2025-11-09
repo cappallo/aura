@@ -35,6 +35,10 @@ function main() {
         return handleTest(args, ctx);
       case "check":
         return handleCheck(args, ctx);
+      case "format":
+        return handleFormat(args, ctx);
+      case "explain":
+        return handleExplain(args, ctx);
       default:
         console.error(`Unknown command '${command}'`);
         printUsage();
@@ -230,6 +234,118 @@ function handleCheck(args: string[], ctx: CliContext) {
   }
 }
 
+function handleFormat(args: string[], ctx: CliContext) {
+  const [filePath] = args;
+  if (!filePath) {
+    console.error("Usage: lx format <file.lx>");
+    process.exit(1);
+  }
+
+  try {
+    const mod = parseModuleFromFile(filePath);
+    const { formatModule } = require("./formatter");
+    const formatted = formatModule(mod);
+    console.log(formatted);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`Format error: ${error.message}`);
+    } else {
+      console.error(`Format error: ${String(error)}`);
+    }
+    process.exit(1);
+  }
+}
+
+function handleExplain(args: string[], ctx: CliContext) {
+  const [filePath, fnName, ...fnArgs] = args;
+  if (!filePath || !fnName) {
+    console.error("Usage: lx explain [--format=json|text] <file.lx> <module.fnName> [args...]");
+    process.exit(1);
+  }
+
+  const { module, modules, symbolTable, errors } = loadModuleWithDependencies(filePath, ctx);
+
+  if (errors && errors.length > 0) {
+    if (ctx.format === "json") {
+      const output: StructuredOutput = { status: "error", errors };
+      console.log(formatStructuredOutput(output));
+    } else {
+      for (const error of errors) {
+        console.error(formatError(error));
+      }
+    }
+    process.exit(1);
+  }
+
+  const runtime = modules && symbolTable
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format)
+    : buildRuntime(module, ctx.format);
+
+  // Enable tracing
+  runtime.tracing = true;
+  runtime.traces = [];
+  runtime.traceDepth = 0;
+
+  const [moduleName, functionName] = splitQualifiedName(fnName);
+  if (moduleName && moduleName !== module.name.join(".")) {
+    console.warn(`Warning: requested module '${moduleName}' does not match parsed module '${module.name.join(".")}'`);
+  }
+
+  const values = fnArgs.map(parseArgAsValue);
+
+  try {
+    const result = callFunction(runtime, functionName, values);
+
+    if (ctx.format === "json") {
+      const output: StructuredOutput = {
+        status: "success",
+        result: prettyValue(result),
+        traces: runtime.traces,
+      };
+      if (runtime.logs) {
+        output.logs = runtime.logs;
+      }
+      console.log(formatStructuredOutput(output));
+    } else {
+      console.log(`Result: ${prettyValue(result)}\n`);
+      console.log("Execution trace:");
+      for (const trace of runtime.traces || []) {
+        const indent = "  ".repeat(trace.depth);
+        console.log(`${indent}[${trace.stepType}] ${trace.description}`);
+      }
+    }
+  } catch (error) {
+    if (error instanceof RuntimeError) {
+      if (ctx.format === "json") {
+        const errorObj = convertToStructuredError({
+          message: error.message,
+          filePath: filePath,
+        });
+        const output: StructuredOutput = {
+          status: "error",
+          errors: [errorObj],
+          traces: runtime.traces,
+        };
+        if (runtime.logs) {
+          output.logs = runtime.logs;
+        }
+        console.log(formatStructuredOutput(output));
+      } else {
+        console.error(`Runtime error: ${error.message}`);
+        if (runtime.traces && runtime.traces.length > 0) {
+          console.error("\nExecution trace before error:");
+          for (const trace of runtime.traces) {
+            const indent = "  ".repeat(trace.depth);
+            console.error(`${indent}[${trace.stepType}] ${trace.description}`);
+          }
+        }
+      }
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
 function formatError(error: import("./typecheck").TypeCheckError): string {
   let msg = "Type error: ";
   if (error.filePath) {
@@ -349,9 +465,11 @@ function handleFatal(error: unknown) {
 
 function printUsage() {
   console.log("Usage:");
-  console.log("  lx [--format=json|text] run <file.lx> <module.fnName> [jsonArgs...]");
+  console.log("  lx [--format=json|text] run <file.lx> <module.fnName> [args...]");
   console.log("  lx [--format=json|text] test <file.lx>");
   console.log("  lx [--format=json|text] check <file.lx>");
+  console.log("  lx format <file.lx>");
+  console.log("  lx [--format=json|text] explain <file.lx> <module.fnName> [args...]");
   console.log("");
   console.log("Options:");
   console.log("  --format=json    Output structured JSON for LLM consumption");

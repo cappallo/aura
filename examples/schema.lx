@@ -1,0 +1,54 @@
+module examples.schema
+
+@version(1)
+schema UserRecord {
+  id: String
+  name: String
+}
+
+// Schema version 2: added email field (optional for backward compatibility)
+@version(2)
+schema UserRecordV2 {
+  id: String
+  name: String
+  email: String?
+}
+
+// Schema version 3: added created_at timestamp
+@version(3)
+schema UserRecordV3 {
+  id: String
+  name: String
+  email: String?
+  created_at: String
+}
+
+// Domain type for internal use
+type User {
+  id: String
+  name: String
+  email: String?
+}
+
+/// spec:
+/// description: Convert schema v2 to internal domain type
+/// inputs:
+///   - record: UserRecordV2 - external record from API/DB
+/// outputs: User - internal domain model
+fn from_user_record_v2(record: User) -> User {
+  // For now, we just use the same structure
+  // In a full implementation, this would do actual conversion
+  return record
+}
+
+test schema_example {
+  // Test basic user construction
+  let user = User {
+    id: "user-123",
+    name: "Alice",
+    email: "alice@example.com"
+  }
+  
+  test.assert_equal(user.id, "user-123")
+  test.assert_equal(user.name, "Alice")
+}

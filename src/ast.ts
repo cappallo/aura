@@ -21,6 +21,7 @@ export type ImportDecl = {
 export type TopLevelDecl =
   | EffectDecl
   | TypeDecl
+  | SchemaDecl
   | FnDecl
   | FnContractDecl
   | TestDecl
@@ -30,6 +31,20 @@ export type EffectDecl = {
   kind: "EffectDecl";
   name: string;
   docComment?: string;
+};
+
+export type SchemaDecl = {
+  kind: "SchemaDecl";
+  name: string;
+  version: number;
+  fields: SchemaField[];
+  docComment?: string;
+};
+
+export type SchemaField = {
+  name: string;
+  type: TypeExpr;
+  optional: boolean;
 };
 
 export type TypeDecl = AliasTypeDecl | RecordTypeDecl | SumTypeDecl;

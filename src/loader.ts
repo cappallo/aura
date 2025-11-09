@@ -19,6 +19,7 @@ export type SymbolTable = {
   types: Map<string, ast.TypeDecl>;
   functions: Map<string, ast.FnDecl>;
   effects: Map<string, ast.EffectDecl>;
+  schemas: Map<string, ast.SchemaDecl>;
 };
 
 /**
@@ -154,6 +155,7 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
   const types = new Map<string, ast.TypeDecl>();
   const functions = new Map<string, ast.FnDecl>();
   const effects = new Map<string, ast.EffectDecl>();
+  const schemas = new Map<string, ast.SchemaDecl>();
   
   for (const mod of modules) {
     const modulePrefix = mod.moduleName.join(".");
@@ -195,6 +197,20 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
           break;
         }
         
+        case "SchemaDecl": {
+          const qualifiedName = `${modulePrefix}.${decl.name}`;
+          if (schemas.has(qualifiedName)) {
+            throw new Error(
+              `Duplicate schema declaration: ${qualifiedName} in ${mod.filePath}`
+            );
+          }
+          schemas.set(qualifiedName, decl);
+          // Also add versioned name
+          const versionedName = `${qualifiedName}@${decl.version}`;
+          schemas.set(versionedName, decl);
+          break;
+        }
+        
         case "FnContractDecl":
         case "TestDecl":
         case "PropertyDecl":
@@ -208,7 +224,7 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
     }
   }
   
-  return { types, functions, effects };
+  return { types, functions, effects, schemas };
 }
 
 /**

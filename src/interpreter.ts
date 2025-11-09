@@ -21,6 +21,10 @@ export type Runtime = {
   // Structured logging support
   outputFormat?: "text" | "json";
   logs?: StructuredLog[];
+  // Execution tracing support
+  traces?: import("./structured").StructuredTrace[];
+  tracing?: boolean;
+  traceDepth?: number;
 };
 
 type FnContract = {
@@ -187,11 +191,20 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
     );
   }
 
+  // Trace function call
+  const argsStr = args.map(prettyValue).join(", ");
+  addTrace(runtime, "call", `${name}(${argsStr})`);
+  
+  // Increase trace depth
+  const oldDepth = runtime.traceDepth ?? 0;
+  runtime.traceDepth = oldDepth + 1;
+
   const paramEnv: Env = new Map();
   for (let i = 0; i < fn.params.length; i += 1) {
     const param = fn.params[i]!;
     const arg = args[i]!;
     paramEnv.set(param.name, arg);
+    addTrace(runtime, "let", `${param.name} = ${prettyValue(arg)}`, arg);
   }
 
   const contract = runtime.contracts.get(name) ?? null;
@@ -209,6 +222,12 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
     ensuresEnv.set("result", returnValue);
     enforceContractClauses(contract.ensures, ensuresEnv, runtime, name, "ensures");
   }
+
+  // Trace function return
+  addTrace(runtime, "return", `${name} => ${prettyValue(returnValue)}`, returnValue);
+  
+  // Restore trace depth
+  runtime.traceDepth = oldDepth;
 
   return returnValue;
 }
@@ -1404,6 +1423,30 @@ export function prettyValue(value: Value): unknown {
     default:
       return null;
   }
+}
+
+function addTrace(
+  runtime: Runtime,
+  stepType: "call" | "return" | "let" | "expr" | "match",
+  description: string,
+  value?: Value,
+  location?: ast.SourceLocation
+) {
+  if (!runtime.tracing || !runtime.traces) {
+    return;
+  }
+  
+  const depth = runtime.traceDepth ?? 0;
+  const { sourceLocationToErrorLocation } = require("./structured");
+  
+  runtime.traces.push({
+    kind: "trace",
+    stepType,
+    description,
+    value: value ? prettyValue(value) : undefined,
+    location: location ? sourceLocationToErrorLocation(location) : undefined,
+    depth,
+  });
 }
 
 export class RuntimeError extends Error {

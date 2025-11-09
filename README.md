@@ -20,14 +20,20 @@ After `npm install`, the `prepare` script builds the project automatically and g
 ### CLI usage
 
 ```
-lx [--format=json|text] run <file.lx> <module.fn> [json-arg ...]
+lx [--format=json|text] run <file.lx> <module.fn> [args...]
 lx [--format=json|text] test <file.lx>
 lx [--format=json|text] check <file.lx>
+lx format <file.lx>
+lx [--format=json|text] explain <file.lx> <module.fn> [args...]
 ```
 
-Arguments to `lx run` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
+Arguments to `lx run` and `lx explain` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
 
 **Structured output:** Use `--format=json` to get machine-readable JSON output (errors, logs, results) suitable for LLM consumption. Default is `--format=text` for human-readable output.
+
+**LLM-friendly tools:**
+- `lx format` - Produces deterministic, canonical formatting from AST
+- `lx explain` - Shows step-by-step execution trace with function calls, returns, and variable bindings
 
 Examples:
 ```bash
@@ -36,6 +42,15 @@ lx run --format=json examples/structured_output.lx examples.structured_output.co
 
 # Check for type errors with structured output
 lx check --format=json examples/error_example.lx
+
+# Format code canonically
+lx format examples/median.lx
+
+# Explain execution with trace
+lx explain examples/median.lx median '[2,4,6,8]'
+
+# Get execution trace as JSON
+lx explain --format=json examples/median.lx median '[2,4,6,8]'
 ```
 
 ## Documentation

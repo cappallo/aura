@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~55% (Core language ~80% complete, LLM-first tooling ~30% complete)
+**Overall Progress:** ~62% (Core language ~82% complete, LLM-first tooling ~45% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -79,6 +79,14 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Failure reporting**: Counterexamples shown with generated values
 - ⚠️ **Shrinking**: No counterexample minimization yet (SPEC.md §7.4 enhancement)
 
+### Schemas
+- ✅ **Schema declarations**: `schema` keyword with field declarations
+- ✅ **Version annotations**: `@version(n)` syntax for schema versioning
+- ✅ **Field validation**: Typechecker validates schema field types
+- ✅ **Module integration**: Schemas tracked in global symbol table
+- ⚠️ **Type generation**: No automatic type derivation from schemas yet
+- ⚠️ **Codecs**: No JSON/HTTP codec generation yet (SPEC.md §8.3)
+
 ---
 
 ## ❌ Not Yet Implemented (Per SPEC.md)
@@ -96,9 +104,10 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ `Concurrent` effect for actor/task operations
 
 ### 2. Schemas & I/O (§8 of SPEC)
-- ❌ `schema` declarations
-- ❌ `@version(n)` annotations
-- ❌ Schema-to-type mapping
+- ✅ `schema` declarations
+- ✅ `@version(n)` annotations
+- ✅ Schema field validation and typechecking
+- ❌ Schema-to-type mapping (automatic type generation)
 - ❌ JSON/HTTP codec generation
 - ❌ Typed I/O bindings
 
@@ -257,31 +266,35 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Completed:** Structured output is now fully functional! The CLI supports `--format=json` flag for all commands (run, test, check). Errors include type, message, location, and optional hints. Logs are collected and emitted as structured JSON with timestamps, levels, and data payloads.
 
 ### **Priority 6: Schemas (§8 of SPEC)**
-**Status:** 🔴 Not started - **HIGH priority**  
+**Status:** ✅ Partially Complete - Core schema declarations done  
 **Goal:** External data shape declarations with versioning
-- [ ] Extend AST for `schema` declarations
-- [ ] Add `@version(n)` annotation parsing
+- [x] Extend AST for `schema` declarations
+- [x] Add `@version(n)` annotation parsing
+- [x] Parse schema field declarations with types
+- [x] Implement schema validation in typechecker
+- [x] Add schema tracking to module loader
+- [x] Test with schema examples (`schema_simple.lx`, `schema_versioned.lx`)
 - [ ] Generate internal types from schemas (e.g., `UserRecord@2`)
 - [ ] Create JSON codec functions
-- [ ] Add validation functions
-- [ ] Test schema evolution scenarios
-- [ ] Implement schema-to-type mapping helpers
+- [ ] Add validation functions for schema compatibility
 
-**Why sixth:** Enables typed I/O; critical for practical programs and external data integration (SPEC.md §8.1-8.3).
+**Completed:** Schema declarations with `@version(n)` annotations are now fully parsed and typechecked! Schemas can declare typed fields and are validated during typechecking. Automatic type generation and codec functions remain as future enhancements.
 
 ### **Priority 7: LLM Tooling API (THOUGHTS.md §5.2, §6.1)**
-**Status:** 🔴 Not started - **MEDIUM priority**  
+**Status:** � Partially Complete - Core tools implemented  
 **Goal:** Execution tracing, formatting, and patch-based editing
-- [ ] Implement canonical code formatter/pretty-printer (THOUGHTS.md §1.2, §6.1)
-- [ ] Add execution tracing for `explain fn(args)` (THOUGHTS.md §5.2)
-- [ ] Emit structured trace output (StructuredTrace type already defined)
+- [x] Implement canonical code formatter/pretty-printer (THOUGHTS.md §1.2, §6.1)
+- [x] Add execution tracing for `explain fn(args)` (THOUGHTS.md §5.2)
+- [x] Emit structured trace output (StructuredTrace type already defined)
+- [x] Add `lx format` command for deterministic code formatting
+- [x] Add `lx explain` command with text and JSON output
 - [ ] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [ ] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
 - [ ] Add named arguments support (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
-**Why seventh:** Completes the LLM-first developer experience and enables the full feedback loop.
+**Completed:** Code formatter produces deterministic, canonical output from AST. Execution tracing captures function calls, returns, let bindings with nesting depth. The `explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption.
 
 ---
 

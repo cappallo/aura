@@ -52,6 +52,14 @@ type RecordTypeInfo = {
   module: ast.Module;
 };
 
+type SchemaInfo = {
+  name: string;
+  qualifiedName: string;
+  version: number;
+  decl: ast.SchemaDecl;
+  module: ast.Module;
+};
+
 type TypecheckContext = {
   functions: Map<string, FnSignature>;
   declaredEffects: Set<string>;
@@ -60,6 +68,7 @@ type TypecheckContext = {
   typeDecls: Map<string, TypeDeclInfo>;
   localTypeDecls: Map<string, TypeDeclInfo>;
   variantConstructors: Map<string, VariantInfo[]>;
+  schemas: Map<string, SchemaInfo>;
   // For multi-module support
   currentModule?: ast.Module;
   symbolTable?: SymbolTable;
@@ -71,6 +80,7 @@ type IndexedTypeInfo = {
   typeDecls: Map<string, TypeDeclInfo>;
   localTypeDecls: Map<string, TypeDeclInfo>;
   variantConstructors: Map<string, VariantInfo[]>;
+  schemas: Map<string, SchemaInfo>;
 };
 
 type TypeVar = {
@@ -281,6 +291,7 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
     typeDecls: typeInfo.typeDecls,
     localTypeDecls: typeInfo.localTypeDecls,
     variantConstructors: typeInfo.variantConstructors,
+    schemas: typeInfo.schemas,
     currentModule: module,
   };
 
@@ -304,6 +315,12 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
     }
   }
 
+  for (const decl of module.decls) {
+    if (decl.kind === "SchemaDecl") {
+      checkSchema(decl, ctx, errors);
+    }
+  }
+
   return errors;
 }
 
@@ -323,6 +340,7 @@ export function typecheckModules(
   const globalRecordTypes = new Map<string, RecordTypeInfo>();
   const globalTypeDecls = new Map<string, TypeDeclInfo>();
   const globalVariantConstructors = new Map<string, VariantInfo[]>();
+  const globalSchemas = new Map<string, SchemaInfo>();
   const moduleTypeCache = new Map<ast.Module, IndexedTypeInfo>();
 
   for (const resolvedModule of modules) {
@@ -387,6 +405,13 @@ export function typecheckModules(
         globalVariantConstructors.set(key, [...infos]);
       }
     }
+
+    for (const [key, schemaInfo] of typeInfo.schemas.entries()) {
+      if (!key.includes(".")) {
+        continue;
+      }
+      globalSchemas.set(key, schemaInfo);
+    }
   }
 
   for (const resolvedModule of modules) {
@@ -400,6 +425,7 @@ export function typecheckModules(
     const moduleRecordTypes = new Map(globalRecordTypes);
     const moduleTypeDecls = new Map(globalTypeDecls);
     const moduleVariantConstructors = new Map<string, VariantInfo[]>();
+    const moduleSchemas = new Map(globalSchemas);
     for (const [key, infos] of globalVariantConstructors.entries()) {
       moduleVariantConstructors.set(key, [...infos]);
     }
@@ -441,6 +467,7 @@ export function typecheckModules(
       typeDecls: moduleTypeDecls,
       localTypeDecls: typeInfo ? typeInfo.localTypeDecls : new Map(),
       variantConstructors: moduleVariantConstructors,
+      schemas: moduleSchemas,
       currentModule: module,
       symbolTable,
     };
@@ -460,6 +487,12 @@ export function typecheckModules(
     for (const decl of module.decls) {
       if (decl.kind === "PropertyDecl") {
         checkProperty(decl, ctx, errors, filePath);
+      }
+    }
+
+    for (const decl of module.decls) {
+      if (decl.kind === "SchemaDecl") {
+        checkSchema(decl, ctx, errors, filePath);
       }
     }
   }
@@ -505,6 +538,7 @@ function collectModuleTypeInfo(module: ast.Module): IndexedTypeInfo {
   const typeDecls = new Map<string, TypeDeclInfo>();
   const localTypeDecls = new Map<string, TypeDeclInfo>();
   const variantConstructors = new Map<string, VariantInfo[]>();
+  const schemas = new Map<string, SchemaInfo>();
 
   const modulePrefix = module.name.join(".");
 
@@ -516,6 +550,34 @@ function collectModuleTypeInfo(module: ast.Module): IndexedTypeInfo {
       variantConstructors.set(key, [info]);
     }
   };
+
+  // Collect schemas
+  for (const decl of module.decls) {
+    if (decl.kind === "SchemaDecl") {
+      const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
+      const schemaInfo: SchemaInfo = {
+        name: decl.name,
+        qualifiedName,
+        version: decl.version,
+        decl,
+        module,
+      };
+      schemas.set(decl.name, schemaInfo);
+      schemas.set(qualifiedName, schemaInfo);
+      // Also add versioned name
+      const versionedName = `${decl.name}@${decl.version}`;
+      const versionedQualifiedName = modulePrefix ? `${modulePrefix}.${versionedName}` : versionedName;
+      const versionedInfo: SchemaInfo = {
+        name: versionedName,
+        qualifiedName: versionedQualifiedName,
+        version: decl.version,
+        decl,
+        module,
+      };
+      schemas.set(versionedName, versionedInfo);
+      schemas.set(versionedQualifiedName, versionedInfo);
+    }
+  }
 
   for (const decl of module.decls) {
     if (decl.kind !== "AliasTypeDecl" && decl.kind !== "RecordTypeDecl" && decl.kind !== "SumTypeDecl") {
@@ -585,6 +647,7 @@ function collectModuleTypeInfo(module: ast.Module): IndexedTypeInfo {
     typeDecls,
     localTypeDecls,
     variantConstructors,
+    schemas,
   };
 }
 
@@ -650,6 +713,51 @@ function checkProperty(
     treatAsExpression: false,
     cloneEnv: false,
   });
+}
+
+function checkSchema(
+  schema: ast.SchemaDecl,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  filePath?: string,
+): void {
+  // Validate version is positive
+  if (schema.version <= 0) {
+    errors.push(makeError(
+      `Schema '${schema.name}' version must be positive, got ${schema.version}`,
+      undefined,
+      filePath
+    ));
+  }
+
+  // Validate field types are valid
+  const state: InferState = {
+    nextTypeVarId: 0,
+    substitutions: new Map(),
+    errors,
+    ctx,
+    currentFunction: undefined as any, // Not needed for schema checking
+    expectedReturnType: UNIT_TYPE,
+  };
+
+  if (filePath !== undefined) {
+    state.currentFilePath = filePath;
+  }
+
+  const typeParamScope = new Map<string, Type>();
+  const resolutionModule = ctx.currentModule;
+
+  for (const field of schema.fields) {
+    try {
+      convertTypeExpr(field.type, typeParamScope, state, resolutionModule);
+    } catch (err) {
+      errors.push(makeError(
+        `Schema '${schema.name}' field '${field.name}' has invalid type`,
+        undefined,
+        filePath
+      ));
+    }
+  }
 }
 
 function verifyDeclaredEffects(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string) {

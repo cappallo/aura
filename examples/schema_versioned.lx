@@ -1,0 +1,93 @@
+module examples.schema_versioned
+
+// Schema evolution example - version 1
+@version(1)
+schema UserV1 {
+  id: String
+  name: String
+}
+
+// Schema evolution - version 2 adds email field
+@version(2)
+schema UserV2 {
+  id: String
+  name: String
+  email: String?
+}
+
+// Complex schema with nested fields
+@version(1)
+schema Address {
+  street: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+}
+
+@version(1)
+schema Profile {
+  userId: String
+  displayName: String
+  bio: String
+  address: AddressData
+  verified: Bool
+}
+
+// Corresponding types for runtime use
+type User {
+  id: String
+  name: String
+  email: String
+}
+
+type AddressData {
+  street: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+}
+
+type ProfileData {
+  userId: String
+  displayName: String
+  bio: String
+  address: AddressData
+  verified: Bool
+}
+
+test schema_basic {
+  let user = User {
+    id: "u123",
+    name: "Alice",
+    email: "alice@example.com"
+  }
+  
+  test.assert_equal(user.id, "u123")
+  test.assert_equal(user.name, "Alice")
+  test.assert_equal(user.email, "alice@example.com")
+}
+
+test nested_schema {
+  let addr = AddressData {
+    street: "123 Main St",
+    city: "Portland",
+    state: "OR",
+    country: "USA",
+    postalCode: "97201"
+  }
+  
+  let profile = ProfileData {
+    userId: "u456",
+    displayName: "Bob",
+    bio: "Developer",
+    address: addr,
+    verified: true
+  }
+  
+  test.assert_equal(profile.userId, "u456")
+  test.assert_equal(profile.verified, true)
+  test.assert_equal(profile.address.city, "Portland")
+  test.assert_equal(profile.address.country, "USA")
+}

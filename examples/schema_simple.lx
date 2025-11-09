@@ -1,0 +1,22 @@
+module examples.schema_simple
+
+@version(1)
+schema UserRecord {
+  id: String
+  name: String
+}
+
+type User {
+  id: String
+  name: String
+}
+
+test schema_example {
+  let user = User {
+    id: "user-123",
+    name: "Alice"
+  }
+  
+  test.assert_equal(user.id, "user-123")
+  test.assert_equal(user.name, "Alice")
+}

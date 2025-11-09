@@ -68,6 +68,7 @@ DocCommentLine
 
 TopLevelDeclCore
 	= EffectDecl
+	/ SchemaDecl
 	/ TypeDecl
 	/ FnDecl
 	/ ContractDecl
@@ -80,6 +81,26 @@ EffectDecl
 				kind: "EffectDecl",
 				name,
 			};
+		}
+
+SchemaDecl
+	= "@version" _ "(" _ version:Integer _ ")" Terminator+ "schema" __ name:Ident __ "{" BlockGap fields:SchemaFieldList? BlockGap "}" Terminator+ {
+			return {
+				kind: "SchemaDecl",
+				name,
+				version: version,
+				fields: fields || [],
+			};
+		}
+
+SchemaFieldList
+	= head:SchemaField tail:(FieldSeparator SchemaField)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+SchemaField
+	= _? name:Ident _ ":" _ type:TypeExpr optional:"?"? {
+			return { name, type, optional: optional !== null };
 		}
 
 TypeDecl
@@ -458,7 +479,7 @@ RecordFieldList
 
 RecordFieldSeparator
 	= (NL)+
-	/ _ "," _
+	/ _ "," WSAny
 
 
 RecordField
@@ -555,7 +576,7 @@ GapUnit
 	/ Comment
 
 Integer
-	= digits:[0-9]+ { return digits.join(""); }
+	= digits:[0-9]+ { return parseInt(digits.join(""), 10); }
 
 Ident
 	= $([a-zA-Z_][a-zA-Z0-9_]*)
