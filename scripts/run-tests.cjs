@@ -23,6 +23,7 @@ function runExpectFailure(description, command, args) {
 runCommand("node", [cliPath, "test", "examples/median.lx"]);
 runCommand("node", [cliPath, "test", "examples/logging.lx"]);
 runCommand("node", [cliPath, "test", "examples/contracts.lx"]);
+runCommand("node", [cliPath, "test", "examples/builtins.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
 
 runExpectFailure(

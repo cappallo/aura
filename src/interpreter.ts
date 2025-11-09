@@ -410,6 +410,24 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinAssert(expr, env, runtime);
     case "str.concat":
       return builtinStrConcat(expr, env, runtime);
+    case "str.len":
+      return builtinStrLen(expr, env, runtime);
+    case "str.slice":
+      return builtinStrSlice(expr, env, runtime);
+    case "str.at":
+      return builtinStrAt(expr, env, runtime);
+    case "math.abs":
+      return builtinMathAbs(expr, env, runtime);
+    case "math.min":
+      return builtinMathMin(expr, env, runtime);
+    case "math.max":
+      return builtinMathMax(expr, env, runtime);
+    case "list.map":
+      return builtinListMap(expr, env, runtime);
+    case "list.filter":
+      return builtinListFilter(expr, env, runtime);
+    case "list.fold":
+      return builtinListFold(expr, env, runtime);
     case "Log.debug":
       return builtinLog("debug", expr, env, runtime);
     case "Log.trace":
@@ -513,6 +531,237 @@ function builtinNot(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
     throw new RuntimeError("logical not expects a boolean argument");
   }
   return { kind: "Bool", value: !value.value };
+}
+
+// String operations
+function builtinStrLen(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("str.len expects exactly one argument");
+  }
+  const str = evalExpr(expr.args[0]!, env, runtime);
+  if (str.kind !== "String") {
+    throw new RuntimeError("str.len expects a string argument");
+  }
+  return { kind: "Int", value: str.value.length };
+}
+
+function builtinStrSlice(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 3) {
+    throw new RuntimeError("str.slice expects exactly three arguments");
+  }
+  const str = evalExpr(expr.args[0]!, env, runtime);
+  const start = evalExpr(expr.args[1]!, env, runtime);
+  const end = evalExpr(expr.args[2]!, env, runtime);
+  
+  if (str.kind !== "String") {
+    throw new RuntimeError("str.slice expects a string as first argument");
+  }
+  if (start.kind !== "Int" || end.kind !== "Int") {
+    throw new RuntimeError("str.slice expects integer start and end positions");
+  }
+  
+  return { kind: "String", value: str.value.slice(start.value, end.value) };
+}
+
+function builtinStrAt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("str.at expects exactly two arguments");
+  }
+  const str = evalExpr(expr.args[0]!, env, runtime);
+  const index = evalExpr(expr.args[1]!, env, runtime);
+  
+  if (str.kind !== "String") {
+    throw new RuntimeError("str.at expects a string as first argument");
+  }
+  if (index.kind !== "Int") {
+    throw new RuntimeError("str.at expects an integer index");
+  }
+  
+  const idx = index.value;
+  if (idx < 0 || idx >= str.value.length) {
+    // Return None
+    return { kind: "Ctor", name: "None", fields: new Map() };
+  }
+  
+  // Return Some(char)
+  const char = str.value.charAt(idx);
+  const fields = new Map<string, Value>();
+  fields.set("value", { kind: "String", value: char });
+  return {
+    kind: "Ctor",
+    name: "Some",
+    fields,
+  };
+}
+
+// Math operations
+function builtinMathAbs(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("math.abs expects exactly one argument");
+  }
+  const value = evalExpr(expr.args[0]!, env, runtime);
+  if (value.kind !== "Int") {
+    throw new RuntimeError("math.abs expects an integer argument");
+  }
+  return { kind: "Int", value: Math.abs(value.value) };
+}
+
+function builtinMathMin(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("math.min expects exactly two arguments");
+  }
+  const left = evalExpr(expr.args[0]!, env, runtime);
+  const right = evalExpr(expr.args[1]!, env, runtime);
+  
+  if (left.kind !== "Int" || right.kind !== "Int") {
+    throw new RuntimeError("math.min expects integer arguments");
+  }
+  return { kind: "Int", value: Math.min(left.value, right.value) };
+}
+
+function builtinMathMax(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("math.max expects exactly two arguments");
+  }
+  const left = evalExpr(expr.args[0]!, env, runtime);
+  const right = evalExpr(expr.args[1]!, env, runtime);
+  
+  if (left.kind !== "Int" || right.kind !== "Int") {
+    throw new RuntimeError("math.max expects integer arguments");
+  }
+  return { kind: "Int", value: Math.max(left.value, right.value) };
+}
+
+// List operations
+function builtinListMap(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("list.map expects exactly two arguments");
+  }
+  const list = evalExpr(expr.args[0]!, env, runtime);
+  const fnArg = expr.args[1]!;
+  
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.map expects a list as first argument");
+  }
+  
+  // The function argument should be a variable name referencing a function
+  if (fnArg.kind !== "VarRef") {
+    throw new RuntimeError("list.map expects a function as second argument");
+  }
+  
+  const fnName = fnArg.name;
+  let resolvedFnName = fnName;
+  
+  // Resolve identifier if we have a symbol table
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
+  }
+  
+  const fn = runtime.functions.get(resolvedFnName);
+  if (!fn) {
+    throw new RuntimeError(`Unknown function '${fnName}' in list.map`);
+  }
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("list.map expects a function that takes exactly one argument");
+  }
+  
+  const mapped = list.elements.map((element) => {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, element);
+    const result = evalBlock(fn.body, callEnv, runtime);
+    return result.value;
+  });
+  
+  return { kind: "List", elements: mapped };
+}
+
+function builtinListFilter(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 2) {
+    throw new RuntimeError("list.filter expects exactly two arguments");
+  }
+  const list = evalExpr(expr.args[0]!, env, runtime);
+  const fnArg = expr.args[1]!;
+  
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.filter expects a list as first argument");
+  }
+  
+  if (fnArg.kind !== "VarRef") {
+    throw new RuntimeError("list.filter expects a function as second argument");
+  }
+  
+  const fnName = fnArg.name;
+  let resolvedFnName = fnName;
+  
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
+  }
+  
+  const fn = runtime.functions.get(resolvedFnName);
+  if (!fn) {
+    throw new RuntimeError(`Unknown function '${fnName}' in list.filter`);
+  }
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("list.filter expects a function that takes exactly one argument");
+  }
+  
+  const filtered = list.elements.filter((element) => {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, element);
+    const result = evalBlock(fn.body, callEnv, runtime);
+    if (result.value.kind !== "Bool") {
+      throw new RuntimeError("list.filter predicate must return a boolean");
+    }
+    return result.value.value;
+  });
+  
+  return { kind: "List", elements: filtered };
+}
+
+function builtinListFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 3) {
+    throw new RuntimeError("list.fold expects exactly three arguments");
+  }
+  const list = evalExpr(expr.args[0]!, env, runtime);
+  const initial = evalExpr(expr.args[1]!, env, runtime);
+  const fnArg = expr.args[2]!;
+  
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.fold expects a list as first argument");
+  }
+  
+  if (fnArg.kind !== "VarRef") {
+    throw new RuntimeError("list.fold expects a function as third argument");
+  }
+  
+  const fnName = fnArg.name;
+  let resolvedFnName = fnName;
+  
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    resolvedFnName = resolveIdentifier(fnName, runtime.module, runtime.symbolTable);
+  }
+  
+  const fn = runtime.functions.get(resolvedFnName);
+  if (!fn) {
+    throw new RuntimeError(`Unknown function '${fnName}' in list.fold`);
+  }
+  if (fn.params.length !== 2) {
+    throw new RuntimeError("list.fold expects a function that takes exactly two arguments");
+  }
+  
+  let accumulator = initial;
+  for (const element of list.elements) {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, accumulator);
+    callEnv.set(fn.params[1]!.name, element);
+    const result = evalBlock(fn.body, callEnv, runtime);
+    accumulator = result.value;
+  }
+  
+  return accumulator;
 }
 
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {

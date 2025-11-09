@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~45% (Core v0.1 + Module Resolution + Type Inference + Property Runtime)
+**Overall Progress:** ~48% (Core v0.1 + Module Resolution + Type Inference + Property Runtime + Extended Builtins)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -42,7 +42,12 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Expression evaluation (569 lines)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
-- ✅ Built-in functions: `list.len`, `str.concat`, `test.assert_equal`, `assert`, `Log.debug`, `Log.trace`
+- ✅ Built-in functions: 
+  - List: `list.len`, `list.map`, `list.filter`, `list.fold`
+  - String: `str.concat`, `str.len`, `str.slice`, `str.at`
+  - Math: `math.abs`, `math.min`, `math.max`
+  - Testing: `test.assert_equal`, `assert`
+  - Logging: `Log.debug`, `Log.trace`
 - ✅ Value types: Int, Bool, String, List, Constructor (ADTs), Unit
 
 ### 5. Contracts (Partial)
@@ -141,13 +146,14 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 13 example files including:
+The implementation successfully runs 14 example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
 - ✅ `median.lx` - Pure functions with tests
 - ✅ `result.lx` - Error handling patterns
 - ✅ `property_basics.lx` - Property-based testing with predicates and assertions
+- ✅ `builtins.lx` - Extended standard library (string, math, list operations)
 
 ---
 
@@ -219,7 +225,7 @@ Phase 2 (Current): Foundations ✅
 ├─ Module resolution → ✅ Complete
 ├─ Full type inference → ✅ Complete
 ├─ Better error messages → ✅ Complete
-└─ Standard library expansion → In Progress
+└─ Standard library expansion → ✅ Basic builtins complete
 
 Phase 3 (Near-term): Testing & I/O
 ├─ Property-based tests → Priority 3
@@ -271,8 +277,8 @@ lx check <file.lx>                        # Type check only
 ## 🐛 Known Issues
 
 1. **No REPL** - must write files to test code
-2. **Limited builtins** - many basic operations missing (string manipulation, math functions, etc.)
-3. **No standard library** - only a handful of built-in functions available
+2. **Limited standard library** - basic operations now available but could be expanded further
+3. **No shrinking for property tests** - counterexamples are not minimized
 
 ---
 

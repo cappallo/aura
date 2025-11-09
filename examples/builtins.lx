@@ -1,0 +1,47 @@
+module examples.builtins
+
+fn is_positive(x: Int) -> Bool {
+  return x > 0
+}
+
+fn add(acc: Int, x: Int) -> Int {
+  return acc + x
+}
+
+fn double(x: Int) -> Int {
+  return x * 2
+}
+
+test builtin_tests {
+  test.assert_equal(str.len("hello"), 5);
+  test.assert_equal(str.len(""), 0);
+  
+  test.assert_equal(str.slice("hello", 0, 5), "hello");
+  test.assert_equal(str.slice("hello", 1, 4), "ell");
+  test.assert_equal(str.slice("hello", 0, 0), "");
+  
+  test.assert_equal(math.abs(-5), 5);
+  test.assert_equal(math.abs(7), 7);
+  test.assert_equal(math.abs(0), 0);
+  test.assert_equal(math.min(3, 8), 3);
+  test.assert_equal(math.max(3, 8), 8);
+  test.assert_equal(math.min(-1, -5), -5);
+  test.assert_equal(math.max(-1, -5), -1);
+  
+  let numbers = [1, 2, 3];
+  let doubled = list.map(numbers, double);
+  test.assert_equal(list.len(doubled), 3);
+  test.assert_equal(doubled, [2, 4, 6]);
+  
+  let mixed = [-2, -1, 0, 1, 2];
+  let positives = list.filter(mixed, is_positive);
+  test.assert_equal(list.len(positives), 2);
+  test.assert_equal(positives, [1, 2]);
+  
+  let values = [1, 2, 3, 4, 5];
+  let sum = list.fold(values, 0, add);
+  test.assert_equal(sum, 15);
+  
+  let empty_sum = list.fold([], 0, add);
+  test.assert_equal(empty_sum, 0);
+}

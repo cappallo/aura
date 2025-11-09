@@ -205,6 +205,68 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([STRING_TYPE, payload], UNIT_TYPE);
     },
   },
+  "str.len": {
+    arity: 1,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE], INT_TYPE),
+  },
+  "str.slice": {
+    arity: 3,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, INT_TYPE, INT_TYPE], STRING_TYPE),
+  },
+  "str.at": {
+    arity: 2,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const optionType = makeOptionType(STRING_TYPE);
+      return makeFunctionType([STRING_TYPE, INT_TYPE], optionType);
+    },
+  },
+  "math.abs": {
+    arity: 1,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "math.min": {
+    arity: 2,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "math.max": {
+    arity: 2,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "list.map": {
+    arity: 2,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const inputElem = freshTypeVar("A", false, state);
+      const outputElem = freshTypeVar("B", false, state);
+      const fnType = makeFunctionType([inputElem], outputElem);
+      return makeFunctionType([makeListType(inputElem), fnType], makeListType(outputElem));
+    },
+  },
+  "list.filter": {
+    arity: 2,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      const fnType = makeFunctionType([element], BOOL_TYPE);
+      return makeFunctionType([makeListType(element), fnType], makeListType(element));
+    },
+  },
+  "list.fold": {
+    arity: 3,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      const accumulator = freshTypeVar("Acc", false, state);
+      const fnType = makeFunctionType([accumulator, element], accumulator);
+      return makeFunctionType([makeListType(element), accumulator, fnType], accumulator);
+    },
+  },
 };
 
 export function typecheckModule(module: ast.Module): TypeCheckError[] {
