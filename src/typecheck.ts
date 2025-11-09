@@ -1,4 +1,6 @@
 import * as ast from "./ast";
+import type { SymbolTable, ResolvedModule } from "./loader";
+import { resolveIdentifier } from "./loader";
 
 export type TypeCheckError = {
   message: string;
@@ -20,6 +22,10 @@ type TypecheckContext = {
   functions: Map<string, FnSignature>;
   declaredEffects: Set<string>;
   sumTypes: Map<string, SumTypeInfo>;
+  recordTypes: Set<string>;
+  // For multi-module support
+  currentModule?: ast.Module;
+  symbolTable?: SymbolTable;
 };
 
 const BUILTIN_FUNCTIONS: Record<string, { arity: number | null; effects: Set<string> }> = {
@@ -37,6 +43,7 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
     functions: collectFunctions(module.decls),
     declaredEffects: collectEffects(module.decls),
     sumTypes: collectSumTypes(module.decls),
+    recordTypes: collectRecordTypes(module.decls),
   };
 
   const errors: TypeCheckError[] = [];
@@ -50,6 +57,77 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
   for (const decl of module.decls) {
     if (decl.kind === "FnContractDecl") {
       checkContract(decl, ctx, errors);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Typecheck multiple modules with cross-module symbol resolution
+ */
+export function typecheckModules(
+  modules: ResolvedModule[],
+  symbolTable: SymbolTable
+): TypeCheckError[] {
+  const errors: TypeCheckError[] = [];
+
+  // Build global function and effect maps
+  const globalFunctions = new Map<string, FnSignature>();
+  const globalEffects = new Set<string>();
+  const globalSumTypes = new Map<string, SumTypeInfo>();
+  const globalRecordTypes = new Set<string>();
+
+  for (const [qualifiedName, fnDecl] of symbolTable.functions.entries()) {
+    globalFunctions.set(qualifiedName, {
+      name: qualifiedName,
+      paramCount: fnDecl.params.length,
+      paramNames: fnDecl.params.map((param) => param.name),
+      effects: new Set(fnDecl.effects),
+    });
+  }
+
+  for (const [qualifiedName] of symbolTable.effects.entries()) {
+    globalEffects.add(qualifiedName);
+  }
+
+  for (const [qualifiedName, typeDecl] of symbolTable.types.entries()) {
+    if (typeDecl.kind === "SumTypeDecl") {
+      const variants = new Set<string>();
+      for (const variant of typeDecl.variants) {
+        variants.add(variant.name);
+      }
+      globalSumTypes.set(qualifiedName, {
+        name: qualifiedName,
+        variants,
+      });
+    } else if (typeDecl.kind === "RecordTypeDecl") {
+      globalRecordTypes.add(qualifiedName);
+    }
+  }
+
+  // Check each module with access to global symbol table
+  for (const resolvedModule of modules) {
+    const module = resolvedModule.ast;
+    const ctx: TypecheckContext = {
+      functions: globalFunctions,
+      declaredEffects: globalEffects,
+      sumTypes: globalSumTypes,
+      recordTypes: globalRecordTypes,
+      currentModule: module,
+      symbolTable: symbolTable,
+    };
+
+    for (const decl of module.decls) {
+      if (decl.kind === "FnDecl") {
+        checkFunction(decl, ctx, errors);
+      }
+    }
+
+    for (const decl of module.decls) {
+      if (decl.kind === "FnContractDecl") {
+        checkContract(decl, ctx, errors);
+      }
     }
   }
 
@@ -93,6 +171,16 @@ function collectSumTypes(decls: ast.TopLevelDecl[]): Map<string, SumTypeInfo> {
         name: decl.name,
         variants,
       });
+    }
+  }
+  return types;
+}
+
+function collectRecordTypes(decls: ast.TopLevelDecl[]): Set<string> {
+  const types = new Set<string>();
+  for (const decl of decls) {
+    if (decl.kind === "RecordTypeDecl") {
+      types.add(decl.name);
     }
   }
   return types;
@@ -252,12 +340,33 @@ function checkContractExpr(
       return;
     }
     case "RecordExpr": {
-      // Validate that the constructor exists in a sum type
+      // Validate that the constructor exists (either as a sum type variant or record type)
       let foundCtor = false;
+      
+      // Check sum type variants
       for (const [typeName, typeInfo] of ctx.sumTypes.entries()) {
         if (typeInfo.variants.has(expr.typeName)) {
           foundCtor = true;
           break;
+        }
+      }
+      
+      // Check record types
+      if (!foundCtor && ctx.recordTypes.has(expr.typeName)) {
+        foundCtor = true;
+      }
+      
+      // Also check if it's a record type name in the symbol table (for multi-module support)
+      if (!foundCtor && ctx.symbolTable && ctx.currentModule) {
+        let qualifiedName = expr.typeName;
+        // Try to resolve the identifier
+        if (!expr.typeName.includes(".")) {
+          qualifiedName = resolveIdentifier(expr.typeName, ctx.currentModule, ctx.symbolTable);
+        }
+        
+        const typeDecl = ctx.symbolTable.types.get(qualifiedName);
+        if (typeDecl && typeDecl.kind === "RecordTypeDecl") {
+          foundCtor = true;
         }
       }
       
@@ -349,8 +458,10 @@ function checkExpr(expr: ast.Expr, fn: ast.FnDecl, ctx: TypecheckContext, errors
       return;
     }
     case "RecordExpr": {
-      // Validate that the constructor exists in a sum type
+      // Validate that the constructor exists (either as a sum type variant or record type)
       let foundCtor = false;
+      
+      // Check sum type variants
       for (const [typeName, typeInfo] of ctx.sumTypes.entries()) {
         if (typeInfo.variants.has(expr.typeName)) {
           foundCtor = true;
@@ -358,9 +469,28 @@ function checkExpr(expr: ast.Expr, fn: ast.FnDecl, ctx: TypecheckContext, errors
         }
       }
       
+      // Check record types
+      if (!foundCtor && ctx.recordTypes.has(expr.typeName)) {
+        foundCtor = true;
+      }
+      
+      // Also check if it's a record type name in the symbol table (for multi-module support)
+      if (!foundCtor && ctx.symbolTable && ctx.currentModule) {
+        let qualifiedName = expr.typeName;
+        // Try to resolve the identifier
+        if (!expr.typeName.includes(".")) {
+          qualifiedName = resolveIdentifier(expr.typeName, ctx.currentModule, ctx.symbolTable);
+        }
+        
+        const typeDecl = ctx.symbolTable.types.get(qualifiedName);
+        if (typeDecl && typeDecl.kind === "RecordTypeDecl") {
+          foundCtor = true;
+        }
+      }
+      
       if (!foundCtor) {
         errors.push({
-          message: `Unknown constructor '${expr.typeName}'. Not found in any sum type.`,
+          message: `Unknown constructor '${expr.typeName}'. Not found in any sum type or record type.`,
         });
       }
       
@@ -405,7 +535,13 @@ function checkCall(expr: ast.CallExpr, fn: ast.FnDecl, ctx: TypecheckContext, er
     return;
   }
 
-  const signature = ctx.functions.get(expr.callee);
+  // Resolve identifier using current module and symbol table
+  let qualifiedName = expr.callee;
+  if (ctx.currentModule && ctx.symbolTable) {
+    qualifiedName = resolveIdentifier(expr.callee, ctx.currentModule, ctx.symbolTable);
+  }
+
+  const signature = ctx.functions.get(qualifiedName);
   if (!signature) {
     errors.push({ message: `Unknown function '${expr.callee}'` });
     return;
@@ -441,7 +577,13 @@ function checkContractCall(
     return;
   }
 
-  const signature = ctx.functions.get(expr.callee);
+  // Resolve identifier using current module and symbol table
+  let qualifiedName = expr.callee;
+  if (ctx.currentModule && ctx.symbolTable) {
+    qualifiedName = resolveIdentifier(expr.callee, ctx.currentModule, ctx.symbolTable);
+  }
+
+  const signature = ctx.functions.get(qualifiedName);
   if (!signature) {
     errors.push({ message: `Contract for '${contractName}' references unknown function '${expr.callee}'` });
     return;

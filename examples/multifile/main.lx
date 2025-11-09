@@ -1,0 +1,13 @@
+module multifile.main
+
+import multifile.math
+
+fn compute(x: Int) -> Int {
+  let doubled = math.add(x, x)
+  return math.multiply(doubled, 3)
+}
+
+test basic_import {
+  let result = compute(5)
+  test.assert_equal(result, 30)
+}

@@ -1,0 +1,9 @@
+module multifile.math
+
+fn add(a: Int, b: Int) -> Int {
+  return a + b
+}
+
+fn multiply(a: Int, b: Int) -> Int {
+  return a * b
+}

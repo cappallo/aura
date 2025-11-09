@@ -3,8 +3,10 @@
 import path from "path";
 import process from "process";
 import { parseModuleFromFile } from "./parser";
-import { typecheckModule } from "./typecheck";
-import { buildRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
+import { typecheckModule, typecheckModules } from "./typecheck";
+import { buildRuntime, buildMultiModuleRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
+import { loadModules, buildSymbolTable } from "./loader";
+import * as ast from "./ast";
 
 function main() {
   const [, , command, ...rest] = process.argv;
@@ -39,8 +41,10 @@ function handleRun(args: string[]) {
     process.exit(1);
   }
 
-  const module = loadModule(filePath);
-  const runtime = buildRuntime(module);
+  const { module, modules, symbolTable } = loadModuleWithDependencies(filePath);
+  const runtime = modules && symbolTable 
+    ? buildMultiModuleRuntime(modules, symbolTable)
+    : buildRuntime(module);
 
   const [moduleName, functionName] = splitQualifiedName(fnName);
   if (moduleName && moduleName !== module.name.join(".")) {
@@ -59,8 +63,10 @@ function handleTest(args: string[]) {
     process.exit(1);
   }
 
-  const module = loadModule(filePath);
-  const runtime = buildRuntime(module);
+  const { module, modules, symbolTable } = loadModuleWithDependencies(filePath);
+  const runtime = modules && symbolTable
+    ? buildMultiModuleRuntime(modules, symbolTable)
+    : buildRuntime(module);
   const outcomes = runTests(runtime);
 
   let failures = 0;
@@ -90,7 +96,7 @@ function handleCheck(args: string[]) {
     process.exit(1);
   }
 
-  loadModule(filePath);
+  loadModuleWithDependencies(filePath);
   console.log("Typecheck succeeded");
 }
 
@@ -105,6 +111,44 @@ function loadModule(filePath: string) {
     process.exit(1);
   }
   return module;
+}
+
+type LoadResult = {
+  module: ast.Module;
+  modules?: import("./loader").ResolvedModule[];
+  symbolTable?: import("./loader").SymbolTable;
+};
+
+function loadModuleWithDependencies(filePath: string): LoadResult {
+  const absolutePath = path.resolve(process.cwd(), filePath);
+  const module = parseModuleFromFile(absolutePath);
+  
+  // Check if module has imports
+  if (module.imports.length === 0) {
+    // No imports - use single-module typecheck
+    const errors = typecheckModule(module);
+    if (errors.length > 0) {
+      for (const error of errors) {
+        console.error(`Type error: ${error.message}`);
+      }
+      process.exit(1);
+    }
+    return { module };
+  }
+  
+  // Has imports - use multi-module loader
+  const modules = loadModules(absolutePath);
+  const symbolTable = buildSymbolTable(modules);
+  const errors = typecheckModules(modules, symbolTable);
+  
+  if (errors.length > 0) {
+    for (const error of errors) {
+      console.error(`Type error: ${error.message}`);
+    }
+    process.exit(1);
+  }
+  
+  return { module, modules, symbolTable };
 }
 
 function parseArgAsValue(raw: string): Value {

@@ -13,6 +13,8 @@ export type Runtime = {
   functions: Map<string, ast.FnDecl>;
   contracts: Map<string, FnContract>;
   tests: ast.TestDecl[];
+  // For multi-module support
+  symbolTable?: import("./loader").SymbolTable;
 };
 
 type FnContract = {
@@ -53,6 +55,57 @@ export function buildRuntime(module: ast.Module): Runtime {
   }
 
   return { module, functions, contracts, tests };
+}
+
+/**
+ * Build runtime from multiple modules with cross-module symbol resolution
+ */
+export function buildMultiModuleRuntime(
+  modules: import("./loader").ResolvedModule[],
+  symbolTable: import("./loader").SymbolTable
+): Runtime {
+  const functions = new Map<string, ast.FnDecl>();
+  const contracts = new Map<string, FnContract>();
+  const tests: ast.TestDecl[] = [];
+  
+  // Primary module is the last one loaded
+  const primaryModule = modules[modules.length - 1]!.ast;
+  
+  // Collect functions from all modules with qualified names
+  for (const resolvedModule of modules) {
+    const module = resolvedModule.ast;
+    const modulePrefix = module.name.join(".");
+    
+    for (const decl of module.decls) {
+      if (decl.kind === "FnDecl") {
+        const qualifiedName = `${modulePrefix}.${decl.name}`;
+        functions.set(qualifiedName, decl);
+        // Also add unqualified name if it's the primary module
+        if (module === primaryModule) {
+          functions.set(decl.name, decl);
+        }
+      } else if (decl.kind === "FnContractDecl") {
+        const qualifiedName = `${modulePrefix}.${decl.name}`;
+        contracts.set(qualifiedName, {
+          requires: decl.requires,
+          ensures: decl.ensures,
+        });
+        if (module === primaryModule) {
+          contracts.set(decl.name, {
+            requires: decl.requires,
+            ensures: decl.ensures,
+          });
+        }
+      } else if (decl.kind === "TestDecl") {
+        // Only run tests from the primary module
+        if (module === primaryModule) {
+          tests.push(decl);
+        }
+      }
+    }
+  }
+  
+  return { module: primaryModule, functions, contracts, tests, symbolTable };
 }
 
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
@@ -395,7 +448,15 @@ function builtinNot(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 }
 
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
-  const fn = runtime.functions.get(expr.callee);
+  let calleeName = expr.callee;
+  
+  // Resolve identifier if we have a symbol table
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    calleeName = resolveIdentifier(expr.callee, runtime.module, runtime.symbolTable);
+  }
+  
+  const fn = runtime.functions.get(calleeName);
   if (!fn) {
     throw new RuntimeError(`Unknown function '${expr.callee}'`);
   }
