@@ -16,6 +16,6 @@ fn median(list: List<Int>) -> Int {
 }
 
 test median_examples {
-  assert_equal(median([1, 3, 5]), 3)
-  assert_equal(median([2, 4, 6, 8]), 4)
+  test.assert_equal(median([1, 3, 5]), 3)
+  test.assert_equal(median([2, 4, 6, 8]), 4)
 }

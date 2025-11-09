@@ -19,11 +19,11 @@ fn shout(text: String) -> String {
 }
 
 test greeting_tests {
-  assert_equal(greet("Alice"), "Hello, Alice!")
-  assert_equal(greet("Bob"), "Hello, Bob!")
+  test.assert_equal(greet("Alice"), "Hello, Alice!")
+  test.assert_equal(greet("Bob"), "Hello, Bob!")
   
   let g = formal_greeting("Dr", "Smith")
-  assert_equal(g.message, "Dr Smith")
+  test.assert_equal(g.message, "Dr Smith")
   
-  assert_equal(shout("Hey"), "Hey!!!")
+  test.assert_equal(shout("Hey"), "Hey!!!")
 }

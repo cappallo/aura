@@ -9,5 +9,5 @@ fn greet_with_log(name: String) -> [Log] String {
 
 test logging_examples {
   let message = greet_with_log("Ada")
-  assert_equal(message, "Hello, Ada")
+  test.assert_equal(message, "Hello, Ada")
 }

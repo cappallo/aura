@@ -17,7 +17,7 @@ type TypecheckContext = {
 
 const BUILTIN_FUNCTIONS: Record<string, { arity: number | null; effects: Set<string> }> = {
   "list.len": { arity: 1, effects: new Set() },
-  assert_equal: { arity: 2, effects: new Set() },
+  "test.assert_equal": { arity: 2, effects: new Set() },
   "str.concat": { arity: 2, effects: new Set() },
   __negate: { arity: 1, effects: new Set() },
   __not: { arity: 1, effects: new Set() },

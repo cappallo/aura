@@ -167,9 +167,9 @@ Functions should naturally have canonical examples and properties right next to 
 
 ```text
 test median_examples {
-  assert_equal(median([1]), 1)
-  assert_equal(median([1, 3, 5]), 3)
-  assert_equal(median([2, 4, 6, 8]), 4)
+  test.assert_equal(median([1]), 1)
+  test.assert_equal(median([1, 3, 5]), 3)
+  test.assert_equal(median([2, 4, 6, 8]), 4)
 }
 
 property median_in_range(list: List<Float> where len(list) > 0) {

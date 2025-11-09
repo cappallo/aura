@@ -56,7 +56,7 @@ fn median(list: List<Int>) -> Int {
 }
 
 test median_examples {
-  assert_equal(median([1, 3, 5]), 3)
+  test.assert_equal(median([1, 3, 5]), 3)
 }
 ```
 
@@ -769,17 +769,17 @@ function evalExpr(expr: Expr, env: Env, fnEnv: FnEnv): Value {
       return evalBinary(expr.op, left, right);
     }
     case "CallExpr": {
-      // Builtins: length, assert_equal
+  // Builtins: length, test.assert_equal
       if (expr.callee === "length") {
         const argV = evalExpr(expr.args[0], env, fnEnv);
         if (argV.kind !== "List") throw new Error("length expects a list");
         return { kind: "Int", value: argV.elements.length };
       }
-      if (expr.callee === "assert_equal") {
+  if (expr.callee === "test.assert_equal") {
         const v1 = evalExpr(expr.args[0], env, fnEnv);
         const v2 = evalExpr(expr.args[1], env, fnEnv);
         if (!valueEquals(v1, v2)) {
-          throw new Error(`assert_equal failed`);
+          throw new Error(`test.assert_equal failed`);
         }
         return { kind: "Unit" };
       }

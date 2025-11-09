@@ -534,9 +534,9 @@ Example tests:
 
 ```lx
 test median_examples {
-  assert_equal(median([1.0]), 1.0)
-  assert_equal(median([1.0, 3.0, 5.0]), 3.0)
-  assert_equal(median([2.0, 4.0, 6.0, 8.0]), 4.0)
+  test.assert_equal(median([1.0]), 1.0)
+  test.assert_equal(median([1.0, 3.0, 5.0]), 3.0)
+  test.assert_equal(median([2.0, 4.0, 6.0, 8.0]), 4.0)
 }
 ```
 

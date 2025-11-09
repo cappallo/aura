@@ -5,5 +5,5 @@ fn concat_test(a: String, b: String) -> String {
 }
 
 test simple {
-  assert_equal(concat_test("Hello", "World"), "HelloWorld")
+  test.assert_equal(concat_test("Hello", "World"), "HelloWorld")
 }

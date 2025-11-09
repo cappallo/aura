@@ -272,7 +272,7 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   switch (expr.callee) {
     case "list.len":
       return builtinLength(expr, env, runtime);
-    case "assert_equal":
+    case "test.assert_equal":
       return builtinAssertEqual(expr, env, runtime);
     case "str.concat":
       return builtinStrConcat(expr, env, runtime);
@@ -301,12 +301,12 @@ function builtinLength(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 
 function builtinAssertEqual(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   if (expr.args.length !== 2) {
-    throw new RuntimeError("assert_equal expects exactly two arguments");
+    throw new RuntimeError("test.assert_equal expects exactly two arguments");
   }
   const left = evalExpr(expr.args[0]!, env, runtime);
   const right = evalExpr(expr.args[1]!, env, runtime);
   if (!valueEquals(left, right)) {
-    throw new RuntimeError("assert_equal failed");
+    throw new RuntimeError("test.assert_equal failed");
   }
   return { kind: "Unit" };
 }
