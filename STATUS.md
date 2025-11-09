@@ -150,7 +150,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Execution tracing/explain** (`lx explain` command with step-by-step traces - THOUGHTS.md §5.2)
 - ✅ **StructuredTrace type** in `src/structured.ts` with full trace collection/emission
 - ✅ AST input format for direct LLM generation (THOUGHTS.md §1.2)
-- ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
+- ✅ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
 - ✅ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
 - ✅ Named arguments (THOUGHTS.md §1.3)
 - ⚠️ Deterministic execution mode (timestamps in logs, but no seedable RNG yet - THOUGHTS.md §5.1)
@@ -196,6 +196,7 @@ The implementation successfully runs 21 example files including:
 - ✅ `comments.lx` - Line comments, block comments, and structured doc comments with `spec:` format
 - ✅ `structured_output.lx` - Structured JSON output with --format=json flag
 - ✅ `error_example.lx` - Structured error output demonstration
+- ✅ `hole_example.lx` - Shows hole expressions caught by the typechecker
 
 ---
 
@@ -349,8 +350,8 @@ Phase 5 (Long-term): Evolution
 With the core language, schemas, and primary LLM tooling complete, the next priorities are:
 
 1. **LLM Tooling Enhancements** (Priority 7 completion):
-   - Patch-based editing with stable symbol IDs
-   - Holes/partial code support
+   - Deterministic execution mode / seedable RNG
+   - Guided refactor operations with structured patches
 2. **Actor Model** (Priority 8, Phase 4) - Begin CONCURRENCY.md implementation with typed actors
 3. **Refactor Operations** (SPEC.md §10.1) - Implement programmatic refactoring tools
 
@@ -418,14 +419,14 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§4.2 Schema-first external data** | 🟡 Partial | Schema declarations implemented (✅), codecs/type generation pending (❌) |
 | **§5.1 Deterministic replayable runs** | 🟡 Partial | Structured logging implemented (✅), seedable RNG pending (❌) |
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
-| **§6.1 Patch-based edits** | 🟡 Partial | Canonical formatter implemented (✅), patch tooling pending (❌) |
+| **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs |
 | **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
 | **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
-| **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
+| **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), and canonical formatting (§6.1) are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
-- Patch-based editing tooling with stable symbol IDs (§6.1)
-- Holes/partial code support (§8)
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits, and hole-aware workflows are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
+- Deterministic execution mode / seedable RNG (§5.1)
+- Guided refactor operations with structured commands (§6.2/§10.1)
 
 **Impact:** The language core is solid (~82% complete), and the LLM developer experience layer has made significant progress (~50% complete), bringing overall progress to ~65%. Structured error and log output, combined with property-based testing, execution tracing, and canonical formatting, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 

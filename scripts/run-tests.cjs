@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const cliPath = path.join("dist", "cli.js");
@@ -28,6 +29,14 @@ runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
 runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
 runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
+
+const tmpDir = path.join("tmp");
+fs.mkdirSync(tmpDir, { recursive: true });
+const patchedMedian = path.join(tmpDir, "median_patch.lx");
+fs.copyFileSync("examples/median.lx", patchedMedian);
+runCommand("node", [cliPath, "patch-body", patchedMedian, "app.stats.median", "examples/patches/median_body.lxsnip"]);
+runCommand("node", [cliPath, "check", patchedMedian]);
+fs.unlinkSync(patchedMedian);
 
 runExpectFailure(
   "Expected contract failure when clamp is called with min > max",

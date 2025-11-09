@@ -25,6 +25,7 @@ lx test [--format=json|text] [--input=source|ast] <file>
 lx check [--format=json|text] [--input=source|ast] <file>
 lx format <file.lx>
 lx explain [--format=json|text] [--input=source|ast] <file> <module.fn> [args...]
+lx patch-body <file.lx> <module.fn> <bodySnippet.lx>
 ```
 
 Arguments to `lx run` and `lx explain` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
@@ -34,6 +35,8 @@ Arguments to `lx run` and `lx explain` are parsed as JSON and converted to inter
 **AST input:** Use `--input=ast` to treat the file as JSON that already matches the Lx AST schema. This lets LLMs emit structured modules that can be executed directly without going through the parser. See `examples/ast_demo.json` for a complete sample.
 
 **Holes:** Use `hole("label")` inside an expression to mark unfinished code. The typechecker reports any remaining holes (with their labels and locations) so you can commit partial work safely.
+
+**Patch-based edits:** Use `lx patch-body` to replace a function body by referencing the module + symbol name. Only the targeted function changes, which keeps diffs small for LLM workflows.
 
 **LLM-friendly tools:**
 - `lx format` - Produces deterministic, canonical formatting from AST
@@ -59,6 +62,10 @@ lx explain --format=json examples/median.lx median '[2,4,6,8]'
 # Run a JSON AST module
 lx test --input=ast examples/ast_demo.json
 lx run --input=ast examples/ast_demo.json app.ast_demo.add 2 3
+
+# Patch a function body in-place
+lx patch-body examples/median.lx app.stats.median examples/patches/median_body.lxsnip
+lx check examples/median.lx
 ```
 
 ## Documentation

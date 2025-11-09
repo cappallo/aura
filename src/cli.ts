@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
+import fs from "fs";
 import path from "path";
 import process from "process";
-import { parseModuleFromFile } from "./parser";
+import { parseModuleFromFile, parseModule } from "./parser";
 import { parseModuleFromAstFile } from "./ast_json";
 import { typecheckModule, typecheckModules } from "./typecheck";
 import { buildRuntime, buildMultiModuleRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
@@ -43,6 +44,8 @@ function main() {
         return handleFormat(args, ctx);
       case "explain":
         return handleExplain(args, ctx);
+      case "patch-body":
+        return handlePatchBody(args, ctx);
       default:
         console.error(`Unknown command '${command}'`);
         printUsage();
@@ -100,6 +103,32 @@ function parseInputFormat(value: string): InputFormat {
   }
   console.error(`Invalid input format: ${value}. Must be 'source' or 'ast'.`);
   process.exit(1);
+}
+
+function parseBlockSnippet(snippet: string, snippetPath: string): ast.Block {
+  const pseudoModule = [
+    "module __patch.temp",
+    "fn __temp() -> Unit {",
+    snippet,
+    "}",
+  ].join("\n");
+  let parsed: ast.Module;
+  try {
+    parsed = parseModule(pseudoModule, snippetPath);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`Failed to parse snippet '${snippetPath}': ${error.message}`);
+    } else {
+      console.error(`Failed to parse snippet '${snippetPath}': ${String(error)}`);
+    }
+    process.exit(1);
+  }
+  const fnDecl = parsed.decls.find((decl): decl is ast.FnDecl => decl.kind === "FnDecl");
+  if (!fnDecl) {
+    console.error(`Snippet '${snippetPath}' did not contain a function body`);
+    process.exit(1);
+  }
+  return fnDecl.body;
 }
 
 function handleRun(args: string[], ctx: CliContext) {
@@ -366,6 +395,53 @@ function handleExplain(args: string[], ctx: CliContext) {
   }
 }
 
+function handlePatchBody(args: string[], ctx: CliContext) {
+  const [filePath, qualifiedName, bodyFile] = args;
+  if (!filePath || !qualifiedName || !bodyFile) {
+    console.error("Usage: lx patch-body <file.lx> <module.fnName> <bodySnippet.lx>");
+    process.exit(1);
+  }
+  if (ctx.input !== "source") {
+    console.error("Patch operations currently require --input=source");
+    process.exit(1);
+  }
+
+  const absolutePath = path.resolve(process.cwd(), filePath);
+  const moduleAst = parseModuleFromFile(absolutePath);
+  const [moduleName, fnName] = splitQualifiedName(qualifiedName);
+  const modulePath = moduleAst.name.join(".");
+  if (moduleName && moduleName !== modulePath) {
+    console.error(`Module mismatch: requested '${moduleName}', but file defines '${modulePath}'`);
+    process.exit(1);
+  }
+
+  const fnDecl = moduleAst.decls.find(
+    (decl): decl is ast.FnDecl => decl.kind === "FnDecl" && decl.name === fnName,
+  );
+  if (!fnDecl) {
+    console.error(`Function '${fnName}' not found in module '${modulePath}'`);
+    process.exit(1);
+  }
+
+  const snippetPath = path.resolve(process.cwd(), bodyFile);
+  const snippet = fs.readFileSync(snippetPath, "utf8");
+  const replacementBlock = parseBlockSnippet(snippet, snippetPath);
+  fnDecl.body = replacementBlock;
+
+  const errors = typecheckModule(moduleAst);
+  if (errors.length > 0) {
+    for (const error of errors) {
+      console.error(formatError(error));
+    }
+    process.exit(1);
+  }
+
+  const { formatModule } = require("./formatter");
+  const formatted = formatModule(moduleAst);
+  fs.writeFileSync(absolutePath, `${formatted}\n`, "utf8");
+  console.log(`Patched ${fnName} in ${filePath}`);
+}
+
 function formatError(error: import("./typecheck").TypeCheckError): string {
   let msg = "Type error: ";
   if (error.filePath) {
@@ -509,6 +585,7 @@ function printUsage() {
   console.log("  lx check [--format=json|text] [--input=source|ast] <file>");
   console.log("  lx format <file.lx>");
   console.log("  lx explain [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
+  console.log("  lx patch-body <file.lx> <module.fnName> <bodySnippet.lx>");
   console.log("");
   console.log("Options:");
   console.log("  --format=json    Output structured JSON for LLM consumption");

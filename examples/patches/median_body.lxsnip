@@ -1,0 +1,6 @@
+let n = list.len(list)
+if n == 0 {
+  return 0
+}
+let index = (n - 1) / 2
+return list[index]
