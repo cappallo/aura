@@ -1,0 +1,8 @@
+module examples.test_match
+
+type Option = Some { value: Int } | None
+
+fn test_fn(opt: Option) -> Int {
+  let x = 5
+  return x
+}

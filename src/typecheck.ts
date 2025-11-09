@@ -11,9 +11,15 @@ type FnSignature = {
   effects: Set<string>;
 };
 
+type SumTypeInfo = {
+  name: string;
+  variants: Set<string>;
+};
+
 type TypecheckContext = {
   functions: Map<string, FnSignature>;
   declaredEffects: Set<string>;
+  sumTypes: Map<string, SumTypeInfo>;
 };
 
 const BUILTIN_FUNCTIONS: Record<string, { arity: number | null; effects: Set<string> }> = {
@@ -30,6 +36,7 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
   const ctx: TypecheckContext = {
     functions: collectFunctions(module.decls),
     declaredEffects: collectEffects(module.decls),
+    sumTypes: collectSumTypes(module.decls),
   };
 
   const errors: TypeCheckError[] = [];
@@ -74,6 +81,23 @@ function collectEffects(decls: ast.TopLevelDecl[]): Set<string> {
   return effects;
 }
 
+function collectSumTypes(decls: ast.TopLevelDecl[]): Map<string, SumTypeInfo> {
+  const types = new Map<string, SumTypeInfo>();
+  for (const decl of decls) {
+    if (decl.kind === "SumTypeDecl") {
+      const variants = new Set<string>();
+      for (const variant of decl.variants) {
+        variants.add(variant.name);
+      }
+      types.set(decl.name, {
+        name: decl.name,
+        variants,
+      });
+    }
+  }
+  return types;
+}
+
 function checkFunction(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[]) {
   verifyDeclaredEffects(fn, ctx, errors);
   for (const stmt of fn.body.stmts) {
@@ -105,12 +129,63 @@ function checkStmt(stmt: ast.Stmt, fn: ast.FnDecl, ctx: TypecheckContext, errors
       return;
     case "MatchStmt":
       checkExpr(stmt.scrutinee, fn, ctx, errors);
+      checkMatchExhaustiveness(stmt, ctx, errors);
       for (const matchCase of stmt.cases) {
         for (const caseStmt of matchCase.body.stmts) {
           checkStmt(caseStmt, fn, ctx, errors);
         }
       }
       return;
+  }
+}
+
+function checkMatchExhaustiveness(stmt: ast.MatchStmt, ctx: TypecheckContext, errors: TypeCheckError[]) {
+  // Collect all constructor patterns in the match
+  const coveredCtors = new Set<string>();
+  let hasWildcard = false;
+
+  for (const matchCase of stmt.cases) {
+    if (matchCase.pattern.kind === "WildcardPattern") {
+      hasWildcard = true;
+    } else if (matchCase.pattern.kind === "CtorPattern") {
+      coveredCtors.add(matchCase.pattern.ctorName);
+    } else if (matchCase.pattern.kind === "VarPattern") {
+      // Variable patterns are catch-all like wildcards
+      hasWildcard = true;
+    }
+  }
+
+  // If there's a wildcard or var pattern, the match is exhaustive
+  if (hasWildcard) {
+    return;
+  }
+
+  // Try to determine which sum type is being matched
+  // We look for the first constructor pattern and find its type
+  for (const matchCase of stmt.cases) {
+    if (matchCase.pattern.kind === "CtorPattern") {
+      const ctorName = matchCase.pattern.ctorName;
+      
+      // Find which sum type this constructor belongs to
+      for (const [typeName, typeInfo] of ctx.sumTypes.entries()) {
+        if (typeInfo.variants.has(ctorName)) {
+          // Check if all variants are covered
+          const uncoveredVariants: string[] = [];
+          for (const variant of typeInfo.variants) {
+            if (!coveredCtors.has(variant)) {
+              uncoveredVariants.push(variant);
+            }
+          }
+          
+          if (uncoveredVariants.length > 0) {
+            errors.push({
+              message: `Non-exhaustive match on type '${typeName}': missing cases for ${uncoveredVariants.join(", ")}`,
+            });
+          }
+          return;
+        }
+      }
+    }
   }
 }
 
@@ -177,6 +252,21 @@ function checkContractExpr(
       return;
     }
     case "RecordExpr": {
+      // Validate that the constructor exists in a sum type
+      let foundCtor = false;
+      for (const [typeName, typeInfo] of ctx.sumTypes.entries()) {
+        if (typeInfo.variants.has(expr.typeName)) {
+          foundCtor = true;
+          break;
+        }
+      }
+      
+      if (!foundCtor) {
+        errors.push({
+          message: `Contract for '${contractName}' uses unknown constructor '${expr.typeName}'`,
+        });
+      }
+      
       for (const field of expr.fields) {
         checkContractExpr(field.expr, ctx, errors, contractName);
       }
@@ -259,6 +349,21 @@ function checkExpr(expr: ast.Expr, fn: ast.FnDecl, ctx: TypecheckContext, errors
       return;
     }
     case "RecordExpr": {
+      // Validate that the constructor exists in a sum type
+      let foundCtor = false;
+      for (const [typeName, typeInfo] of ctx.sumTypes.entries()) {
+        if (typeInfo.variants.has(expr.typeName)) {
+          foundCtor = true;
+          break;
+        }
+      }
+      
+      if (!foundCtor) {
+        errors.push({
+          message: `Unknown constructor '${expr.typeName}'. Not found in any sum type.`,
+        });
+      }
+      
       for (const field of expr.fields) {
         checkExpr(field.expr, fn, ctx, errors);
       }

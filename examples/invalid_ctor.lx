@@ -1,0 +1,12 @@
+module examples.invalid_ctor
+
+type Option = Some { value: Int } | None
+
+fn use_bad_ctor() -> Option {
+  return Maybe { value: 42 }
+}
+
+test should_not_compile {
+  let result = use_bad_ctor()
+  test.assert_equal(1, 1)
+}

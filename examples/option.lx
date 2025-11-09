@@ -1,0 +1,105 @@
+module examples.option
+
+type Option = Some { value: Int } | None
+
+fn find_positive(n: Int) -> Option {
+  if n > 0 {
+    return Some { value: n }
+  } else {
+    return None {}
+  }
+}
+
+fn unwrap_or_default(opt: Option, default: Int) -> Int {
+  match opt {
+    case Some { value: v } => {
+      return v
+    }
+    case None => {
+      return default
+    }
+  }
+}
+
+fn is_positive_option(opt: Option) -> Bool {
+  match opt {
+    case Some { value: v } => {
+      return v > 0
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn is_some(opt: Option) -> Bool {
+  match opt {
+    case Some { value: _ } => {
+      return true
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn option_map(opt: Option, increment: Int) -> Option {
+  match opt {
+    case Some { value: v } => {
+      return Some { value: v + increment }
+    }
+    case None => {
+      return None {}
+    }
+  }
+}
+
+test find_positive_returns_some {
+  let result = find_positive(42)
+  test.assert_equal(is_some(result), true)
+}
+
+test find_positive_returns_none {
+  let result = find_positive(-5)
+  test.assert_equal(is_some(result), false)
+}
+
+test unwrap_or_default_with_some {
+  let opt = Some { value: 100 }
+  let result = unwrap_or_default(opt, 0)
+  test.assert_equal(result, 100)
+}
+
+test unwrap_or_default_with_none {
+  let opt = None {}
+  let result = unwrap_or_default(opt, 42)
+  test.assert_equal(result, 42)
+}
+
+test is_positive_option_with_positive {
+  let opt = Some { value: 10 }
+  test.assert_equal(is_positive_option(opt), true)
+}
+
+test is_positive_option_with_negative {
+  let opt = Some { value: -10 }
+  test.assert_equal(is_positive_option(opt), false)
+}
+
+test is_positive_option_with_none {
+  let opt = None {}
+  test.assert_equal(is_positive_option(opt), false)
+}
+
+test option_map_with_some {
+  let opt = Some { value: 5 }
+  let mapped = option_map(opt, 3)
+  let result = unwrap_or_default(mapped, 0)
+  test.assert_equal(result, 8)
+}
+
+test option_map_with_none {
+  let opt = None {}
+  let mapped = option_map(opt, 10)
+  test.assert_equal(is_some(mapped), false)
+}

@@ -1,0 +1,68 @@
+module examples.result
+
+type Result = Ok { value: Int } | Err { message: String }
+
+fn divide(a: Int, b: Int) -> Result {
+  if b == 0 {
+    return Err { message: "division by zero" }
+  } else {
+    return Ok { value: a / b }
+  }
+}
+
+fn unwrap_or(result: Result, default: Int) -> Int {
+  match result {
+    case Ok { value: v } => {
+      return v
+    }
+    case Err { message: _ } => {
+      return default
+    }
+  }
+}
+
+fn is_ok(result: Result) -> Bool {
+  match result {
+    case Ok { value: _ } => {
+      return true
+    }
+    case Err { message: _ } => {
+      return false
+    }
+  }
+}
+
+fn map_result(result: Result, increment: Int) -> Result {
+  match result {
+    case Ok { value: v } => {
+      return Ok { value: v + increment }
+    }
+    case Err { message: msg } => {
+      return Err { message: msg }
+    }
+  }
+}
+
+test divide_success {
+  let result = divide(10, 2)
+  test.assert_equal(is_ok(result), true)
+  test.assert_equal(unwrap_or(result, 0), 5)
+}
+
+test divide_by_zero {
+  let result = divide(10, 0)
+  test.assert_equal(is_ok(result), false)
+  test.assert_equal(unwrap_or(result, 99), 99)
+}
+
+test map_result_ok {
+  let result = divide(20, 4)
+  let mapped = map_result(result, 3)
+  test.assert_equal(unwrap_or(mapped, 0), 8)
+}
+
+test map_result_err {
+  let result = divide(10, 0)
+  let mapped = map_result(result, 100)
+  test.assert_equal(is_ok(mapped), false)
+}

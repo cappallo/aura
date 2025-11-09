@@ -1,0 +1,26 @@
+module examples.simple_option
+
+type Option = Some { value: Int } | None
+
+fn unwrap_or_default(opt: Option, default: Int) -> Int {
+  match opt {
+    case Some { value: v } => {
+      return v
+    }
+    case None => {
+      return default
+    }
+  }
+}
+
+test unwrap_with_some {
+  let opt = Some { value: 100 }
+  let result = unwrap_or_default(opt, 0)
+  test.assert_equal(result, 100)
+}
+
+test unwrap_with_none {
+  let opt = None {}
+  let result = unwrap_or_default(opt, 42)
+  test.assert_equal(result, 42)
+}

@@ -1,0 +1,17 @@
+module examples.non_exhaustive
+
+type Option = Some { value: Int } | None
+
+fn bad_unwrap(opt: Option) -> Int {
+  match opt {
+    case Some { value: v } => {
+      return v
+    }
+  }
+}
+
+test should_not_compile {
+  let opt = Some { value: 42 }
+  let result = bad_unwrap(opt)
+  test.assert_equal(result, 42)
+}
