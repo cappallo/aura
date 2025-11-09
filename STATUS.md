@@ -276,9 +276,55 @@ lx check <file.lx>                        # Type check only
 
 ## 🐛 Known Issues
 
-1. **No REPL** - must write files to test code
-2. **Limited standard library** - basic operations now available but could be expanded further
-3. **No shrinking for property tests** - counterexamples are not minimized
+### Critical (LLM-First Design Violations)
+1. **No comments or doc strings** - Grammar doesn't support `//` or `/* */` comments, violating THOUGHTS.md §3.1 design principle of "comments, specs, and tests as first-class citizens"
+2. **No structured error output** - Errors are human-readable strings, not JSON format per THOUGHTS.md §2.2 for LLM consumption
+3. **No structured logging** - `Log.debug`/`Log.trace` print to console rather than emitting machine-readable structured logs (THOUGHTS.md §5.1)
+4. **No explain/tracing hooks** - Missing execution tracing tooling per THOUGHTS.md §5.2 (`explain fn(args)`)
+
+### Tooling Gaps
+5. **No canonical formatter** - No pretty-printer for consistent code layout (THOUGHTS.md §1.2, §6.1)
+6. **No AST input format** - LLMs cannot directly generate AST despite "AST-first" design principle (THOUGHTS.md §1.2)
+7. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
+8. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
+
+### Language Features
+9. **No REPL** - Must write files to test code
+10. **No named arguments** - Only positional parameters supported, violating "explicit parameter names everywhere" principle (THOUGHTS.md §1.3)
+11. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+12. **Limited standard library** - Basic operations now available but could be expanded further
+13. **No shrinking for property tests** - Counterexamples are not minimized
+
+---
+
+## 🎯 Alignment with THOUGHTS.md Design Principles
+
+This section tracks how well the implementation follows the LLM-first design philosophy:
+
+| Principle (THOUGHTS.md) | Status | Notes |
+|-------------------------|--------|-------|
+| **§1.1 Regular, low-context syntax** | ✅ Good | Simple keywords, explicit syntax, no clever shortcuts |
+| **§1.2 AST-first design** | ⚠️ Partial | Has AST but no JSON input format for LLMs |
+| **§1.3 Redundancy allowed** | 🟡 Mixed | Verbose keywords (✅), but no named arguments (❌) |
+| **§2.1 Pure-by-default, explicit effects** | ✅ Good | Effect system implemented and enforced |
+| **§2.2 Strong, local, simple types** | ✅ Good | Full type inference with location-based errors |
+| **§2.3 Total/defined behavior (no UB)** | ✅ Good | All operations defined or rejected statically |
+| **§3.1 Natural-language spec blocks** | ❌ Missing | No `/// spec:` comments supported |
+| **§3.2 Inline tests & properties** | ✅ Good | `test` and `property` blocks implemented |
+| **§4.1 Small, versioned stdlib** | 🟡 Partial | Small stdlib (✅), but no version tracking (❌) |
+| **§4.2 Schema-first external data** | ❌ Missing | Schemas planned but not implemented |
+| **§5.1 Deterministic replayable runs** | ❌ Missing | No seedable RNG or structured logging |
+| **§5.2 Explicit explain hooks** | ❌ Missing | No execution tracing tooling |
+| **§6.1 Patch-based edits** | ❌ Missing | No stable symbol addressing or patch tooling |
+| **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
+| **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
+| **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
+
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles, but **critical tooling and developer experience features are missing**, especially:
+- Comments and documentation (§3.1) - **CRITICAL**
+- Structured errors/logging for LLM consumption (§2.2, §5.1)
+- Execution tracing and explain hooks (§5.2)
+- Canonical formatting and patch-based editing (§6.1)
 
 ---
 
