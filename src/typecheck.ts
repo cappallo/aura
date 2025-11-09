@@ -169,6 +169,11 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([valueType, valueType], UNIT_TYPE);
     },
   },
+  assert: {
+    arity: 1,
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([BOOL_TYPE], UNIT_TYPE),
+  },
   "str.concat": {
     arity: 2,
     effects: new Set(),
@@ -228,6 +233,12 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
   for (const decl of module.decls) {
     if (decl.kind === "FnContractDecl") {
       checkContract(decl, ctx, errors);
+    }
+  }
+
+  for (const decl of module.decls) {
+    if (decl.kind === "PropertyDecl") {
+      checkProperty(decl, ctx, errors);
     }
   }
 
@@ -383,6 +394,12 @@ export function typecheckModules(
         checkContract(decl, ctx, errors);
       }
     }
+
+    for (const decl of module.decls) {
+      if (decl.kind === "PropertyDecl") {
+        checkProperty(decl, ctx, errors, filePath);
+      }
+    }
   }
 
   return errors;
@@ -512,6 +529,65 @@ function collectModuleTypeInfo(module: ast.Module): IndexedTypeInfo {
 function checkFunction(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string) {
   verifyDeclaredEffects(fn, ctx, errors, filePath);
   typeCheckFunctionBody(fn, ctx, errors, filePath);
+}
+
+function checkProperty(
+  property: ast.PropertyDecl,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  filePath?: string,
+): void {
+  const syntheticFn: ast.FnDecl = {
+    kind: "FnDecl",
+    name: `__property_${property.name}`,
+    typeParams: [],
+    params: property.params.map((param) => ({ name: param.name, type: param.type })),
+    returnType: { kind: "TypeName", name: "Unit", typeArgs: [] },
+    effects: [],
+    body: property.body,
+  };
+
+  const state: InferState = {
+    nextTypeVarId: 0,
+    substitutions: new Map(),
+    errors,
+    ctx,
+    currentFunction: syntheticFn,
+    expectedReturnType: UNIT_TYPE,
+  };
+
+  if (filePath !== undefined) {
+    state.currentFilePath = filePath;
+  }
+
+  const env: TypeEnv = new Map();
+  const typeParamScope = new Map<string, Type>();
+  const resolutionModule = ctx.currentModule;
+
+  for (const param of syntheticFn.params) {
+    const paramType = convertTypeExpr(param.type, typeParamScope, state, resolutionModule);
+    env.set(param.name, paramType);
+  }
+
+  for (const param of property.params) {
+    if (!param.predicate) {
+      continue;
+    }
+    const predicateType = inferExpr(param.predicate, env, state);
+    unify(
+      predicateType,
+      BOOL_TYPE,
+      state,
+      `Predicate for parameter '${param.name}' must evaluate to Bool`,
+      param.predicate.loc,
+    );
+  }
+
+  inferBlock(property.body, env, state, {
+    expectedReturnType: UNIT_TYPE,
+    treatAsExpression: false,
+    cloneEnv: false,
+  });
 }
 
 function verifyDeclaredEffects(fn: ast.FnDecl, ctx: TypecheckContext, errors: TypeCheckError[], filePath?: string) {

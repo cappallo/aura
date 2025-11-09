@@ -23,7 +23,8 @@ export type TopLevelDecl =
   | TypeDecl
   | FnDecl
   | FnContractDecl
-  | TestDecl;
+  | TestDecl
+  | PropertyDecl;
 
 export type EffectDecl = {
   kind: "EffectDecl";
@@ -80,6 +81,12 @@ export type FnDecl = {
 export type Param = {
   name: string;
   type: TypeExpr;
+};
+
+export type PropertyParam = {
+  name: string;
+  type: TypeExpr;
+  predicate?: Expr;
 };
 
 export type Block = {
@@ -220,6 +227,14 @@ export type TestDecl = {
   kind: "TestDecl";
   name: string;
   body: Block;
+};
+
+export type PropertyDecl = {
+  kind: "PropertyDecl";
+  name: string;
+  params: PropertyParam[];
+  body: Block;
+  iterations?: number;
 };
 
 export type FnContractDecl = {

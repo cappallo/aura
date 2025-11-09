@@ -1,0 +1,20 @@
+module examples.property_basics
+
+fn double(n: Int) -> Int {
+  return n + n
+}
+
+property double_is_even(n: Int where n >= 0) {
+  let doubled = double(n)
+  let half = doubled / 2
+  assert(half * 2 == doubled)
+}
+
+property concat_identity(left: String, right: String) {
+  let combined = str.concat(left, right)
+  assert(str.concat(combined, "") == combined)
+}
+
+test sanity_check {
+  test.assert_equal(double(3), 6)
+}

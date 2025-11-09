@@ -59,6 +59,7 @@ TopLevelDeclCore
 	/ FnDecl
 	/ ContractDecl
 	/ TestDecl
+	/ PropertyDecl
 
 EffectDecl
 	= "effect" __ name:Ident Terminator+ {
@@ -202,6 +203,29 @@ TestDecl
 				body,
 			};
 		}
+
+PropertyDecl
+	= "property" __ name:Ident _ "(" _ params:PropertyParamList? _ ")" _ body:Block {
+			return {
+				kind: "PropertyDecl",
+				name,
+				params: params || [],
+				body,
+			};
+		}
+
+PropertyParamList
+	= head:PropertyParam tail:(_ "," _ PropertyParam)* {
+			return foldList(head, tail, 3);
+		}
+
+PropertyParam
+	= name:Ident _ ":" _ type:TypeExpr predicate:PropertyPredicate? {
+			return { name, type, predicate }; 
+		}
+
+PropertyPredicate
+	= __ "where" __ expr:Expr { return expr; }
 
 Block
 	= "{" BlockGap stmts:StmtList? BlockGap "}" {

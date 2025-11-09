@@ -71,11 +71,12 @@ function handleTest(args: string[]) {
 
   let failures = 0;
   for (const outcome of outcomes) {
+    const label = outcome.kind === "property" ? `property ${outcome.name}` : outcome.name;
     if (outcome.success) {
-      console.log(`✓ ${outcome.name}`);
+      console.log(`✓ ${label}`);
     } else {
       failures += 1;
-      console.error(`✗ ${outcome.name}`);
+      console.error(`✗ ${label}`);
       if (outcome.error instanceof Error) {
         console.error(`  ${outcome.error.message}`);
       } else if (outcome.error) {

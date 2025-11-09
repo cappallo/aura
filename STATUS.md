@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~40% (Core v0.1 + Module Resolution + Type Inference)
+**Overall Progress:** ~45% (Core v0.1 + Module Resolution + Type Inference + Property Runtime)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -42,7 +42,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Expression evaluation (569 lines)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
-- ✅ Built-in functions: `list.len`, `str.concat`, `test.assert_equal`, `Log.debug`, `Log.trace`
+- ✅ Built-in functions: `list.len`, `str.concat`, `test.assert_equal`, `assert`, `Log.debug`, `Log.trace`
 - ✅ Value types: Int, Bool, String, List, Constructor (ADTs), Unit
 
 ### 5. Contracts (Partial)
@@ -67,6 +67,12 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ### Contracts
 - ⚠️ **Contract language**: Pure expressions supported, but no SMT solving or static verification (runtime only)
 
+### Property-Based Tests
+- ✅ `property` declarations with `where` predicates
+- ✅ Generators for Int/Bool/String/List values and ADTs (depth-limited)
+- ✅ CLI reporting with counterexamples when properties fail
+- ⚠️ No shrinking/minimization yet; counterexamples are not reduced
+
 ---
 
 ## ❌ Not Yet Implemented (Per SPEC.md)
@@ -86,9 +92,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ Typed I/O bindings
 
 ### 3. Property-Based Tests (§7.4 of SPEC)
-- ❌ `property` blocks
-- ❌ Generator constraints (`where` clauses)
-- ❌ Shrinking/minimization
+- ❌ Shrinking/minimization for counterexamples
 
 ### 4. Refactors (§10.1 of SPEC)
 - ❌ `refactor` declarations
@@ -128,7 +132,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §6 | Actors | ❌ Not started |
 | §7.1-7.2 | Contracts | 🟡 Runtime only |
 | §7.3 | Tests | ✅ Complete |
-| §7.4 | Properties | ❌ Not started |
+| §7.4 | Properties | 🟡 Runtime generators, no shrinking |
 | §8 | Schemas & I/O | ❌ Not started |
 | §9 | Logging/tracing | 🟡 Basic logging, no structured tracing |
 | §10 | Refactors/migrations | ❌ Not started |
@@ -137,12 +141,13 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 12 example files including:
+The implementation successfully runs 13 example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
 - ✅ `median.lx` - Pure functions with tests
 - ✅ `result.lx` - Error handling patterns
+- ✅ `property_basics.lx` - Property-based testing with predicates and assertions
 
 ---
 
@@ -175,15 +180,15 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Completed:** Full type inference with Hindley-Milner algorithm is now working, with detailed error messages showing exact source locations!
 
 ### **Priority 3: Property-Based Tests (§7.4)**
-**Status:** 🔴 Not started  
+**Status:** � In progress (runtime support live, shrinking pending)  
 **Goal:** Add `property` blocks for generative testing
-- [ ] Extend AST for `property` declarations
-- [ ] Add grammar for `where` constraints
-- [ ] Implement basic generators for primitive types
-- [ ] Add list/ADT generators
-- [ ] Implement constraint filtering
+- [x] Extend AST for `property` declarations
+- [x] Add grammar for `where` constraints
+- [x] Implement basic generators for primitive types
+- [x] Add list/ADT generators
+- [x] Implement constraint filtering
 - [ ] Add shrinking for counterexamples
-- [ ] Report property failures with minimal examples
+- [x] Report property failures with counterexample context
 
 **Why third:** High value for LLM workflow; complements existing test infrastructure.
 

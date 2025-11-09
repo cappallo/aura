@@ -13,6 +13,8 @@ export type Runtime = {
   functions: Map<string, ast.FnDecl>;
   contracts: Map<string, FnContract>;
   tests: ast.TestDecl[];
+  properties: ast.PropertyDecl[];
+  typeDecls: Map<string, ast.TypeDecl>;
   // For multi-module support
   symbolTable?: import("./loader").SymbolTable;
 };
@@ -31,15 +33,23 @@ type EvalResult =
 type MatchEnv = Env;
 
 type TestOutcome = {
+  kind: "test" | "property";
   name: string;
   success: boolean;
   error?: unknown;
 };
 
+const DEFAULT_PROPERTY_RUNS = 50;
+const MAX_GENERATION_ATTEMPTS = 100;
+const MAX_GENERATION_DEPTH = 4;
+const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
+
 export function buildRuntime(module: ast.Module): Runtime {
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
   const tests: ast.TestDecl[] = [];
+  const properties: ast.PropertyDecl[] = [];
+  const typeDecls = new Map<string, ast.TypeDecl>();
 
   for (const decl of module.decls) {
     if (decl.kind === "FnDecl") {
@@ -51,10 +61,18 @@ export function buildRuntime(module: ast.Module): Runtime {
       });
     } else if (decl.kind === "TestDecl") {
       tests.push(decl);
+    } else if (decl.kind === "PropertyDecl") {
+      properties.push(decl);
+    } else if (
+      decl.kind === "AliasTypeDecl" ||
+      decl.kind === "RecordTypeDecl" ||
+      decl.kind === "SumTypeDecl"
+    ) {
+      typeDecls.set(decl.name, decl);
     }
   }
 
-  return { module, functions, contracts, tests };
+  return { module, functions, contracts, tests, properties, typeDecls };
 }
 
 /**
@@ -67,6 +85,8 @@ export function buildMultiModuleRuntime(
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
   const tests: ast.TestDecl[] = [];
+  const properties: ast.PropertyDecl[] = [];
+  const typeDecls = new Map<string, ast.TypeDecl>();
   
   // Primary module is the last one loaded
   const primaryModule = modules[modules.length - 1]!.ast;
@@ -96,16 +116,38 @@ export function buildMultiModuleRuntime(
             ensures: decl.ensures,
           });
         }
-      } else if (decl.kind === "TestDecl") {
+        } else if (decl.kind === "TestDecl") {
         // Only run tests from the primary module
         if (module === primaryModule) {
           tests.push(decl);
         }
+        } else if (decl.kind === "PropertyDecl") {
+          if (module === primaryModule) {
+            properties.push(decl);
+          }
+        } else if (
+          decl.kind === "AliasTypeDecl" ||
+          decl.kind === "RecordTypeDecl" ||
+          decl.kind === "SumTypeDecl"
+        ) {
+          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
+          typeDecls.set(qualifiedName, decl);
+          if (module === primaryModule) {
+            typeDecls.set(decl.name, decl);
+          }
       }
     }
   }
   
-  return { module: primaryModule, functions, contracts, tests, symbolTable };
+  return {
+    module: primaryModule,
+    functions,
+    contracts,
+    tests,
+    properties,
+    typeDecls,
+    symbolTable,
+  };
 }
 
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
@@ -146,22 +188,32 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
 }
 
 export function runTests(runtime: Runtime): TestOutcome[] {
-  return runtime.tests.map((test) => {
+  const outcomes: TestOutcome[] = [];
+
+  for (const test of runtime.tests) {
     try {
       const env: Env = new Map();
       const result = evalBlock(test.body, env, runtime);
       if (result.type === "return" && result.value.kind !== "Unit") {
-        return {
+        outcomes.push({
+          kind: "test",
           name: test.name,
           success: false,
           error: new RuntimeError("Tests must not return non-unit values"),
-        };
+        });
+      } else {
+        outcomes.push({ kind: "test", name: test.name, success: true });
       }
-      return { name: test.name, success: true };
     } catch (error) {
-      return { name: test.name, success: false, error };
+      outcomes.push({ kind: "test", name: test.name, success: false, error });
     }
-  });
+  }
+
+  for (const property of runtime.properties) {
+    outcomes.push(runProperty(property, runtime));
+  }
+
+  return outcomes;
 }
 
 function evalBlock(block: ast.Block, env: Env, runtime: Runtime): EvalResult {
@@ -354,6 +406,8 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinLength(expr, env, runtime);
     case "test.assert_equal":
       return builtinAssertEqual(expr, env, runtime);
+    case "assert":
+      return builtinAssert(expr, env, runtime);
     case "str.concat":
       return builtinStrConcat(expr, env, runtime);
     case "Log.debug":
@@ -389,6 +443,20 @@ function builtinAssertEqual(expr: ast.CallExpr, env: Env, runtime: Runtime): Val
   const right = evalExpr(expr.args[1]!, env, runtime);
   if (!valueEquals(left, right)) {
     throw new RuntimeError("test.assert_equal failed");
+  }
+  return { kind: "Unit" };
+}
+
+function builtinAssert(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("assert expects exactly one argument");
+  }
+  const condition = evalExpr(expr.args[0]!, env, runtime);
+  if (condition.kind !== "Bool") {
+    throw new RuntimeError("assert expects a boolean argument");
+  }
+  if (!condition.value) {
+    throw new RuntimeError("assertion failed");
   }
   return { kind: "Unit" };
 }
@@ -468,14 +536,440 @@ function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
 
   const callEnv: Env = new Map();
   for (let i = 0; i < fn.params.length; i += 1) {
-  const param = fn.params[i]!;
-  const argExpr = expr.args[i]!;
-  const argValue = evalExpr(argExpr, env, runtime);
-  callEnv.set(param.name, argValue);
+    const param = fn.params[i]!;
+    const argExpr = expr.args[i]!;
+    const argValue = evalExpr(argExpr, env, runtime);
+    callEnv.set(param.name, argValue);
   }
 
   const result = evalBlock(fn.body, callEnv, runtime);
   return result.value;
+}
+
+type ParameterGenerationResult =
+  | { success: true }
+  | { success: false; paramName: string; message: string; cause?: unknown };
+
+function runProperty(property: ast.PropertyDecl, runtime: Runtime): TestOutcome {
+  const iterations = property.iterations ?? DEFAULT_PROPERTY_RUNS;
+  const rng = () => Math.random();
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const env: Env = new Map();
+    const generation = generateParametersForProperty(property, env, runtime, rng);
+    if (!generation.success) {
+      const snapshot = snapshotEnv(env);
+      const parts: string[] = [
+        `Property '${property.name}' could not generate value for parameter '${generation.paramName}': ${generation.message}`,
+      ];
+      if (generation.cause) {
+        const causeMessage = generation.cause instanceof Error ? generation.cause.message : String(generation.cause);
+        parts.push(`Cause: ${causeMessage}`);
+      }
+      if (Object.keys(snapshot).length > 0) {
+        parts.push(`Bound inputs: ${JSON.stringify(snapshot)}`);
+      }
+      return {
+        kind: "property",
+        name: property.name,
+        success: false,
+        error: new RuntimeError(parts.join(" ")),
+      };
+    }
+
+    try {
+      const result = evalBlock(property.body, new Map(env), runtime);
+      if (result.type === "return" && result.value.kind !== "Unit") {
+        return {
+          kind: "property",
+          name: property.name,
+          success: false,
+          error: propertyFailureError(property.name, iteration, env, "Properties must not return non-unit values"),
+        };
+      }
+    } catch (error) {
+      return {
+        kind: "property",
+        name: property.name,
+        success: false,
+        error: propertyFailureError(property.name, iteration, env, error),
+      };
+    }
+  }
+
+  return { kind: "property", name: property.name, success: true };
+}
+
+function generateParametersForProperty(
+  property: ast.PropertyDecl,
+  env: Env,
+  runtime: Runtime,
+  rng: () => number,
+): ParameterGenerationResult {
+  for (const param of property.params) {
+    const result = tryGenerateParameter(param, env, runtime, rng);
+    if (!result.success) {
+      return result;
+    }
+  }
+  return { success: true };
+}
+
+function tryGenerateParameter(
+  param: ast.PropertyParam,
+  env: Env,
+  runtime: Runtime,
+  rng: () => number,
+): ParameterGenerationResult {
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
+    const candidate = generateValueForTypeExpr(param.type, runtime, 0, rng);
+    env.set(param.name, candidate);
+
+    if (!param.predicate) {
+      return { success: true };
+    }
+
+    let predicateValue: Value;
+    try {
+      predicateValue = evalExpr(param.predicate, env, runtime);
+    } catch (error) {
+      return {
+        success: false,
+        paramName: param.name,
+        message: "error evaluating predicate",
+        cause: error,
+      };
+    }
+
+    if (predicateValue.kind !== "Bool") {
+      return {
+        success: false,
+        paramName: param.name,
+        message: "predicate must evaluate to a boolean value",
+      };
+    }
+
+    if (predicateValue.value) {
+      return { success: true };
+    }
+
+    env.delete(param.name);
+  }
+
+  return {
+    success: false,
+    paramName: param.name,
+    message: `predicate remained unsatisfied after ${MAX_GENERATION_ATTEMPTS} attempts`,
+  };
+}
+
+function propertyFailureError(propertyName: string, iteration: number, env: Env, cause: unknown): RuntimeError {
+  const snapshot = snapshotEnv(env);
+  const serializedInputs = JSON.stringify(snapshot);
+  const causeMessage =
+    cause instanceof RuntimeError || cause instanceof Error ? cause.message : String(cause);
+  return new RuntimeError(
+    `Property '${propertyName}' failed on iteration ${iteration + 1} with input ${serializedInputs}: ${causeMessage}`,
+  );
+}
+
+function snapshotEnv(env: Env): Record<string, unknown> {
+  const obj: Record<string, unknown> = {};
+  for (const [name, value] of env.entries()) {
+    obj[name] = prettyValue(value);
+  }
+  return obj;
+}
+
+function generateValueForTypeExpr(
+  typeExpr: ast.TypeExpr,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  if (depth > MAX_GENERATION_DEPTH) {
+    return defaultValueForType(typeExpr, runtime);
+  }
+
+  if (typeExpr.kind === "OptionalType") {
+    return generateOptionalValue(typeExpr, runtime, depth, rng);
+  }
+
+  if (typeExpr.kind === "TypeName") {
+    return generateFromTypeName(typeExpr, runtime, depth, rng);
+  }
+
+  return { kind: "Unit" };
+}
+
+function generateFromTypeName(
+  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  if (typeExpr.typeArgs.length === 0) {
+    switch (typeExpr.name) {
+      case "Int":
+        return { kind: "Int", value: randomInt(rng) };
+      case "Bool":
+        return { kind: "Bool", value: randomBool(rng) };
+      case "String":
+        return { kind: "String", value: randomString(rng) };
+      case "Unit":
+        return { kind: "Unit" };
+      default:
+        break;
+    }
+  }
+
+  if (typeExpr.name === "List") {
+    const elementType = typeExpr.typeArgs[0] ?? { kind: "TypeName", name: "Int", typeArgs: [] };
+    return generateListValue(elementType, runtime, depth, rng);
+  }
+
+  if (typeExpr.name === "Option" && typeExpr.typeArgs.length === 1) {
+    const inner = typeExpr.typeArgs[0]!;
+    return generateOptionalValue({ kind: "OptionalType", inner }, runtime, depth, rng);
+  }
+
+  const decl = findTypeDecl(runtime, typeExpr.name);
+  if (!decl) {
+    return { kind: "Unit" };
+  }
+
+  switch (decl.kind) {
+    case "AliasTypeDecl": {
+      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+      const target = substituteTypeExpr(decl.target, substitutions);
+      return generateValueForTypeExpr(target, runtime, depth + 1, rng);
+    }
+    case "RecordTypeDecl":
+      return generateRecordValue(decl, typeExpr, runtime, depth, rng);
+    case "SumTypeDecl":
+      return generateSumValue(decl, typeExpr, runtime, depth, rng);
+    default:
+      return { kind: "Unit" };
+  }
+}
+
+function generateRecordValue(
+  decl: ast.RecordTypeDecl,
+  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+  const fields = new Map<string, Value>();
+  for (const field of decl.fields) {
+    const fieldType = substituteTypeExpr(field.type, substitutions);
+    const value = generateValueForTypeExpr(fieldType, runtime, depth + 1, rng);
+    fields.set(field.name, value);
+  }
+  return { kind: "Ctor", name: decl.name, fields };
+}
+
+function generateSumValue(
+  decl: ast.SumTypeDecl,
+  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  if (decl.variants.length === 0) {
+    return { kind: "Unit" };
+  }
+
+  const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+  let variant: ast.Variant;
+  if (depth >= MAX_GENERATION_DEPTH) {
+    variant = decl.variants.find((candidate) => candidate.fields.length === 0) ?? decl.variants[0]!;
+  } else {
+    const index = Math.floor(rng() * decl.variants.length);
+    variant = decl.variants[index] ?? decl.variants[0]!;
+  }
+
+  const fields = new Map<string, Value>();
+  for (const field of variant.fields) {
+    const fieldType = substituteTypeExpr(field.type, substitutions);
+    const value = generateValueForTypeExpr(fieldType, runtime, depth + 1, rng);
+    fields.set(field.name, value);
+  }
+
+  return { kind: "Ctor", name: variant.name, fields };
+}
+
+function generateListValue(
+  elementType: ast.TypeExpr,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  const maxLength = depth >= MAX_GENERATION_DEPTH ? 0 : 3;
+  const length = maxLength === 0 ? 0 : Math.floor(rng() * (maxLength + 1));
+  const elements: Value[] = [];
+  for (let i = 0; i < length; i += 1) {
+    elements.push(generateValueForTypeExpr(elementType, runtime, depth + 1, rng));
+  }
+  return { kind: "List", elements };
+}
+
+function generateOptionalValue(
+  typeExpr: Extract<ast.TypeExpr, { kind: "OptionalType" }>,
+  runtime: Runtime,
+  depth: number,
+  rng: () => number,
+): Value {
+  if (depth >= MAX_GENERATION_DEPTH || rng() < 0.3) {
+    return makeCtor("None");
+  }
+  const value = generateValueForTypeExpr(typeExpr.inner, runtime, depth + 1, rng);
+  return makeCtor("Some", [["value", value]]);
+}
+
+function findTypeDecl(runtime: Runtime, name: string): ast.TypeDecl | undefined {
+  if (runtime.typeDecls.has(name)) {
+    return runtime.typeDecls.get(name);
+  }
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    const qualified = resolveIdentifier(name, runtime.module, runtime.symbolTable);
+    return runtime.typeDecls.get(qualified);
+  }
+  return undefined;
+}
+
+function buildTypeArgMap(params: string[], args: ast.TypeExpr[]): Map<string, ast.TypeExpr> {
+  const map = new Map<string, ast.TypeExpr>();
+  for (let i = 0; i < params.length; i += 1) {
+    const paramName = params[i]!;
+    const arg = args[i] ?? { kind: "TypeName", name: "Int", typeArgs: [] };
+    map.set(paramName, arg);
+  }
+  return map;
+}
+
+function substituteTypeExpr(
+  typeExpr: ast.TypeExpr,
+  substitutions: Map<string, ast.TypeExpr>,
+  depth = 0,
+): ast.TypeExpr {
+  if (depth > 10) {
+    return typeExpr;
+  }
+
+  if (typeExpr.kind === "TypeName") {
+    if (typeExpr.typeArgs.length > 0) {
+      return {
+        kind: "TypeName",
+        name: typeExpr.name,
+        typeArgs: typeExpr.typeArgs.map((arg) => substituteTypeExpr(arg, substitutions, depth + 1)),
+      };
+    }
+    const replacement = substitutions.get(typeExpr.name);
+    if (replacement) {
+      return substituteTypeExpr(replacement, substitutions, depth + 1);
+    }
+    return typeExpr;
+  }
+
+  if (typeExpr.kind === "OptionalType") {
+    return {
+      kind: "OptionalType",
+      inner: substituteTypeExpr(typeExpr.inner, substitutions, depth + 1),
+    };
+  }
+
+  return typeExpr;
+}
+
+function defaultValueForType(typeExpr: ast.TypeExpr, runtime: Runtime): Value {
+  if (typeExpr.kind === "OptionalType") {
+    return makeCtor("None");
+  }
+
+  if (typeExpr.kind === "TypeName") {
+    switch (typeExpr.name) {
+      case "Int":
+        return { kind: "Int", value: 0 };
+      case "Bool":
+        return { kind: "Bool", value: false };
+      case "String":
+        return { kind: "String", value: "" };
+      case "Unit":
+        return { kind: "Unit" };
+      case "List":
+        return { kind: "List", elements: [] };
+      default:
+        break;
+    }
+
+    const decl = findTypeDecl(runtime, typeExpr.name);
+    if (!decl) {
+      return { kind: "Unit" };
+    }
+
+    if (decl.kind === "AliasTypeDecl") {
+      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+      const target = substituteTypeExpr(decl.target, substitutions);
+      return defaultValueForType(target, runtime);
+    }
+
+    if (decl.kind === "RecordTypeDecl") {
+      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+      const fields = new Map<string, Value>();
+      for (const field of decl.fields) {
+        const fieldType = substituteTypeExpr(field.type, substitutions);
+        fields.set(field.name, defaultValueForType(fieldType, runtime));
+      }
+      return { kind: "Ctor", name: decl.name, fields };
+    }
+
+    if (decl.kind === "SumTypeDecl") {
+      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
+      const variant = decl.variants.find((candidate) => candidate.fields.length === 0) ?? decl.variants[0];
+      if (!variant) {
+        return { kind: "Unit" };
+      }
+      const fields = new Map<string, Value>();
+      for (const field of variant.fields) {
+        const fieldType = substituteTypeExpr(field.type, substitutions);
+        fields.set(field.name, defaultValueForType(fieldType, runtime));
+      }
+      return { kind: "Ctor", name: variant.name, fields };
+    }
+  }
+
+  return { kind: "Unit" };
+}
+
+function randomInt(rng: () => number): number {
+  return Math.floor(rng() * 41) - 20;
+}
+
+function randomBool(rng: () => number): boolean {
+  return rng() < 0.5;
+}
+
+function randomString(rng: () => number): string {
+  const length = Math.floor(rng() * 6);
+  let result = "";
+  for (let i = 0; i < length; i += 1) {
+    const index = Math.floor(rng() * RANDOM_STRING_CHARS.length);
+    result += RANDOM_STRING_CHARS[index] ?? "a";
+  }
+  return result;
+}
+
+function makeCtor(name: string, entries?: [string, Value][]): Value {
+  const fields = new Map<string, Value>();
+  if (entries) {
+    for (const [fieldName, fieldValue] of entries) {
+      fields.set(fieldName, fieldValue);
+    }
+  }
+  return { kind: "Ctor", name, fields };
 }
 
 function evalRecord(expr: ast.RecordExpr, env: Env, runtime: Runtime): Value {
