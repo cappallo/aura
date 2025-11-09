@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~62% (Core language ~82% complete, LLM-first tooling ~45% complete)
+**Overall Progress:** ~65% (Core language ~82% complete, LLM-first tooling ~50% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -92,24 +92,25 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## ❌ Not Yet Implemented (Per SPEC.md)
 
 ### 1. Actors & Concurrency (§6 of SPEC, CONCURRENCY.md)
-- ❌ `actor` declarations with typed state
-- ❌ Message protocols (ADT-based message types)
-- ❌ Actor references and `.send()` syntax
-- ❌ Mailbox semantics (ordered, at-least-once delivery)
-- ❌ Message handler syntax (`on MessageType(msg) -> ...`)
-- ❌ Structured async tasks within actors (`async_group`, scoped tasks)
-- ❌ Data-parallel primitives (`parallel_map`, `parallel_fold`)
-- ❌ Supervision trees and failure handling
-- ❌ Deterministic scheduling mode for testing
-- ❌ `Concurrent` effect for actor/task operations
+**Note:** See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design specification.
+- ❌ `actor` declarations with typed state (CONCURRENCY.md §2)
+- ❌ Message protocols (ADT-based message types) (CONCURRENCY.md §3)
+- ❌ Actor references and `.send()` syntax (SPEC.md §6.2)
+- ❌ Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2)
+- ❌ Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1)
+- ❌ Structured async tasks within actors (`async_group`, scoped tasks) (CONCURRENCY.md §4)
+- ❌ Data-parallel primitives (`parallel_map`, `parallel_fold`) (CONCURRENCY.md §5)
+- ❌ Supervision trees and failure handling (CONCURRENCY.md §7)
+- ❌ Deterministic scheduling mode for testing (CONCURRENCY.md §8)
+- ❌ `Concurrent` effect for actor/task operations (CONCURRENCY.md §6)
 
 ### 2. Schemas & I/O (§8 of SPEC)
-- ✅ `schema` declarations
-- ✅ `@version(n)` annotations
+- ✅ `schema` declarations (SPEC.md §8.1)
+- ✅ `@version(n)` annotations (SPEC.md §8.1)
 - ✅ Schema field validation and typechecking
-- ❌ Schema-to-type mapping (automatic type generation)
-- ❌ JSON/HTTP codec generation
-- ❌ Typed I/O bindings
+- ❌ Schema-to-type mapping (automatic type generation like `UserRecord@2`) (SPEC.md §8.2)
+- ❌ JSON/HTTP codec generation (SPEC.md §8.3)
+- ❌ Typed I/O bindings (SPEC.md §8.3)
 
 ### 3. Property-Based Tests (§7.4 of SPEC)
 - ✅ `property` declarations with `where` predicates
@@ -145,9 +146,9 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Structured logging output** (logs collected and emitted as JSON)
 - ✅ **CLI --format flag** (supports both text and json output formats)
 - ✅ **Example files**: `comments.lx`, `structured_output.lx`, `error_example.lx`
-- ✅ **StructuredTrace type defined** in `src/structured.ts` (ready for tracing implementation)
-- ❌ Explain/tracing tooling API - trace collection/emission not implemented yet (THOUGHTS.md §5.2)
-- ❌ Canonical code formatter/pretty-printer (THOUGHTS.md §6.1)
+- ✅ **Canonical code formatter/pretty-printer** (`lx format` command, `src/formatter.ts` - THOUGHTS.md §6.1)
+- ✅ **Execution tracing/explain** (`lx explain` command with step-by-step traces - THOUGHTS.md §5.2)
+- ✅ **StructuredTrace type** in `src/structured.ts` with full trace collection/emission
 - ❌ AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
 - ❌ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
@@ -174,8 +175,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §7.1-7.2 | Contracts | 🟡 Runtime only, no SMT verification |
 | §7.3 | Tests | ✅ Complete |
 | §7.4 | Properties | 🟡 Mostly complete, shrinking pending |
-| §8 | Schemas & I/O | ❌ Not started |
-| §9 | Logging/tracing | 🟡 Basic logging, no structured tracing |
+| §8 | Schemas & I/O | 🟡 Schemas declared, codecs/I/O pending |
+| §9 | Logging/tracing | ✅ Complete (structured logging + execution tracing) |
 | §10 | Refactors/migrations | ❌ Not started |
 
 ---
@@ -294,7 +295,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [ ] Add named arguments support (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
-**Completed:** Code formatter produces deterministic, canonical output from AST. Execution tracing captures function calls, returns, let bindings with nesting depth. The `explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption.
+**Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Both `lx format` and `lx explain` commands are fully functional in the CLI.
 
 ---
 
@@ -314,31 +315,45 @@ Phase 2 (Current): Foundations ✅
 └─ Standard library expansion → ✅ Basic builtins complete
 
 Phase 3 (Near-term): LLM-First Tooling & I/O
-├─ Comments & doc strings → Priority 4 (CRITICAL)
-├─ Structured errors/logging → Priority 5
-├─ Property test shrinking → Priority 3
-├─ Schemas → Priority 6
-├─ JSON codec generation
-└─ LLM tooling (formatting, tracing) → Priority 7
+├─ Comments & doc strings → ✅ Complete (Priority 4)
+├─ Structured errors/logging → ✅ Complete (Priority 5)
+├─ Canonical formatting → ✅ Complete (Priority 7)
+├─ Execution tracing/explain → ✅ Complete (Priority 7)
+├─ Property test shrinking → 🟡 Pending (Priority 3)
+├─ Schemas → 🟡 Partial (Priority 6)
+├─ JSON codec generation → ❌ Pending
+└─ AST input format / patch editing → ❌ Pending (Priority 7 enhancements)
 
 Phase 4 (Mid-term): Concurrency & Tools
-├─ Actor model implementation (CONCURRENCY.md)
+├─ Actor model implementation (CONCURRENCY.md) → Priority 8
 │  ├─ Basic actor declarations with typed state
 │  ├─ Message protocols and handlers
 │  ├─ Structured async tasks within actors
 │  ├─ Supervision trees
 │  └─ Deterministic scheduling for tests
 ├─ Data-parallel primitives (parallel_map, parallel_fold)
-├─ Refactor operations
-├─ Explain/debug tooling
-└─ Effect polymorphism
+├─ Refactor operations (SPEC.md §10.1)
+└─ Effect polymorphism (SPEC.md §5.3)
 
 Phase 5 (Long-term): Evolution
-├─ Schema migrations
-├─ Static contract verification (SMT)
+├─ Schema migrations (SPEC.md §10.2)
+├─ Static contract verification (SMT) (SPEC.md §7.1)
 ├─ Full standard library
 └─ Optimization
 ```
+
+### 🎯 Immediate Next Steps (Post-Priority 7)
+
+With the core language and primary LLM tooling complete, the next priorities are:
+
+1. **Property Test Shrinking** (Priority 3 completion) - Minimize counterexamples for better debugging
+2. **Schema Codecs** (Priority 6 completion) - Generate JSON codecs and typed I/O from schema declarations
+3. **LLM Tooling Enhancements** (Priority 7 completion):
+   - AST input format for direct LLM generation
+   - Patch-based editing with stable symbol IDs
+   - Holes/partial code support
+   - Named arguments
+4. **Actor Model** (Priority 8, Phase 4) - Begin CONCURRENCY.md implementation with typed actors
 
 ---
 
@@ -353,9 +368,11 @@ npm test               # Run all example tests
 
 ### CLI Usage
 ```bash
-lx run [--format=json|text] <file.lx> <module.fn> [args...]   # Execute function
-lx test [--format=json|text] <file.lx>                         # Run tests
-lx check [--format=json|text] <file.lx>                        # Type check only
+lx run [--format=json|text] <file.lx> <module.fn> [args...]      # Execute function
+lx test [--format=json|text] <file.lx>                            # Run tests
+lx check [--format=json|text] <file.lx>                           # Type check only
+lx format <file.lx>                                                # Format code (canonical output)
+lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with trace
 
 # --format=json outputs structured JSON for LLM consumption
 # --format=text (default) outputs human-readable text
@@ -373,21 +390,17 @@ lx check [--format=json|text] <file.lx>                        # Type check only
 
 ## 🐛 Known Issues
 
-### Critical (LLM-First Design Violations)
-1. **No explain/tracing hooks** - Missing execution tracing tooling per THOUGHTS.md §5.2 (`explain fn(args)`)
-
-### Tooling Gaps
-2. **No canonical formatter** - No pretty-printer for consistent code layout (THOUGHTS.md §1.2, §6.1)
-3. **No AST input format** - LLMs cannot directly generate AST despite "AST-first" design principle (THOUGHTS.md §1.2)
-4. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
-5. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
+### Tooling Gaps (LLM-First Design)
+1. **No AST input format** - LLMs cannot directly generate AST despite "AST-first" design principle (THOUGHTS.md §1.2)
+2. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
+3. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
 
 ### Language Features
-6. **No REPL** - Must write files to test code
-7. **No named arguments** - Only positional parameters supported, violating "explicit parameter names everywhere" principle (THOUGHTS.md §1.3)
-8. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
-9. **Limited standard library** - Basic operations now available but could be expanded further
-10. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
+4. **No REPL** - Must write files to test code
+5. **No named arguments** - Only positional parameters supported, violating "explicit parameter names everywhere" principle (THOUGHTS.md §1.3)
+6. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+7. **Limited standard library** - Basic operations now available but could be expanded further
+8. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 
@@ -406,20 +419,21 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§3.1 Natural-language spec blocks** | ✅ Good | `/// spec:` doc comments implemented with parsing and validation |
 | **§3.2 Inline tests & properties** | ✅ Good | `test` and `property` blocks implemented |
 | **§4.1 Small, versioned stdlib** | 🟡 Partial | Small stdlib (✅), but no version tracking (❌) |
-| **§4.2 Schema-first external data** | ❌ Missing | Schemas planned but not implemented |
+| **§4.2 Schema-first external data** | 🟡 Partial | Schema declarations implemented (✅), codecs/type generation pending (❌) |
 | **§5.1 Deterministic replayable runs** | 🟡 Partial | Structured logging implemented (✅), seedable RNG pending (❌) |
-| **§5.2 Explicit explain hooks** | ❌ Missing | No execution tracing tooling |
-| **§6.1 Patch-based edits** | ❌ Missing | No stable symbol addressing or patch tooling |
+| **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
+| **§6.1 Patch-based edits** | 🟡 Partial | Canonical formatter implemented (✅), patch tooling pending (❌) |
 | **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
 | **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
 | **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), and structured output (§2.2, §5.1) are now complete. Property-based testing (§3.2) is functional. Remaining critical tooling features needed:
-- Execution tracing and explain hooks (§5.2) → Priority 7
-- Canonical formatting and patch-based editing (§6.1) → Priority 7
-- Named arguments for explicit parameter passing (§1.3) → Lower priority enhancement
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), and canonical formatting (§6.1) are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
+- AST input format for direct LLM code generation (§1.2)
+- Patch-based editing tooling with stable symbol IDs (§6.1)
+- Named arguments for explicit parameter passing (§1.3)
+- Holes/partial code support (§8)
 
-**Impact:** The language core is solid (~80% complete), and the LLM developer experience layer has made significant progress (~30% complete), bringing overall progress to ~55%. Structured error and log output, combined with property-based testing, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~82% complete), and the LLM developer experience layer has made significant progress (~50% complete), bringing overall progress to ~65%. Structured error and log output, combined with property-based testing, execution tracing, and canonical formatting, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 
