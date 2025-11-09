@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~50% (Core language ~75% complete, LLM-first tooling ~25% complete)
+**Overall Progress:** ~55% (Core language ~80% complete, LLM-first tooling ~30% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -65,18 +65,19 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## ⚠️ Partially Implemented
 
-### Type System
-- ✅ **Type inference**: Full Hindley-Milner type inference with unification
-- ✅ **Type checking**: Complete type checking with detailed error messages and source locations
-
 ### Contracts
-- ⚠️ **Contract language**: Pure expressions supported, but no SMT solving or static verification (runtime only)
+- ✅ **Contract declarations**: `contract fn` with `requires` and `ensures` clauses
+- ✅ **Runtime enforcement**: Pre/postcondition checking during execution
+- ✅ **Contract validation**: Typechecker verifies contract expressions are pure
+- ⚠️ **Static verification**: No SMT solving or formal verification (runtime assertions only per SPEC.md §7.1)
 
 ### Property-Based Tests
-- ✅ `property` declarations with `where` predicates
-- ✅ Generators for Int/Bool/String/List values and ADTs (depth-limited)
-- ✅ CLI reporting with counterexamples when properties fail
-- ⚠️ No shrinking/minimization yet; counterexamples are not reduced
+- ✅ **Property declarations**: `property` blocks with typed parameters
+- ✅ **Constraint predicates**: `where` clauses for value filtering
+- ✅ **Value generators**: Automatic generation for Int/Bool/String/List/ADT types (depth-limited)
+- ✅ **Test execution**: Integrated with `lx test` command
+- ✅ **Failure reporting**: Counterexamples shown with generated values
+- ⚠️ **Shrinking**: No counterexample minimization yet (SPEC.md §7.4 enhancement)
 
 ---
 
@@ -97,6 +98,10 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ Typed I/O bindings
 
 ### 3. Property-Based Tests (§7.4 of SPEC)
+- ✅ `property` declarations with `where` predicates
+- ✅ Value generators for primitives, lists, and ADTs
+- ✅ Constraint filtering
+- ✅ Counterexample reporting
 - ❌ Shrinking/minimization for counterexamples
 
 ### 4. Refactors (§10.1 of SPEC)
@@ -109,13 +114,14 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ Schema version transforms
 - ❌ Data migration execution
 
-### 6. Module System (NEW!)
+### 6. Module System (COMPLETE - §3.2 of SPEC)
 - ✅ **Module path resolution**: Convert module names to file paths
 - ✅ **Dependency graph loading**: Recursive import resolution with cycle detection
 - ✅ **Global symbol table**: Cross-module type and function lookups
 - ✅ **Qualified name resolution**: Support for `math.add` syntax with imports
 - ✅ **Multi-file typechecking**: Full type checking across module boundaries
 - ✅ **Multi-file interpreter**: Runtime function calls across modules
+- ✅ **Example**: `examples/multifile/` with main.lx and math.lx
 
 ### 7. LLM-First Tooling (THOUGHTS.md)
 - ✅ Comments and doc strings (`//`, `/* */`, `/// spec:`)
@@ -124,13 +130,15 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **Structured error output** (JSON format with --format=json flag)
 - ✅ **Structured logging output** (logs collected and emitted as JSON)
 - ✅ **CLI --format flag** (supports both text and json output formats)
-- ❌ Explain/tracing tooling API
-- ❌ Canonical code formatter/pretty-printer
-- ❌ AST input format for direct LLM generation
-- ❌ Patch-based editing with stable symbol IDs
-- ❌ Holes/partial code support (`hole("name")`)
-- ❌ Named arguments
-- ⚠️ Deterministic execution mode (timestamps in logs, but no seedable RNG yet)
+- ✅ **Example files**: `comments.lx`, `structured_output.lx`, `error_example.lx`
+- ✅ **StructuredTrace type defined** in `src/structured.ts` (ready for tracing implementation)
+- ❌ Explain/tracing tooling API - trace collection/emission not implemented yet (THOUGHTS.md §5.2)
+- ❌ Canonical code formatter/pretty-printer (THOUGHTS.md §6.1)
+- ❌ AST input format for direct LLM generation (THOUGHTS.md §1.2)
+- ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
+- ❌ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
+- ❌ Named arguments (THOUGHTS.md §1.3)
+- ⚠️ Deterministic execution mode (timestamps in logs, but no seedable RNG yet - THOUGHTS.md §5.1)
 
 ### 8. Advanced Features
 - ❌ Effect polymorphism (effect row variables)
@@ -149,9 +157,9 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §4 | Type system | ✅ Complete |
 | §5 | Effect system | 🟡 Declarations + checking, no polymorphism |
 | §6 | Actors | ❌ Not started |
-| §7.1-7.2 | Contracts | 🟡 Runtime only |
+| §7.1-7.2 | Contracts | 🟡 Runtime only, no SMT verification |
 | §7.3 | Tests | ✅ Complete |
-| §7.4 | Properties | 🟡 Runtime generators, no shrinking |
+| §7.4 | Properties | 🟡 Mostly complete, shrinking pending |
 | §8 | Schemas & I/O | ❌ Not started |
 | §9 | Logging/tracing | 🟡 Basic logging, no structured tracing |
 | §10 | Refactors/migrations | ❌ Not started |
@@ -160,7 +168,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 17+ example files including:
+The implementation successfully runs 19 example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -203,17 +211,19 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Completed:** Full type inference with Hindley-Milner algorithm is now working, with detailed error messages showing exact source locations!
 
 ### **Priority 3: Property-Based Tests (§7.4)**
-**Status:** � In progress (runtime support live, shrinking pending)  
+**Status:** 🟡 Mostly complete (runtime support live, shrinking pending)  
 **Goal:** Add `property` blocks for generative testing
 - [x] Extend AST for `property` declarations
 - [x] Add grammar for `where` constraints
 - [x] Implement basic generators for primitive types
 - [x] Add list/ADT generators
 - [x] Implement constraint filtering
-- [ ] Add shrinking for counterexamples
 - [x] Report property failures with counterexample context
+- [x] CLI integration with `lx test` command
+- [x] Example file: `property_basics.lx`
+- [ ] Add shrinking/minimization for counterexamples
 
-**Why third:** High value for LLM workflow; complements existing test infrastructure.
+**Mostly Completed:** Property-based testing is now functional with value generation, constraint filtering, and counterexample reporting. Only shrinking remains as an enhancement.
 
 ### **Priority 4: Comments & Documentation (THOUGHTS.md §3.1)**
 **Status:** ✅ Complete  
@@ -222,8 +232,9 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Add block comment support (`/* */`) to grammar
 - [x] Implement structured doc comments (`/// spec:`) in grammar
 - [x] Preserve doc comments in AST for tooling
-- [x] Parse structured spec format (description, inputs, outputs, laws)
-- [x] Add example with commented code to demonstrate
+- [x] Parse structured spec format (description, inputs, outputs, laws, fields)
+- [x] Add validation for doc spec parameters/fields vs. actual declarations
+- [x] Add example with commented code to demonstrate (`comments.lx`)
 
 **Completed:** Comments and structured documentation are now fully supported! Line comments (`//`), block comments (`/* */`), and doc comments (`///`) all work. Doc comments with `spec:` format are parsed into structured data and validated against declarations.
 
@@ -240,8 +251,8 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 
 **Completed:** Structured output is now fully functional! The CLI supports `--format=json` flag for all commands (run, test, check). Errors include type, message, location, and optional hints. Logs are collected and emitted as structured JSON with timestamps, levels, and data payloads.
 
-### **Priority 6: Schemas (§8.1-8.2)**
-**Status:** 🔴 Not started  
+### **Priority 6: Schemas (§8 of SPEC)**
+**Status:** 🔴 Not started - **HIGH priority**  
 **Goal:** External data shape declarations with versioning
 - [ ] Extend AST for `schema` declarations
 - [ ] Add `@version(n)` annotation parsing
@@ -249,20 +260,23 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [ ] Create JSON codec functions
 - [ ] Add validation functions
 - [ ] Test schema evolution scenarios
+- [ ] Implement schema-to-type mapping helpers
 
-**Why sixth:** Enables real I/O; critical for practical programs.
+**Why sixth:** Enables typed I/O; critical for practical programs and external data integration (SPEC.md §8.1-8.3).
 
-### **Priority 7: LLM Tooling (THOUGHTS.md §5.2, §6.1)**
+### **Priority 7: LLM Tooling API (THOUGHTS.md §5.2, §6.1)**
 **Status:** 🔴 Not started - **MEDIUM priority**  
 **Goal:** Execution tracing, formatting, and patch-based editing
-- [ ] Implement canonical code formatter/pretty-printer
-- [ ] Add `explain fn(args)` execution tracing
-- [ ] Design JSON AST input format for direct LLM generation
-- [ ] Implement patch-based editing (replace function body by stable ID)
-- [ ] Add `hole("name")` expressions for partial code
-- [ ] Create tooling commands for guided refactors
+- [ ] Implement canonical code formatter/pretty-printer (THOUGHTS.md §1.2, §6.1)
+- [ ] Add execution tracing for `explain fn(args)` (THOUGHTS.md §5.2)
+- [ ] Emit structured trace output (StructuredTrace type already defined)
+- [ ] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
+- [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
+- [ ] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
+- [ ] Add named arguments support (THOUGHTS.md §1.3)
+- [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
-**Why seventh:** Completes the LLM-first developer experience.
+**Why seventh:** Completes the LLM-first developer experience and enables the full feedback loop.
 
 ---
 
@@ -349,7 +363,7 @@ lx check [--format=json|text] <file.lx>                        # Type check only
 7. **No named arguments** - Only positional parameters supported, violating "explicit parameter names everywhere" principle (THOUGHTS.md §1.3)
 8. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
 9. **Limited standard library** - Basic operations now available but could be expanded further
-13. **No shrinking for property tests** - Counterexamples are not minimized
+10. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 
@@ -376,11 +390,12 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
 | **§8 Holes/partial code** | ❌ Missing | No support for incomplete programs |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), and structured output (§2.2, §5.1) are now complete. Remaining critical tooling features needed:
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), and structured output (§2.2, §5.1) are now complete. Property-based testing (§3.2) is functional. Remaining critical tooling features needed:
 - Execution tracing and explain hooks (§5.2) → Priority 7
 - Canonical formatting and patch-based editing (§6.1) → Priority 7
+- Named arguments for explicit parameter passing (§1.3) → Lower priority enhancement
 
-**Impact:** The language core is solid (~75% complete), and the LLM developer experience layer has made significant progress (~25% complete), bringing overall progress to ~50%. Structured error and log output enables the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~80% complete), and the LLM developer experience layer has made significant progress (~30% complete), bringing overall progress to ~55%. Structured error and log output, combined with property-based testing, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 
