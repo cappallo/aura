@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 9, 2025  
-**Overall Progress:** ~72% (Core language ~82% complete, LLM-first tooling ~60% complete)
+**Overall Progress:** ~75% (Core language ~82% complete, LLM-first tooling ~75% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -183,7 +183,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 21 example files including:
+The implementation successfully runs 25 example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -191,12 +191,16 @@ The implementation successfully runs 21 example files including:
 - ✅ `result.lx` - Error handling patterns
 - ✅ `property_basics.lx` - Property-based testing with predicates and assertions
 - ✅ `property_shrinking.lx` - Counterexample shrinking for property tests
+- ✅ `schema.lx` - Basic schema declarations
+- ✅ `schema_simple.lx` - Simple schema examples
+- ✅ `schema_versioned.lx` - Schema versioning examples
 - ✅ `schema_codecs.lx` - Schema-to-type generation and JSON codecs
 - ✅ `builtins.lx` - Extended standard library (string, math, list operations)
 - ✅ `comments.lx` - Line comments, block comments, and structured doc comments with `spec:` format
 - ✅ `structured_output.lx` - Structured JSON output with --format=json flag
 - ✅ `error_example.lx` - Structured error output demonstration
 - ✅ `hole_example.lx` - Shows hole expressions caught by the typechecker
+- ✅ `list_concat.lx` - List concatenation examples
 
 ---
 
@@ -285,7 +289,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 **Completed:** Schema system is now fully functional! Schemas are parsed with `@version(n)` annotations, validated during typechecking, and automatically generate internal record types (e.g., `UserRecord@1` from schema UserRecord version 1). JSON codecs enable serialization/deserialization with `json.encode()` and `json.decode()` builtins.
 
 ### **Priority 7: LLM Tooling API (THOUGHTS.md §5.2, §6.1)**
-**Status:** � Partially Complete - Core tools implemented  
+**Status:** ✅ Mostly Complete - Core tools implemented  
 **Goal:** Execution tracing, formatting, and patch-based editing
 - [x] Implement canonical code formatter/pretty-printer (THOUGHTS.md §1.2, §6.1)
 - [x] Add execution tracing for `explain fn(args)` (THOUGHTS.md §5.2)
@@ -293,12 +297,12 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Add `lx format` command for deterministic code formatting
 - [x] Add `lx explain` command with text and JSON output
 - [x] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
-- [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
+- [x] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [x] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
 - [x] Add named arguments support (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
-**Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Both `lx format` and `lx explain` commands are fully functional in the CLI.
+**Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Patch-based editing is implemented via `lx patch-body` command which rewrites function bodies by symbol ID. AST input format (`--input=ast`) allows direct JSON AST execution. All core LLM tooling commands (`format`, `explain`, `patch-body`) are fully functional in the CLI.
 
 ---
 
@@ -325,7 +329,8 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 ├─ Property test shrinking → ✅ Complete (Priority 3)
 ├─ Schemas & type generation → ✅ Complete (Priority 6)
 ├─ JSON codec generation → ✅ Complete (Priority 6)
-└─ Patch editing tooling → ❌ Pending (Priority 7 enhancements)
+├─ Patch editing tooling → ✅ Complete (Priority 7)
+└─ AST input format → ✅ Complete (Priority 7)
 
 Phase 4 (Mid-term): Concurrency & Tools
 ├─ Actor model implementation (CONCURRENCY.md) → Priority 8
@@ -347,13 +352,12 @@ Phase 5 (Long-term): Evolution
 
 ### 🎯 Immediate Next Steps
 
-With the core language, schemas, and primary LLM tooling complete, the next priorities are:
+With the core language, schemas, and most LLM tooling complete, the next priorities are:
 
 1. **LLM Tooling Enhancements** (Priority 7 completion):
    - Deterministic execution mode / seedable RNG
-   - Guided refactor operations with structured patches
+   - Guided refactor operations (SPEC.md §10.1) - Implement programmatic refactoring tools
 2. **Actor Model** (Priority 8, Phase 4) - Begin CONCURRENCY.md implementation with typed actors
-3. **Refactor Operations** (SPEC.md §10.1) - Implement programmatic refactoring tools
 
 ---
 
@@ -368,14 +372,16 @@ npm test               # Run all example tests
 
 ### CLI Usage
 ```bash
-lx run [--format=json|text] <file.lx> <module.fn> [args...]      # Execute function
-lx test [--format=json|text] <file.lx>                            # Run tests
-lx check [--format=json|text] <file.lx>                           # Type check only
-lx format <file.lx>                                                # Format code (canonical output)
-lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with trace
+lx run [--format=json|text] [--input=source|ast] <file.lx> <module.fn> [args...]      # Execute function
+lx test [--format=json|text] [--input=source|ast] <file.lx>                            # Run tests
+lx check [--format=json|text] [--input=source|ast] <file.lx>                           # Type check only
+lx format <file.lx>                                                                      # Format code (canonical output)
+lx explain [--format=json|text] [--input=source|ast] <file.lx> <module.fn> [args...]  # Execute with trace
+lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                                   # Replace function body
 
 # --format=json outputs structured JSON for LLM consumption
 # --format=text (default) outputs human-readable text
+# --input=ast treats file as JSON AST instead of source code
 ```
 
 ### Adding New Features
@@ -391,13 +397,12 @@ lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with 
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
+1. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+2. **No guided refactor operations** - No structured commands for refactoring (SPEC.md §10.1, THOUGHTS.md §6.2)
 
 ### Language Features
-2. **No REPL** - Must write files to test code
-3. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+3. **No REPL** - Must write files to test code
 4. **Limited standard library** - Basic operations now available but could be expanded further
-5. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 
@@ -408,7 +413,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 | Principle (THOUGHTS.md) | Status | Notes |
 |-------------------------|--------|-------|
 | **§1.1 Regular, low-context syntax** | ✅ Good | Simple keywords, explicit syntax, no clever shortcuts |
-| **§1.2 AST-first design** | ⚠️ Partial | Has AST but no JSON input format for LLMs |
+| **§1.2 AST-first design** | ✅ Good | Has AST and JSON input format via `--input=ast` flag |
 | **§1.3 Redundancy allowed** | ✅ Good | Verbose keywords plus named arguments for every call |
 | **§2.1 Pure-by-default, explicit effects** | ✅ Good | Effect system implemented and enforced |
 | **§2.2 Strong, local, simple types** | ✅ Good | Full type inference with location-based errors, now with JSON output |
@@ -419,16 +424,16 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§4.2 Schema-first external data** | 🟡 Partial | Schema declarations implemented (✅), codecs/type generation pending (❌) |
 | **§5.1 Deterministic replayable runs** | 🟡 Partial | Structured logging implemented (✅), seedable RNG pending (❌) |
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
-| **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs |
+| **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs, AST input/output format |
 | **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
 | **§7 Safe concurrency model** | ❌ Missing | Actors planned but not implemented |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits, and hole-aware workflows are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), and hole-aware workflows (§8) are now complete. Property-based testing (§3.2) is functional. Remaining tooling enhancements needed:
 - Deterministic execution mode / seedable RNG (§5.1)
 - Guided refactor operations with structured commands (§6.2/§10.1)
 
-**Impact:** The language core is solid (~82% complete), and the LLM developer experience layer has made significant progress (~50% complete), bringing overall progress to ~65%. Structured error and log output, combined with property-based testing, execution tracing, and canonical formatting, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~82% complete), and the LLM developer experience layer has made significant progress (~75% complete), bringing overall progress to ~75%. Structured error and log output, combined with property-based testing, execution tracing, canonical formatting, patch-based editing, and AST input format, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 
