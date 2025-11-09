@@ -1,0 +1,30 @@
+module examples.property_shrinking
+
+/// This file demonstrates property test shrinking.
+/// When a property fails, the test runner attempts to find
+/// the minimal counterexample by shrinking the failing inputs.
+
+/// A property that fails when n >= 5
+/// Without shrinking, it might fail at n=42
+/// With shrinking, it should report n=5 as the minimal counterexample
+property fails_at_five(n: Int where n >= 0) {
+  assert(n < 5)
+}
+
+/// A property that fails for non-empty lists
+/// Should shrink to a list with one element
+property fails_on_nonempty_list(items: List<Int>) {
+  assert(list.len(items) == 0)
+}
+
+/// A property that fails when string length > 3
+/// Should shrink to a string of length 4
+property fails_on_long_strings(s: String) {
+  assert(str.len(s) <= 3)
+}
+
+/// A property that combines multiple parameters
+/// Should shrink both to minimal failing values
+property fails_on_sum(a: Int where a >= 0, b: Int where b >= 0) {
+  assert(a + b < 10)
+}

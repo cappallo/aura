@@ -228,6 +228,42 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
 }
 
 /**
+ * Generate internal types from schema declarations
+ * For each schema UserRecord@2, creates a RecordTypeDecl named UserRecord@2
+ */
+export function generateTypesFromSchemas(symbolTable: SymbolTable): void {
+  for (const [qualifiedName, schema] of symbolTable.schemas.entries()) {
+    // Only generate for versioned names (e.g., UserRecord@2, not UserRecord)
+    if (!qualifiedName.includes("@")) {
+      continue;
+    }
+    
+    // Skip if type already exists (manually defined)
+    if (symbolTable.types.has(qualifiedName)) {
+      continue;
+    }
+    
+    // Generate RecordTypeDecl from SchemaDecl
+    const fields = schema.fields.map((field) => ({
+      name: field.name,
+      type: field.optional
+        ? { kind: "OptionalType" as const, inner: field.type }
+        : field.type,
+    }));
+    
+    const recordType: ast.RecordTypeDecl = {
+      kind: "RecordTypeDecl",
+      name: qualifiedName,
+      typeParams: [],
+      fields,
+      ...(schema.docComment ? { docComment: schema.docComment } : {}),
+    };
+    
+    symbolTable.types.set(qualifiedName, recordType);
+  }
+}
+
+/**
  * Resolve a potentially qualified identifier to its full qualified name
  * Takes into account module imports and aliases
  */

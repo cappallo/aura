@@ -48,6 +48,7 @@ type TestOutcome = {
 };
 
 const DEFAULT_PROPERTY_RUNS = 50;
+const MAX_SHRINK_ATTEMPTS = 100;
 const MAX_GENERATION_ATTEMPTS = 100;
 const MAX_GENERATION_DEPTH = 4;
 const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
@@ -477,6 +478,10 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinLog("debug", expr, env, runtime);
     case "Log.trace":
       return builtinLog("trace", expr, env, runtime);
+    case "json.encode":
+      return builtinJsonEncode(expr, env, runtime);
+    case "json.decode":
+      return builtinJsonDecode(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -825,6 +830,98 @@ function builtinListFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value 
   return accumulator;
 }
 
+function builtinJsonEncode(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("json.encode expects exactly 1 argument");
+  }
+  
+  const value = evalExpr(expr.args[0]!, env, runtime);
+  const jsValue = valueToJsValue(value);
+  const jsonString = JSON.stringify(jsValue);
+  
+  return { kind: "String", value: jsonString };
+}
+
+function builtinJsonDecode(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  if (expr.args.length !== 1) {
+    throw new RuntimeError("json.decode expects exactly 1 argument");
+  }
+  
+  const jsonStringValue = evalExpr(expr.args[0]!, env, runtime);
+  if (jsonStringValue.kind !== "String") {
+    throw new RuntimeError("json.decode expects a string argument");
+  }
+  
+  try {
+    const jsValue = JSON.parse(jsonStringValue.value);
+    return jsValueToValue(jsValue);
+  } catch (error) {
+    throw new RuntimeError(
+      `json.decode failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function valueToJsValue(value: Value): unknown {
+  switch (value.kind) {
+    case "Int":
+    case "Bool":
+    case "String":
+      return value.value;
+    case "Unit":
+      return null;
+    case "List":
+      return value.elements.map(valueToJsValue);
+    case "Ctor": {
+      // For all constructors, use the standard _constructor format
+      const obj: Record<string, unknown> = { _constructor: value.name };
+      for (const [fieldName, fieldValue] of value.fields.entries()) {
+        obj[fieldName] = valueToJsValue(fieldValue);
+      }
+      return obj;
+    }
+  }
+}
+
+function jsValueToValue(jsValue: unknown): Value {
+  if (jsValue === null || jsValue === undefined) {
+    return { kind: "Unit" };
+  }
+  if (typeof jsValue === "number") {
+    return { kind: "Int", value: Math.floor(jsValue) };
+  }
+  if (typeof jsValue === "boolean") {
+    return { kind: "Bool", value: jsValue };
+  }
+  if (typeof jsValue === "string") {
+    return { kind: "String", value: jsValue };
+  }
+  if (Array.isArray(jsValue)) {
+    return { kind: "List", elements: jsValue.map(jsValueToValue) };
+  }
+  if (typeof jsValue === "object") {
+    const obj = jsValue as Record<string, unknown>;
+    const constructor = obj._constructor;
+    if (typeof constructor === "string") {
+      // Convert back to constructor
+      const fields = new Map<string, Value>();
+      for (const [key, val] of Object.entries(obj)) {
+        if (key !== "_constructor") {
+          fields.set(key, jsValueToValue(val));
+        }
+      }
+      return { kind: "Ctor", name: constructor, fields };
+    }
+    // Generic object - convert to record-like constructor
+    const fields = new Map<string, Value>();
+    for (const [key, val] of Object.entries(obj)) {
+      fields.set(key, jsValueToValue(val));
+    }
+    return { kind: "Ctor", name: "Object", fields };
+  }
+  return { kind: "Unit" };
+}
+
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   let calleeName = expr.callee;
   
@@ -890,19 +987,23 @@ function runProperty(property: ast.PropertyDecl, runtime: Runtime): TestOutcome 
     try {
       const result = evalBlock(property.body, new Map(env), runtime);
       if (result.type === "return" && result.value.kind !== "Unit") {
+        // Property failed - try to shrink the counterexample
+        const shrunkEnv = shrinkCounterexample(property, env, runtime);
         return {
           kind: "property",
           name: property.name,
           success: false,
-          error: propertyFailureError(property.name, iteration, env, "Properties must not return non-unit values"),
+          error: propertyFailureError(property.name, iteration, shrunkEnv, "Properties must not return non-unit values"),
         };
       }
     } catch (error) {
+      // Property failed - try to shrink the counterexample
+      const shrunkEnv = shrinkCounterexample(property, env, runtime);
       return {
         kind: "property",
         name: property.name,
         success: false,
-        error: propertyFailureError(property.name, iteration, env, error),
+        error: propertyFailureError(property.name, iteration, shrunkEnv, error),
       };
     }
   }
@@ -1136,6 +1237,204 @@ function generateOptionalValue(
   }
   const value = generateValueForTypeExpr(typeExpr.inner, runtime, depth + 1, rng);
   return makeCtor("Some", [["value", value]]);
+}
+
+// Shrinking functions for counterexample minimization
+function shrinkValue(value: Value): Value[] {
+  switch (value.kind) {
+    case "Int":
+      return shrinkInt(value.value);
+    case "String":
+      return shrinkString(value.value);
+    case "List":
+      return shrinkList(value.elements);
+    case "Bool":
+      return value.value ? [{ kind: "Bool", value: false }] : [];
+    case "Ctor":
+      return shrinkCtor(value);
+    case "Unit":
+      return [];
+  }
+}
+
+function shrinkInt(n: number): Value[] {
+  const candidates: Value[] = [];
+  
+  // Try zero if not already zero
+  if (n !== 0) {
+    candidates.push({ kind: "Int", value: 0 });
+  }
+  
+  // Try halving towards zero
+  if (Math.abs(n) > 1) {
+    const half = Math.floor(n / 2);
+    candidates.push({ kind: "Int", value: half });
+  }
+  
+  // Try one less in absolute value
+  if (n > 0) {
+    candidates.push({ kind: "Int", value: n - 1 });
+  } else if (n < 0) {
+    candidates.push({ kind: "Int", value: n + 1 });
+  }
+  
+  return candidates;
+}
+
+function shrinkString(s: string): Value[] {
+  const candidates: Value[] = [];
+  
+  // Try empty string
+  if (s.length > 0) {
+    candidates.push({ kind: "String", value: "" });
+  }
+  
+  // Try removing first character
+  if (s.length > 1) {
+    candidates.push({ kind: "String", value: s.slice(1) });
+  }
+  
+  // Try removing last character
+  if (s.length > 1) {
+    candidates.push({ kind: "String", value: s.slice(0, -1) });
+  }
+  
+  // Try halving the string
+  if (s.length > 2) {
+    const mid = Math.floor(s.length / 2);
+    candidates.push({ kind: "String", value: s.slice(0, mid) });
+  }
+  
+  return candidates;
+}
+
+function shrinkList(elements: Value[]): Value[] {
+  const candidates: Value[] = [];
+  
+  // Try empty list
+  if (elements.length > 0) {
+    candidates.push({ kind: "List", elements: [] });
+  }
+  
+  // Try removing first element
+  if (elements.length > 1) {
+    candidates.push({ kind: "List", elements: elements.slice(1) });
+  }
+  
+  // Try removing last element
+  if (elements.length > 1) {
+    candidates.push({ kind: "List", elements: elements.slice(0, -1) });
+  }
+  
+  // Try halving the list
+  if (elements.length > 2) {
+    const mid = Math.floor(elements.length / 2);
+    candidates.push({ kind: "List", elements: elements.slice(0, mid) });
+  }
+  
+  // Try shrinking individual elements (one at a time)
+  for (let i = 0; i < elements.length && candidates.length < 10; i += 1) {
+    const shrunk = shrinkValue(elements[i]!);
+    for (const smaller of shrunk) {
+      const newElements = [...elements];
+      newElements[i] = smaller;
+      candidates.push({ kind: "List", elements: newElements });
+    }
+  }
+  
+  return candidates;
+}
+
+function shrinkCtor(value: Value & { kind: "Ctor" }): Value[] {
+  const candidates: Value[] = [];
+  
+  // For Option types, try None if it's Some
+  if (value.name === "Some") {
+    candidates.push(makeCtor("None"));
+    // Also try shrinking the wrapped value
+    const wrappedValue = value.fields.get("value");
+    if (wrappedValue) {
+      const shrunk = shrinkValue(wrappedValue);
+      for (const smaller of shrunk) {
+        candidates.push(makeCtor("Some", [["value", smaller]]));
+      }
+    }
+  }
+  
+  // For other constructors, try shrinking field values
+  const fieldEntries = Array.from(value.fields.entries());
+  for (let i = 0; i < fieldEntries.length && candidates.length < 10; i += 1) {
+    const [fieldName, fieldValue] = fieldEntries[i]!;
+    const shrunk = shrinkValue(fieldValue);
+    for (const smaller of shrunk) {
+      const newFields = new Map(value.fields);
+      newFields.set(fieldName, smaller);
+      candidates.push({ kind: "Ctor", name: value.name, fields: newFields });
+    }
+  }
+  
+  return candidates;
+}
+
+function shrinkCounterexample(
+  property: ast.PropertyDecl,
+  failingEnv: Env,
+  runtime: Runtime,
+): Env {
+  let currentEnv = new Map(failingEnv);
+  let improved = true;
+  let attempts = 0;
+  
+  while (improved && attempts < MAX_SHRINK_ATTEMPTS) {
+    improved = false;
+    attempts += 1;
+    
+    // Try shrinking each parameter
+    for (const param of property.params) {
+      const currentValue = currentEnv.get(param.name);
+      if (!currentValue) continue;
+      
+      const candidates = shrinkValue(currentValue);
+      
+      for (const candidate of candidates) {
+        const testEnv = new Map(currentEnv);
+        testEnv.set(param.name, candidate);
+        
+        // Check if the candidate satisfies the predicate (if any)
+        if (param.predicate) {
+          try {
+            const predicateValue = evalExpr(param.predicate, testEnv, runtime);
+            if (predicateValue.kind !== "Bool" || !predicateValue.value) {
+              continue; // Skip candidates that don't satisfy the predicate
+            }
+          } catch {
+            continue; // Skip candidates that cause predicate errors
+          }
+        }
+        
+        // Check if the property still fails with this smaller value
+        try {
+          const result = evalBlock(property.body, new Map(testEnv), runtime);
+          // If it doesn't throw and doesn't return non-unit, it passed - not a valid shrink
+          if (result.type === "return" && result.value.kind !== "Unit") {
+            // This is a failure case - use this shrunk value
+            currentEnv = testEnv;
+            improved = true;
+            break;
+          }
+        } catch {
+          // Still fails - this is a valid shrink
+          currentEnv = testEnv;
+          improved = true;
+          break;
+        }
+      }
+      
+      if (improved) break; // Start over with the new smaller value
+    }
+  }
+  
+  return currentEnv;
 }
 
 function findTypeDecl(runtime: Runtime, name: string): ast.TypeDecl | undefined {

@@ -277,6 +277,22 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([makeListType(element), accumulator, fnType], accumulator);
     },
   },
+  "json.encode": {
+    arity: 1,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const value = freshTypeVar("T", false, state);
+      return makeFunctionType([value], STRING_TYPE);
+    },
+  },
+  "json.decode": {
+    arity: 1,
+    effects: new Set(),
+    instantiateType: (state) => {
+      const resultType = freshTypeVar("T", false, state);
+      return makeFunctionType([STRING_TYPE], resultType);
+    },
+  },
 };
 
 export function typecheckModule(module: ast.Module): TypeCheckError[] {
@@ -414,6 +430,66 @@ export function typecheckModules(
     }
   }
 
+  // Add generated types from symbol table (e.g., schema-generated types like UserRecord@1)
+  for (const [qualifiedName, typeDecl] of symbolTable.types.entries()) {
+    if (!globalTypeDecls.has(qualifiedName)) {
+      // Find which module this belongs to
+      const moduleName = qualifiedName.substring(0, qualifiedName.lastIndexOf('.'));
+      const foundModule = modules.find(m => m.ast.name.join('.') === moduleName);
+      if (!foundModule) continue;
+      
+      const typeParams = typeDecl.kind === "AliasTypeDecl" || typeDecl.kind === "RecordTypeDecl" || typeDecl.kind === "SumTypeDecl"
+        ? typeDecl.typeParams
+        : [];
+      
+      const info: TypeDeclInfo = {
+        name: typeDecl.name,
+        qualifiedName,
+        typeParams,
+        decl: typeDecl,
+        module: foundModule.ast,
+      };
+      globalTypeDecls.set(qualifiedName, info);
+      
+      // Also add to record types if it's a RecordTypeDecl
+      if (typeDecl.kind === "RecordTypeDecl") {
+        const recordInfo: RecordTypeInfo = {
+          name: typeDecl.name,
+          qualifiedName,
+          typeParams: typeDecl.typeParams,
+          decl: typeDecl,
+          module: foundModule.ast,
+        };
+        globalRecordTypes.set(qualifiedName, recordInfo);
+        
+        // Add variant constructor entry for the record (so it can be used as a constructor)
+        const variantInfo: VariantInfo = {
+          name: typeDecl.name,
+          qualifiedName,
+          parentQualifiedName: qualifiedName,
+          typeParams: typeDecl.typeParams,
+          fields: typeDecl.fields,
+          module: foundModule.ast,
+          parentDecl: {
+            kind: "SumTypeDecl",
+            name: typeDecl.name,
+            typeParams: typeDecl.typeParams,
+            variants: [{
+              name: typeDecl.name,
+              fields: typeDecl.fields,
+            }],
+          } as ast.SumTypeDecl,
+        };
+        const existing = globalVariantConstructors.get(qualifiedName);
+        if (existing) {
+          existing.push(variantInfo);
+        } else {
+          globalVariantConstructors.set(qualifiedName, [variantInfo]);
+        }
+      }
+    }
+  }
+
   for (const resolvedModule of modules) {
     const module = resolvedModule.ast;
     const filePath = resolvedModule.filePath;
@@ -428,6 +504,62 @@ export function typecheckModules(
     const moduleSchemas = new Map(globalSchemas);
     for (const [key, infos] of globalVariantConstructors.entries()) {
       moduleVariantConstructors.set(key, [...infos]);
+    }
+
+    // Add built-in Option constructors (Some and None)
+    // These work with the built-in Option<T> type
+    const builtinOptionSumDecl: ast.SumTypeDecl = {
+      kind: "SumTypeDecl",
+      name: "Option",
+      typeParams: ["T"],
+      variants: [
+        { name: "Some", fields: [{ name: "value", type: { kind: "TypeName", name: "T", typeArgs: [] } }] },
+        { name: "None", fields: [] },
+      ],
+    };
+
+    const someCtor: VariantInfo = {
+      name: "Some",
+      qualifiedName: "Some",
+      parentQualifiedName: "Option",
+      typeParams: ["T"],
+      fields: [{ name: "value", type: { kind: "TypeName", name: "T", typeArgs: [] } }],
+      module,
+      parentDecl: builtinOptionSumDecl,
+    };
+
+    const noneCtor: VariantInfo = {
+      name: "None",
+      qualifiedName: "None",
+      parentQualifiedName: "Option",
+      typeParams: ["T"],
+      fields: [],
+      module,
+      parentDecl: builtinOptionSumDecl,
+    };
+
+    // Add to module context (but don't override user-defined constructors with same name)
+    if (!moduleVariantConstructors.has("Some")) {
+      moduleVariantConstructors.set("Some", [someCtor]);
+    }
+    if (!moduleVariantConstructors.has("None")) {
+      moduleVariantConstructors.set("None", [noneCtor]);
+    }
+
+    // Add built-in Option as a sum type for exhaustiveness checking
+    if (!moduleSumTypes.has("Option")) {
+      const builtinOptionInfo: SumTypeInfo = {
+        name: "Option",
+        qualifiedName: "Option",
+        typeParams: ["T"],
+        variants: new Map([
+          ["Some", someCtor],
+          ["None", noneCtor],
+        ]),
+        decl: builtinOptionSumDecl,
+        module,
+      };
+      moduleSumTypes.set("Option", builtinOptionInfo);
     }
 
     for (const decl of module.decls) {

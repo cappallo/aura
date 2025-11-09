@@ -579,7 +579,7 @@ Integer
 	= digits:[0-9]+ { return parseInt(digits.join(""), 10); }
 
 Ident
-	= $([a-zA-Z_][a-zA-Z0-9_]*)
+	= $([a-zA-Z_][a-zA-Z0-9_@]*)
 
 QualifiedIdent
 	= head:Ident tail:("." Ident)* {
@@ -590,7 +590,7 @@ QualifiedIdent
 		}
 
 CtorName
-	= $([A-Z][a-zA-Z0-9_]*)
+	= $([A-Z][a-zA-Z0-9_@]*)
 
 // Comments
 DocComment

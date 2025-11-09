@@ -5,7 +5,7 @@ import process from "process";
 import { parseModuleFromFile } from "./parser";
 import { typecheckModule, typecheckModules } from "./typecheck";
 import { buildRuntime, buildMultiModuleRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
-import { loadModules, buildSymbolTable } from "./loader";
+import { loadModules, buildSymbolTable, generateTypesFromSchemas } from "./loader";
 import * as ast from "./ast";
 import { StructuredOutput, formatStructuredOutput } from "./structured";
 
@@ -402,18 +402,26 @@ function loadModuleWithDependencies(filePath: string, ctx: CliContext): LoadResu
   
   // Check if module has imports
   if (module.imports.length === 0) {
-    // No imports - use single-module typecheck
-    const typeErrors = typecheckModule(module);
+    // No imports - use single-module typecheck, but still generate types from schemas
+    const modules = [{ moduleName: module.name, filePath: absolutePath, ast: module }];
+    const symbolTable = buildSymbolTable(modules);
+    generateTypesFromSchemas(symbolTable);
+    
+    const typeErrors = typecheckModules(modules, symbolTable);
     if (typeErrors.length > 0) {
       const structuredErrors = typeErrors.map(convertToStructuredError);
-      return { module, errors: structuredErrors };
+      return { module, modules, symbolTable, errors: structuredErrors };
     }
-    return { module };
+    return { module, modules, symbolTable };
   }
   
   // Has imports - use multi-module loader
   const modules = loadModules(absolutePath);
   const symbolTable = buildSymbolTable(modules);
+  
+  // Generate types from schema declarations
+  generateTypesFromSchemas(symbolTable);
+  
   const typeErrors = typecheckModules(modules, symbolTable);
   
   if (typeErrors.length > 0) {

@@ -1,0 +1,101 @@
+module examples.schema_codecs
+
+/// This example demonstrates JSON codecs for schema types.
+/// Schemas define external data shapes and can be encoded/decoded to/from JSON.
+/// Optional fields are marked with ? and map to the built-in Option<T> type.
+
+@version(1)
+schema UserRecord {
+  id: Int
+  name: String
+  email: String?
+}
+
+/// Create a user record with email
+fn make_user_with_email(id: Int, name: String, email: String) -> UserRecord@1 {
+  return UserRecord@1 {
+    id: id,
+    name: name,
+    email: Some { value: email }
+  }
+}
+
+/// Create a user record without email
+fn make_user_no_email(id: Int, name: String) -> UserRecord@1 {
+  return UserRecord@1 {
+    id: id,
+    name: name,
+    email: None {}
+  }
+}
+
+/// Encode a user to JSON string
+fn user_to_json(user: UserRecord@1) -> String {
+  return json.encode(user)
+}
+
+/// Decode a user from JSON string  
+fn json_to_user(json_str: String) -> UserRecord@1 {
+  return json.decode(json_str)
+}
+
+test codec_roundtrip_with_email {
+  let user = make_user_with_email(1, "Alice", "alice@example.com")
+  let json_str = user_to_json(user)
+  
+  Log.debug("encoded_user_with_email", user)
+  
+  let decoded_user = json_to_user(json_str)
+  
+  // Verify fields match
+  test.assert_equal(decoded_user.id, 1)
+  test.assert_equal(decoded_user.name, "Alice")
+  
+  // Verify email is Some
+  match decoded_user.email {
+    case Some { value: email } => {
+      test.assert_equal(email, "alice@example.com")
+    }
+    case None => {
+      assert(false)  // Should not be None
+    }
+  }
+}
+
+test codec_roundtrip_without_email {
+  let user = make_user_no_email(2, "Bob")
+  let json_str = user_to_json(user)
+  
+  Log.debug("encoded_user_without_email", user)
+  
+  let decoded_user = json_to_user(json_str)
+  
+  // Verify fields match
+  test.assert_equal(decoded_user.id, 2)
+  test.assert_equal(decoded_user.name, "Bob")
+  
+  // Verify email is None
+  match decoded_user.email {
+    case Some { value: _ } => {
+      assert(false)  // Should not be Some
+    }
+    case None => {
+      // Expected - this is good
+    }
+  }
+}
+
+test encode_decode_preserves_optional_fields {
+  let user_with = make_user_with_email(3, "Charlie", "charlie@example.com")
+  let user_without = make_user_no_email(4, "Diana")
+  
+  let json_with = user_to_json(user_with)
+  let json_without = user_to_json(user_without)
+  
+  // Both should produce valid JSON
+  assert(str.len(json_with) > 0)
+  assert(str.len(json_without) > 0)
+  
+  // JSON strings should be different (one has email, one doesn't)
+  assert(json_with != json_without)
+}
