@@ -6,9 +6,10 @@ When implementing features for the Lx programming language:
 
 1. **Always consult these documents first:**
    - `STATUS.md` - Current implementation status and next priorities
-   - `SPEC.md` - Full language specification (authoritative design)
-   - `ROADMAP.md` - Implementation strategy and v0.1 scope
+   - `SPEC.md` - Full language specification (semi-authoritative design)
    - `THOUGHTS.md` - Design philosophy and LLM-first principles
+   - `ROADMAP.md` - Implementation strategy and v0.1 scope
+   - `CONCURRENCY.md` - Detailed concurrency model (actors, structured async, supervision)
 
 2. **Select the next priority task from STATUS.md**
    - Look under "🚀 Next Priority Tasks"
@@ -123,7 +124,7 @@ When implementing module resolution:
 
 ## Questions to Ask Before Implementing
 
-1. Does this match the SPEC.md design?
+1. Does this match the SPEC.md / THOUGHTS.md / CONCURRENCY.md design?
 2. Is this the next priority in STATUS.md?
 3. Will this break any existing examples?
 4. Can I test this feature in isolation?

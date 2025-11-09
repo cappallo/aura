@@ -3,6 +3,8 @@
 * Wire a **CLI + JSON analyzer interface** around it.
 * Grow toward the rest of the spec incrementally (effects, actors, schemas, refactors) once the core loop is real.
 
+**Note:** For the complete concurrency design (actors, structured async, supervision trees), see [`CONCURRENCY.md`](CONCURRENCY.md).
+
 Yes, I can absolutely “spit out” a starting point: repo layout + minimal grammar + AST + tiny typechecker + interpreter + CLI, in a way that you can actually run and experiment with. It won’t implement *all* of Lx, but it’ll be a faithful skeleton and demo of the architecture your spec implies.
 
 Below is a concrete plan plus real code you can paste into a new project.

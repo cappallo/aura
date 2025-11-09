@@ -323,7 +323,7 @@ The language is constrained enough that these refactors are always well-defined,
 
 LLMs are notoriously bad at subtle concurrency bugs.
 
-You’d pick something:
+You'd pick something:
 
 * Message-passing / actor model.
 * Or a structured async model where:
@@ -331,7 +331,15 @@ You’d pick something:
   * Tasks are spawned in limited, supervised trees.
   * Shared state must go through explicit channels / agents.
 
-No bare locks, no data races. More like “Erlang-lite but with a type system,” or “Rust’s ownership rules but simplified and enforced via effects.”
+No bare locks, no data races. More like "Erlang-lite but with a type system," or "Rust's ownership rules but simplified and enforced via effects."
+
+**See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design**, which specifies:
+- Typed actors with single-threaded message handlers
+- Structured async tasks within actors (scoped, supervised)
+- Pure data-parallel primitives for CPU-bound work
+- Supervision trees for failure handling
+- Deterministic scheduling for reproducible testing
+- Explicit `Concurrent` effect for all concurrency operations
 
 ---
 

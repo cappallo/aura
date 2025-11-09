@@ -83,12 +83,17 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## ❌ Not Yet Implemented (Per SPEC.md)
 
-### 1. Actors (§6 of SPEC)
-- ❌ `actor` declarations
-- ❌ Message protocols
+### 1. Actors & Concurrency (§6 of SPEC, CONCURRENCY.md)
+- ❌ `actor` declarations with typed state
+- ❌ Message protocols (ADT-based message types)
 - ❌ Actor references and `.send()` syntax
-- ❌ Mailbox semantics
-- ❌ Supervision/failure handling
+- ❌ Mailbox semantics (ordered, at-least-once delivery)
+- ❌ Message handler syntax (`on MessageType(msg) -> ...`)
+- ❌ Structured async tasks within actors (`async_group`, scoped tasks)
+- ❌ Data-parallel primitives (`parallel_map`, `parallel_fold`)
+- ❌ Supervision trees and failure handling
+- ❌ Deterministic scheduling mode for testing
+- ❌ `Concurrent` effect for actor/task operations
 
 ### 2. Schemas & I/O (§8 of SPEC)
 - ❌ `schema` declarations
@@ -156,7 +161,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §3.4 | Functions & effects | ✅ Complete |
 | §4 | Type system | ✅ Complete |
 | §5 | Effect system | 🟡 Declarations + checking, no polymorphism |
-| §6 | Actors | ❌ Not started |
+| §6 + CONCURRENCY.md | Actors & Concurrency | ❌ Not started |
 | §7.1-7.2 | Contracts | 🟡 Runtime only, no SMT verification |
 | §7.3 | Tests | ✅ Complete |
 | §7.4 | Properties | 🟡 Mostly complete, shrinking pending |
@@ -304,7 +309,13 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 └─ LLM tooling (formatting, tracing) → Priority 7
 
 Phase 4 (Mid-term): Concurrency & Tools
-├─ Actor model implementation
+├─ Actor model implementation (CONCURRENCY.md)
+│  ├─ Basic actor declarations with typed state
+│  ├─ Message protocols and handlers
+│  ├─ Structured async tasks within actors
+│  ├─ Supervision trees
+│  └─ Deterministic scheduling for tests
+├─ Data-parallel primitives (parallel_map, parallel_fold)
 ├─ Refactor operations
 ├─ Explain/debug tooling
 └─ Effect polymorphism

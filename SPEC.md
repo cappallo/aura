@@ -396,6 +396,8 @@ This is still analyzable: the compiler can instantiate `e` at call sites.
 
 ## 6. Concurrency model
 
+**Note:** This section provides a high-level overview. For the complete concurrency design including structured async, supervision trees, deterministic testing, and data-parallel primitives, see [`CONCURRENCY.md`](CONCURRENCY.md).
+
 ### 6.1. Actors
 
 Actors are single-threaded entities with:
@@ -468,6 +470,19 @@ Backpressure / failure:
 * More advanced patterns (streams, backpressure, supervision trees) are deferred to future versions.
 
 Key property: All actor interaction is via **typed messages**, so the analyzer can construct a message graph (who sends what to whom).
+
+### 6.3. Structured Async and Parallelism
+
+**For v0.1:** Actors use simple synchronous message handlers.
+
+**Future enhancements** (detailed in [`CONCURRENCY.md`](CONCURRENCY.md)):
+- **Structured async tasks** within actors for concurrent I/O operations
+- **Data-parallel primitives** (`parallel_map`, `parallel_fold`) for pure CPU-bound work
+- **Supervision trees** for robust failure handling and actor lifecycle management
+- **Deterministic scheduling** mode for reproducible testing and debugging
+- **Concurrency effect** (`Effect<Concurrent>`) for spawning actors and tasks
+
+These features will be added incrementally after the core actor model is implemented.
 
 ---
 
