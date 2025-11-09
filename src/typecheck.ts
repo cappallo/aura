@@ -1144,6 +1144,13 @@ function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
       return inferIndexExpr(expr, env, state);
     case "IfExpr":
       return inferIfExpr(expr, env, state);
+    case "HoleExpr":
+      state.errors.push(makeError(
+        `Unfilled hole${expr.label ? ` '${expr.label}'` : ""} in function '${state.currentFunction.name}'`,
+        expr.loc,
+        state.currentFilePath,
+      ));
+      return freshTypeVar("Hole", false, state);
     default: {
       const exhaustive: never = expr;
       throw new Error(`Unsupported expression kind: ${(exhaustive as ast.Expr).kind}`);
@@ -1965,6 +1972,12 @@ function checkContractExpr(
           checkContractStmt(stmt, ctx, errors, contractName);
         }
       }
+      return;
+    }
+    case "HoleExpr": {
+      errors.push({
+        message: `Contract for '${contractName}' contains unfilled hole${expr.label ? ` '${expr.label}'` : ""}`,
+      });
       return;
     }
   }

@@ -33,6 +33,8 @@ Arguments to `lx run` and `lx explain` are parsed as JSON and converted to inter
 
 **AST input:** Use `--input=ast` to treat the file as JSON that already matches the Lx AST schema. This lets LLMs emit structured modules that can be executed directly without going through the parser. See `examples/ast_demo.json` for a complete sample.
 
+**Holes:** Use `hole("label")` inside an expression to mark unfinished code. The typechecker reports any remaining holes (with their labels and locations) so you can commit partial work safely.
+
 **LLM-friendly tools:**
 - `lx format` - Produces deterministic, canonical formatting from AST
 - `lx explain` - Shows step-by-step execution trace with function calls, returns, and variable bindings

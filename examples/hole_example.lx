@@ -1,0 +1,7 @@
+module examples.hole_example
+
+fn choose_next(xs: List<Int>) -> Int {
+  // Placeholder implementation filled by LLM later.
+  let candidate = hole("next_value")
+  return candidate
+}

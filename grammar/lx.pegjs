@@ -441,6 +441,7 @@ PostfixSegment
 BaseExpr
 	= ListLiteral
 	/ RecordLiteral
+	/ HoleExpr
 	/ CallExpr
 	/ IntLiteral
 	/ StringLiteral
@@ -508,6 +509,15 @@ CallArg
 		}
 	/ expr:Expr {
 			return { kind: "PositionalArg", expr };
+		}
+
+HoleExpr
+	= "hole" _ "(" BlockGap? _ label:StringLiteral? BlockGap? _ ")" {
+			return {
+				kind: "HoleExpr",
+				label: label ? label.value : undefined,
+				loc: location(),
+			};
 		}
 
 IntLiteral

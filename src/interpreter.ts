@@ -409,6 +409,8 @@ function evalExpr(expr: ast.Expr, env: Env, runtime: Runtime): Value {
       return evalIndexExpr(expr, env, runtime);
     case "IfExpr":
       return evalIfExpr(expr, env, runtime);
+    case "HoleExpr":
+      throw new RuntimeError(`Encountered unfilled hole${expr.label ? ` '${expr.label}'` : ""}`);
     default:
       throw new RuntimeError(`Unsupported expression kind: ${(expr as ast.Expr).kind}`);
   }

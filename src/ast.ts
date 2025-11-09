@@ -167,7 +167,8 @@ export type Expr =
   | RecordExpr
   | FieldAccessExpr
   | IndexExpr
-  | IfExpr;
+  | IfExpr
+  | HoleExpr;
 
 export type IntLiteral = {
   kind: "IntLiteral";
@@ -244,6 +245,12 @@ export type IfExpr = {
   cond: Expr;
   thenBranch: Block;
   elseBranch?: Block;
+  loc?: SourceLocation;
+};
+
+export type HoleExpr = {
+  kind: "HoleExpr";
+  label?: string;
   loc?: SourceLocation;
 };
 

@@ -151,7 +151,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ **StructuredTrace type** in `src/structured.ts` with full trace collection/emission
 - ✅ AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - ❌ Patch-based editing with stable symbol IDs (THOUGHTS.md §6.1)
-- ❌ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
+- ✅ Holes/partial code support (`hole("name")`) (THOUGHTS.md §8)
 - ✅ Named arguments (THOUGHTS.md §1.3)
 - ⚠️ Deterministic execution mode (timestamps in logs, but no seedable RNG yet - THOUGHTS.md §5.1)
 
@@ -293,7 +293,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Add `lx explain` command with text and JSON output
 - [x] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - [ ] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
-- [ ] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
+- [x] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
 - [x] Add named arguments support (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
@@ -324,7 +324,7 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 ├─ Property test shrinking → ✅ Complete (Priority 3)
 ├─ Schemas & type generation → ✅ Complete (Priority 6)
 ├─ JSON codec generation → ✅ Complete (Priority 6)
-└─ Patch editing & hole tooling → ❌ Pending (Priority 7 enhancements)
+└─ Patch editing tooling → ❌ Pending (Priority 7 enhancements)
 
 Phase 4 (Mid-term): Concurrency & Tools
 ├─ Actor model implementation (CONCURRENCY.md) → Priority 8
@@ -391,13 +391,12 @@ lx explain [--format=json|text] <file.lx> <module.fn> [args...]  # Execute with 
 
 ### Tooling Gaps (LLM-First Design)
 1. **No patch-based editing** - No tooling for stable symbol-based edits (THOUGHTS.md §6.1)
-2. **No holes/partial code** - Cannot mark incomplete code with `hole()` expressions (THOUGHTS.md §8)
 
 ### Language Features
-3. **No REPL** - Must write files to test code
-4. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
-5. **Limited standard library** - Basic operations now available but could be expanded further
-6. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
+2. **No REPL** - Must write files to test code
+3. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
+4. **Limited standard library** - Basic operations now available but could be expanded further
+5. **No shrinking for property tests** - Counterexamples are not minimized (SPEC.md §7.4)
 
 ---
 

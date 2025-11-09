@@ -40,3 +40,9 @@ runExpectFailure(
   "node",
   [cliPath, "check", "examples/type_error.lx"],
 );
+
+runExpectFailure(
+  "Expected type checker failure for hole expressions",
+  "node",
+  [cliPath, "check", "examples/hole_example.lx"],
+);

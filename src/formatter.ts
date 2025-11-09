@@ -262,6 +262,11 @@ function formatExpr(expr: AST.Expr, indent: number): string {
       return formatRecordExpr(expr, indent);
     case "FieldAccessExpr":
       return `${formatExpr(expr.target, indent)}.${expr.field}`;
+    case "HoleExpr":
+      if (expr.label !== undefined) {
+        return `hole(${JSON.stringify(expr.label)})`;
+      }
+      return "hole()";
     default:
       const _exhaustive: never = expr;
       throw new Error(`Unknown expression kind: ${(expr as any).kind}`);
