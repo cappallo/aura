@@ -44,6 +44,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
   - List: `list.len`, `list.map`, `list.filter`, `list.fold`
+  - Data-parallel: `parallel_map`, `parallel_fold`, `parallel_for_each` (purity-checked; sequential runtime today)
   - String: `str.concat`, `str.len`, `str.slice`, `str.at`
   - Math: `math.abs`, `math.min`, `math.max`
   - Testing: `test.assert_equal`, `assert`
@@ -103,7 +104,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - 🟡 Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2) - **Basic infrastructure in place**
 - 🟡 Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
 - ❌ Structured async tasks within actors (`async_group`, scoped tasks) (CONCURRENCY.md §4)
-- ❌ Data-parallel primitives (`parallel_map`, `parallel_fold`) (CONCURRENCY.md §5)
+- 🟡 Data-parallel primitives (`parallel_map`, `parallel_fold`, `parallel_for_each`) (CONCURRENCY.md §5) - **Builtins + purity checks implemented; real parallel execution pending**
 - ❌ Supervision trees and failure handling (CONCURRENCY.md §7)
 - ❌ Deterministic scheduling mode for testing (CONCURRENCY.md §8)
 - ✅ `Concurrent` effect for actor/task operations (CONCURRENCY.md §6) - **Built-in effect added**
@@ -165,6 +166,7 @@ The implementation successfully runs 30+ example files including:
 - ✅ `hole_example.lx` - Shows hole expressions caught by the typechecker
 - ✅ `list_concat.lx` - List concatenation examples
 - ✅ `actor_basic.lx` - Basic actor declarations with state and message handlers
+- ✅ `parallel.lx` - Data-parallel builtins with chained map/fold/for_each usage
 - ✅ `expr_simplifier.lx` - Expression simplification with property-based testing
 - ✅ `test_match.lx` - Match expression testing
 - ✅ `greetings.lx` - Basic function examples
@@ -310,7 +312,7 @@ Phase 4 (Mid-term): Concurrency & Tools
 │  ├─ Structured async tasks within actors → ❌ Not started
 │  ├─ Supervision trees → ❌ Not started
 │  └─ Deterministic scheduling for tests → ❌ Not started
-├─ Data-parallel primitives (parallel_map, parallel_fold) → Not started
+├─ Data-parallel primitives (parallel_map, parallel_fold, parallel_for_each) → 🟡 Builtins/purity checks done; parallel scheduler TBD
 ├─ Refactor operations (SPEC.md §10.1) → Not started
 └─ Effect polymorphism (SPEC.md §5.3) → Not started
 

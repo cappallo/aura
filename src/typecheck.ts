@@ -297,6 +297,38 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([makeListType(element), accumulator, fnType], accumulator);
     },
   },
+  parallel_map: {
+    arity: 2,
+    paramNames: ["list", "mapper"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const inputElem = freshTypeVar("A", false, state);
+      const outputElem = freshTypeVar("B", false, state);
+      const fnType = makeFunctionType([inputElem], outputElem);
+      return makeFunctionType([makeListType(inputElem), fnType], makeListType(outputElem));
+    },
+  },
+  parallel_fold: {
+    arity: 3,
+    paramNames: ["list", "initial", "reducer"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      const accumulator = freshTypeVar("Acc", false, state);
+      const fnType = makeFunctionType([accumulator, element], accumulator);
+      return makeFunctionType([makeListType(element), accumulator, fnType], accumulator);
+    },
+  },
+  parallel_for_each: {
+    arity: 2,
+    paramNames: ["list", "action"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      const fnType = makeFunctionType([element], UNIT_TYPE);
+      return makeFunctionType([makeListType(element), fnType], UNIT_TYPE);
+    },
+  },
   "json.encode": {
     arity: 1,
     paramNames: ["value"],
@@ -315,6 +347,12 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([STRING_TYPE], resultType);
     },
   },
+};
+
+const PURE_BUILTIN_FUNCTION_PARAMS: Record<string, string[]> = {
+  parallel_map: ["mapper"],
+  parallel_fold: ["reducer"],
+  parallel_for_each: ["action"],
 };
 
 export function typecheckModule(module: ast.Module): TypeCheckError[] {
@@ -1243,6 +1281,31 @@ function instantiateFunctionSignature(
   return { params, returnType };
 }
 
+function resolveFunctionSignatureForVar(name: string, state: InferState): FnSignature | undefined {
+  const ctx = state.ctx;
+  const direct = ctx.functions.get(name);
+  if (direct) {
+    return direct;
+  }
+  if (ctx.currentModule && ctx.symbolTable) {
+    const resolved = resolveIdentifier(name, ctx.currentModule, ctx.symbolTable);
+    return ctx.functions.get(resolved);
+  }
+  return undefined;
+}
+
+function resolveFunctionValueType(name: string, state: InferState): TypeFunction | null {
+  const signature = resolveFunctionSignatureForVar(name, state);
+  if (!signature) {
+    return null;
+  }
+  const instantiated = instantiateFunctionSignature(signature, state, false);
+  if (!instantiated) {
+    return null;
+  }
+  return makeFunctionType(instantiated.params, instantiated.returnType);
+}
+
 function inferBlock(block: ast.Block, env: TypeEnv, state: InferState, options: BlockOptions): BlockResult {
   const workingEnv = options.cloneEnv ? new Map(env) : env;
   let returned = false;
@@ -1353,6 +1416,10 @@ function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
     case "VarRef": {
       const binding = env.get(expr.name);
       if (!binding) {
+        const fnType = resolveFunctionValueType(expr.name, state);
+        if (fnType) {
+          return fnType;
+        }
         state.errors.push(makeError(
           `Unknown variable '${expr.name}' in function '${state.currentFunction.name}'`,
           expr.loc,
@@ -1461,6 +1528,7 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
 
     const instantiated = builtin.instantiateType(state);
     verifyEffectSubset(builtin.effects, state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
+    enforcePureBuiltinArgs(expr, builtin.paramNames, alignment, state);
 
     alignment.ordered.forEach((arg, index) => {
       const expectedParam = instantiated.params[index] ?? freshTypeVar("BuiltinArg", false, state);
@@ -2504,6 +2572,61 @@ function reportCallArgIssues(
         break;
       default:
         break;
+    }
+  }
+}
+
+function getAlignedArgument(
+  alignment: ReturnType<typeof alignCallArguments>,
+  paramNames: string[],
+  name: string,
+): ast.CallArg | null {
+  const index = paramNames.indexOf(name);
+  if (index === -1) {
+    return null;
+  }
+  return alignment.ordered[index] ?? null;
+}
+
+function enforcePureBuiltinArgs(
+  expr: ast.CallExpr,
+  paramNames: string[],
+  alignment: ReturnType<typeof alignCallArguments>,
+  state: InferState,
+): void {
+  const targets = PURE_BUILTIN_FUNCTION_PARAMS[expr.callee];
+  if (!targets) {
+    return;
+  }
+  for (const paramName of targets) {
+    const arg = getAlignedArgument(alignment, paramNames, paramName);
+    if (!arg) {
+      continue;
+    }
+    if (arg.expr.kind !== "VarRef") {
+      state.errors.push(makeError(
+        `Argument '${paramName}' of '${expr.callee}' must reference a function name`,
+        arg.expr.loc,
+        state.currentFilePath,
+      ));
+      continue;
+    }
+    const signature = resolveFunctionSignatureForVar(arg.expr.name, state);
+    if (!signature) {
+      state.errors.push(makeError(
+        `Unknown function '${arg.expr.name}' passed to '${expr.callee}'`,
+        arg.expr.loc,
+        state.currentFilePath,
+      ));
+      continue;
+    }
+    if (signature.effects.size > 0) {
+      const effectList = Array.from(signature.effects).join(", ");
+      state.errors.push(makeError(
+        `Function '${signature.name}' passed to '${expr.callee}' must be pure but declares effects [${effectList}]`,
+        arg.expr.loc,
+        state.currentFilePath,
+      ));
     }
   }
 }

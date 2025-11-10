@@ -1,0 +1,39 @@
+module examples.parallel
+
+fn square(x: Int) -> Int {
+  return x * x
+}
+
+fn sum(acc: Int, x: Int) -> Int {
+  return acc + x
+}
+
+fn ensure_positive(x: Int) -> Unit {
+  if (x < 0) {
+    assert(false)
+  }
+}
+
+fn map_and_sum(values: List<Int>) -> Int {
+  let squared = parallel_map(values, square)
+  return parallel_fold(squared, 0, sum)
+}
+
+fn check_all_positive(values: List<Int>) -> Unit {
+  parallel_for_each(values, ensure_positive)
+}
+
+test parallel_primitives {
+  let data = [1, 2, 3, 4]
+
+  let squared = parallel_map(data, square)
+  test.assert_equal(squared, [1, 4, 9, 16])
+
+  let total = parallel_fold(data, 0, sum)
+  test.assert_equal(total, 10)
+
+  let chained = map_and_sum(data)
+  test.assert_equal(chained, 30)
+
+  check_all_positive(data)
+}

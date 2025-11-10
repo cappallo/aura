@@ -167,6 +167,9 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.map": ["list", "mapper"],
   "list.filter": ["list", "predicate"],
   "list.fold": ["list", "initial", "reducer"],
+  parallel_map: ["list", "mapper"],
+  parallel_fold: ["list", "initial", "reducer"],
+  parallel_for_each: ["list", "action"],
   "json.encode": ["value"],
   "json.decode": ["text"],
 };
@@ -631,6 +634,12 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinListFilter(expr, env, runtime);
     case "list.fold":
       return builtinListFold(expr, env, runtime);
+    case "parallel_map":
+      return builtinParallelMap(expr, env, runtime);
+    case "parallel_fold":
+      return builtinParallelFold(expr, env, runtime);
+    case "parallel_for_each":
+      return builtinParallelForEach(expr, env, runtime);
     case "Log.debug":
       return builtinLog("debug", expr, env, runtime);
     case "Log.trace":
@@ -1011,6 +1020,107 @@ function builtinListFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value 
   }
   
   return accumulator;
+}
+
+function ensurePureFunction(fn: ast.FnDecl, context: string): void {
+  if (fn.effects.length > 0) {
+    const effectList = fn.effects.join(", ");
+    throw new RuntimeError(
+      `'${context}' requires a pure function argument, but '${fn.name}' declares effects [${effectList}]`,
+    );
+  }
+}
+
+function builtinParallelMap(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const paramNames = getBuiltinParamNames("parallel_map");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["mapper"] });
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("parallel_map expects a list as first argument");
+  }
+
+  const mapperArg = getArgumentByName(alignment, paramNames, "mapper");
+  if (!mapperArg || mapperArg.expr.kind !== "VarRef") {
+    throw new RuntimeError("parallel_map expects a function as second argument");
+  }
+
+  const fn = resolveFunctionReference(mapperArg.expr.name, runtime, "parallel_map");
+  ensurePureFunction(fn, "parallel_map");
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("parallel_map expects a function that takes exactly one argument");
+  }
+
+  const mapped = list.elements.map((element) => {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, element);
+    const result = evalBlock(fn.body, callEnv, runtime);
+    return result.value;
+  });
+
+  return { kind: "List", elements: mapped };
+}
+
+function builtinParallelFold(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const paramNames = getBuiltinParamNames("parallel_fold");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["reducer"] });
+  const list = expectValue(values, "list", expr.callee);
+  const initial = expectValue(values, "initial", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("parallel_fold expects a list as first argument");
+  }
+
+  const reducerArg = getArgumentByName(alignment, paramNames, "reducer");
+  if (!reducerArg || reducerArg.expr.kind !== "VarRef") {
+    throw new RuntimeError("parallel_fold expects a function as third argument");
+  }
+
+  const fn = resolveFunctionReference(reducerArg.expr.name, runtime, "parallel_fold");
+  ensurePureFunction(fn, "parallel_fold");
+  if (fn.params.length !== 2) {
+    throw new RuntimeError("parallel_fold expects a function that takes exactly two arguments");
+  }
+
+  let accumulator = initial;
+  for (const element of list.elements) {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, accumulator);
+    callEnv.set(fn.params[1]!.name, element);
+    const result = evalBlock(fn.body, callEnv, runtime);
+    accumulator = result.value;
+  }
+
+  return accumulator;
+}
+
+function builtinParallelForEach(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const paramNames = getBuiltinParamNames("parallel_for_each");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["action"] });
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("parallel_for_each expects a list as first argument");
+  }
+
+  const actionArg = getArgumentByName(alignment, paramNames, "action");
+  if (!actionArg || actionArg.expr.kind !== "VarRef") {
+    throw new RuntimeError("parallel_for_each expects a function as second argument");
+  }
+
+  const fn = resolveFunctionReference(actionArg.expr.name, runtime, "parallel_for_each");
+  ensurePureFunction(fn, "parallel_for_each");
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("parallel_for_each expects a function that takes exactly one argument");
+  }
+
+  for (const element of list.elements) {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, element);
+    evalBlock(fn.body, callEnv, runtime);
+  }
+
+  return { kind: "Unit" };
 }
 
 function builtinJsonEncode(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {

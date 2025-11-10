@@ -25,6 +25,7 @@ runCommand("node", [cliPath, "test", "examples/median.lx"]);
 runCommand("node", [cliPath, "test", "examples/logging.lx"]);
 runCommand("node", [cliPath, "test", "examples/contracts.lx"]);
 runCommand("node", [cliPath, "test", "examples/builtins.lx"]);
+runCommand("node", [cliPath, "test", "examples/parallel.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
 runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_basic.lx"]);
@@ -61,4 +62,9 @@ runExpectFailure(
   "Expected type checker failure for mismatched actor message parameter types",
   "node",
   [cliPath, "check", "examples/actor_type_error.lx"],
+);
+runExpectFailure(
+  "Expected type checker failure when parallel primitives receive effectful functions",
+  "node",
+  [cliPath, "check", "examples/parallel_type_error.lx"],
 );

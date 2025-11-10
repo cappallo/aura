@@ -68,6 +68,10 @@ lx patch-body examples/median.lx app.stats.median examples/patches/median_body.l
 lx check examples/median.lx
 ```
 
+### Data-parallel primitives
+
+The interpreter now exposes `parallel_map`, `parallel_fold`, and `parallel_for_each` builtins. They require pure (effect-free) callback functions, and the current implementation executes them deterministically (sequentially) so tests stay reproducible. See `examples/parallel.lx` for end-to-end usage.
+
 ## Documentation
 
 - **[SPEC.md](SPEC.md)** - Full language specification

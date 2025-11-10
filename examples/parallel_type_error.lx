@@ -1,0 +1,10 @@
+module examples.parallel_type_error
+
+fn noisy_double(x: Int) -> [Log] Int {
+  Log.debug("parallel", x)
+  return x * 2
+}
+
+fn attempt(values: List<Int>) -> List<Int> {
+  return parallel_map(values, noisy_double)
+}
