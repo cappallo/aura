@@ -56,3 +56,9 @@ runExpectFailure(
   "node",
   [cliPath, "check", "examples/hole_example.lx"],
 );
+
+runExpectFailure(
+  "Expected type checker failure for mismatched actor message parameter types",
+  "node",
+  [cliPath, "check", "examples/actor_type_error.lx"],
+);

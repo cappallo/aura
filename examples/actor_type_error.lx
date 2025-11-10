@@ -1,0 +1,13 @@
+module examples.actor_type_error
+
+type WorkerMsg = Add { amount: Int } | Ignore
+
+actor Worker() {
+  state {
+    total: Int
+  }
+
+  on Add(value: String) -> [Concurrent] Int {
+    return 0
+  }
+}

@@ -675,6 +675,12 @@ export function typecheckModules(
         checkSchema(decl, ctx, errors, filePath);
       }
     }
+
+    for (const decl of module.decls) {
+      if (decl.kind === "ActorDecl") {
+        checkActor(decl, ctx, errors, filePath);
+      }
+    }
   }
 
   return errors;
@@ -1029,6 +1035,8 @@ function checkActor(
       ));
     }
 
+    validateActorHandlerMessage(actor, handler, state, errors, filePath);
+
     // Check handler body (similar to function checking)
     // Create a temporary function declaration for type checking the handler body
     const tempFn: ast.FnDecl = {
@@ -1037,6 +1045,10 @@ function checkActor(
       typeParams: [],
       params: [
         ...actor.params,  // Actor initialization params are accessible
+        ...actor.stateFields.map((field): ast.Param => ({
+          name: field.name,
+          type: field.type,
+        })),
         ...handler.msgParams
       ],
       returnType: handler.returnType,
@@ -1044,14 +1056,103 @@ function checkActor(
       body: handler.body,
     };
 
-    // Add actor state fields as available variables in the handler context
-    const handlerState = {
-      ...state,
-      currentFunction: tempFn,
-    };
-
     // Check the handler body
     typeCheckFunctionBody(tempFn, ctx, errors, filePath);
+  }
+}
+
+function actorHandlerBindsWholeMessage(handler: ast.ActorHandler): boolean {
+  if (handler.msgParams.length !== 1) {
+    return false;
+  }
+  const param = handler.msgParams[0]!;
+  return (
+    param.type.kind === "TypeName" &&
+    param.type.name === handler.msgTypeName &&
+    param.type.typeArgs.length === 0
+  );
+}
+
+function validateActorHandlerMessage(
+  actor: ast.ActorDecl,
+  handler: ast.ActorHandler,
+  state: InferState,
+  errors: TypeCheckError[],
+  filePath?: string,
+): void {
+  const variantInfo = resolveVariant(handler.msgTypeName, state);
+  if (!variantInfo) {
+    errors.push(makeError(
+      `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' references unknown message constructor '${handler.msgTypeName}'`,
+      undefined,
+      filePath,
+    ));
+    return;
+  }
+
+  const typeParamScope = new Map<string, Type>();
+  for (const paramName of variantInfo.typeParams) {
+    typeParamScope.set(paramName, freshTypeVar(paramName, false, state));
+  }
+
+  if (actorHandlerBindsWholeMessage(handler)) {
+    const paramType = convertTypeExpr(
+      handler.msgParams[0]!.type,
+      typeParamScope,
+      state,
+      state.ctx.currentModule,
+    );
+    const variantType: Type = {
+      kind: "Constructor",
+      name: variantInfo.parentQualifiedName,
+      args: variantInfo.typeParams.map((paramName) => typeParamScope.get(paramName)!),
+    };
+    unify(
+      paramType,
+      variantType,
+      state,
+      `Actor '${actor.name}' handler '${handler.msgTypeName}' parameter '${handler.msgParams[0]!.name}' must have type '${handler.msgTypeName}'`,
+    );
+    return;
+  }
+
+  const variantFieldTypes = new Map<string, Type>();
+  for (const field of variantInfo.fields) {
+    variantFieldTypes.set(
+      field.name,
+      convertTypeExpr(field.type, typeParamScope, state, variantInfo.module),
+    );
+  }
+
+  const matchedFields = new Set<string>();
+  for (const param of handler.msgParams) {
+    const fieldType = variantFieldTypes.get(param.name);
+    if (!fieldType) {
+      errors.push(makeError(
+        `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' has parameter '${param.name}' which does not exist on message '${handler.msgTypeName}'`,
+        undefined,
+        filePath,
+      ));
+      continue;
+    }
+    matchedFields.add(param.name);
+    const paramType = convertTypeExpr(param.type, typeParamScope, state, state.ctx.currentModule);
+    unify(
+      paramType,
+      fieldType,
+      state,
+      `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' parameter '${param.name}' has incompatible type`,
+    );
+  }
+
+  for (const field of variantInfo.fields) {
+    if (!matchedFields.has(field.name)) {
+      errors.push(makeError(
+        `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' is missing parameter for message field '${field.name}'`,
+        undefined,
+        filePath,
+      ));
+    }
   }
 }
 
