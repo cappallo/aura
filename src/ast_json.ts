@@ -385,6 +385,16 @@ function parseExpr(value: unknown, ctx: ParseContext): ast.Expr {
       };
       return attachLoc(expr, loc);
     }
+    case "MatchExpr": {
+      const expr: ast.MatchExpr = {
+        kind: "MatchExpr",
+        scrutinee: parseExpr(obj.scrutinee, child(ctx, "scrutinee")),
+        cases: expectArray(obj.cases ?? [], child(ctx, "cases")).map((matchCase: unknown, index: number) =>
+          parseMatchCase(matchCase, indexPath(child(ctx, "cases"), index)),
+        ),
+      };
+      return attachLoc(expr, loc);
+    }
     case "RecordExpr": {
       const expr: ast.RecordExpr = {
         kind: "RecordExpr",

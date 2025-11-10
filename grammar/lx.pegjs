@@ -346,6 +346,16 @@ MatchStmt
 			};
 		}
 
+MatchExpr
+	= "match" __ scrutinee:Expr __ "{" BlockGap cases:MatchCase* BlockGap "}" {
+			return {
+				kind: "MatchExpr",
+				scrutinee,
+				cases,
+				loc: location(),
+			};
+		}
+
 MatchCase
 	= "case" __ pattern:Pattern __ "=>" _ body:Block Terminator* {
 			return {
@@ -468,7 +478,8 @@ PostfixSegment
 	/ "[" _ index:Expr _ "]" { return { kind: "index", index }; }
 
 BaseExpr
-	= ListLiteral
+	= MatchExpr
+	/ ListLiteral
 	/ RecordLiteral
 	/ HoleExpr
 	/ CallExpr

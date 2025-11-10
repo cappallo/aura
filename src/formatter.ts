@@ -273,6 +273,21 @@ function formatMatchStmt(stmt: AST.MatchStmt, indent: number): string {
   return lines.join("\n");
 }
 
+function formatMatchExpr(expr: AST.MatchExpr, indent: number): string {
+  const prefix = INDENT.repeat(indent);
+  const lines: string[] = [];
+  
+  lines.push(`match ${formatExpr(expr.scrutinee, 0)} {`);
+  for (const c of expr.cases) {
+    lines.push(`${prefix}${INDENT}case ${formatPattern(c.pattern)} => {`);
+    lines.push(formatBlock(c.body, indent + 2));
+    lines.push(`${prefix}${INDENT}}`);
+  }
+  lines.push(`${prefix}}`);
+  
+  return lines.join("\n");
+}
+
 function formatExpr(expr: AST.Expr, indent: number): string {
   switch (expr.kind) {
     case "IntLiteral":
@@ -293,6 +308,8 @@ function formatExpr(expr: AST.Expr, indent: number): string {
         return formatExpr(arg.expr, indent);
       }).join(", ");
       return `${expr.callee}(${args})`;
+    case "MatchExpr":
+      return formatMatchExpr(expr, indent);
     case "IfExpr":
       return formatIfExpr(expr, indent);
     case "ListLiteral":

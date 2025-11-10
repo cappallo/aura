@@ -1,8 +1,36 @@
 module examples.test_match
 
 type Option = Some { value: Int } | None
+type Shape = Circle { radius: Int } | Square { side: Int }
 
-fn test_fn(opt: Option) -> Int {
-  let x = 5
-  return x
+fn option_default(opt: Option) -> Int {
+  let doubled = match opt {
+    case Some { value } => {
+      value * 2
+    }
+    case None => {
+      0
+    }
+  }
+  return doubled
+}
+
+fn describe(shape: Shape) -> Int {
+  return match shape {
+    case Circle { radius } => {
+      radius * 2
+    }
+    case Square { side } => {
+      side * 4
+    }
+  }
+}
+
+test match_exprs {
+  let none = None { }
+  let some = Some { value: 3 }
+  test.assert_equal(0, option_default(none))
+  test.assert_equal(6, option_default(some))
+  test.assert_equal(8, describe(Circle { radius: 4 }))
+  test.assert_equal(16, describe(Square { side: 4 }))
 }

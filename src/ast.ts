@@ -142,6 +142,13 @@ export type MatchStmt = {
   cases: MatchCase[];
 };
 
+export type MatchExpr = {
+  kind: "MatchExpr";
+  scrutinee: Expr;
+  cases: MatchCase[];
+  loc?: SourceLocation;
+};
+
 export type MatchCase = {
   pattern: Pattern;
   body: Block;
@@ -165,6 +172,7 @@ export type Expr =
   | ListLiteral
   | BinaryExpr
   | CallExpr
+  | MatchExpr
   | RecordExpr
   | FieldAccessExpr
   | IndexExpr

@@ -457,15 +457,26 @@ function evalStmt(stmt: ast.Stmt, env: Env, runtime: Runtime): EvalResult {
 
 function evalMatch(stmt: ast.MatchStmt, env: Env, runtime: Runtime): EvalResult {
   const scrutinee = evalExpr(stmt.scrutinee, env, runtime);
-  for (const matchCase of stmt.cases) {
+  return executeMatch(scrutinee, stmt.cases, env, runtime);
+}
+
+function evalMatchExpr(expr: ast.MatchExpr, env: Env, runtime: Runtime): Value {
+  const scrutinee = evalExpr(expr.scrutinee, env, runtime);
+  const result = executeMatch(scrutinee, expr.cases, env, runtime);
+  return result.value;
+}
+
+function executeMatch(scrutinee: Value, cases: ast.MatchCase[], env: Env, runtime: Runtime): EvalResult {
+  for (const matchCase of cases) {
     const matchEnv = tryMatchPattern(matchCase.pattern, scrutinee, env);
-    if (matchEnv) {
-      const result = evalBlock(matchCase.body, matchEnv, runtime);
-      if (result.type === "return") {
-        return result;
-      }
-      return { type: "value", value: result.value };
+    if (!matchEnv) {
+      continue;
     }
+    const result = evalBlock(matchCase.body, matchEnv, runtime);
+    if (result.type === "return") {
+      return result;
+    }
+    return { type: "value", value: result.value };
   }
   throw new RuntimeError("Non-exhaustive match expression");
 }
@@ -528,6 +539,8 @@ function evalExpr(expr: ast.Expr, env: Env, runtime: Runtime): Value {
       return evalBinary(expr, env, runtime);
     case "CallExpr":
       return evalCall(expr, env, runtime);
+    case "MatchExpr":
+      return evalMatchExpr(expr, env, runtime);
     case "RecordExpr":
       return evalRecord(expr, env, runtime);
     case "FieldAccessExpr":

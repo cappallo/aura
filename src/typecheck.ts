@@ -1405,6 +1405,49 @@ function inferMatchStmt(
   };
 }
 
+function inferMatchExpr(expr: ast.MatchExpr, env: TypeEnv, state: InferState): Type {
+  const scrutineeType = inferExpr(expr.scrutinee, env, state);
+  checkMatchExhaustiveness(
+    { kind: "MatchStmt", scrutinee: expr.scrutinee, cases: expr.cases },
+    state.ctx,
+    state.errors,
+  );
+
+  let allReturn = true;
+  let accumulatedType: Type | null = null;
+
+  for (const matchCase of expr.cases) {
+    const caseEnv = new Map(env);
+    bindPattern(matchCase.pattern, scrutineeType, caseEnv, state);
+    const caseResult = inferBlock(matchCase.body, caseEnv, state, {
+      expectedReturnType: state.expectedReturnType,
+      treatAsExpression: true,
+      cloneEnv: false,
+    });
+
+    if (!caseResult.returned) {
+      allReturn = false;
+      if (accumulatedType === null) {
+        accumulatedType = caseResult.valueType;
+      } else {
+        unify(
+          caseResult.valueType,
+          accumulatedType,
+          state,
+          `Match case result mismatch in function '${state.currentFunction.name}'`,
+        );
+        accumulatedType = applySubstitution(accumulatedType, state);
+      }
+    }
+  }
+
+  if (allReturn) {
+    return state.expectedReturnType;
+  }
+
+  return accumulatedType ? applySubstitution(accumulatedType, state) : UNIT_TYPE;
+}
+
 function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
   switch (expr.kind) {
     case "IntLiteral":
@@ -1446,6 +1489,8 @@ function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
       return inferBinaryExpr(expr, env, state);
     case "CallExpr":
       return inferCallExpr(expr, env, state);
+    case "MatchExpr":
+      return inferMatchExpr(expr, env, state);
     case "RecordExpr":
       return inferRecordExpr(expr, env, state);
     case "FieldAccessExpr":
