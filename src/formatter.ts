@@ -65,6 +65,8 @@ function formatDeclaration(decl: AST.TopLevelDecl, indent: number): string {
       return formatTestDecl(decl, indent);
     case "PropertyDecl":
       return formatPropertyDecl(decl, indent);
+    case "ActorDecl":
+      return formatActorDecl(decl, indent);
     default:
       const _exhaustive: never = decl;
       throw new Error(`Unknown declaration kind: ${(decl as any).kind}`);
@@ -82,6 +84,46 @@ function formatFnDecl(fn: AST.FnDecl, indent: number): string {
   
   // Body
   lines.push(formatBlock(fn.body, indent + 1));
+  lines.push(`${prefix}}`);
+  
+  return lines.join("\n");
+}
+
+function formatActorDecl(actor: AST.ActorDecl, indent: number): string {
+  const prefix = INDENT.repeat(indent);
+  const lines: string[] = [];
+  
+  // Actor signature
+  const params = actor.params.map(p => `${p.name}: ${formatTypeExpr(p.type)}`).join(", ");
+  lines.push(`${prefix}actor ${actor.name}(${params}) {`);
+  
+  // State fields
+  if (actor.stateFields.length > 0) {
+    lines.push(`${prefix}${INDENT}state {`);
+    for (const field of actor.stateFields) {
+      lines.push(`${prefix}${INDENT}${INDENT}${field.name}: ${formatTypeExpr(field.type)}`);
+    }
+    lines.push(`${prefix}${INDENT}}`);
+    lines.push("");
+  }
+  
+  // Handlers
+  for (let i = 0; i < actor.handlers.length; i++) {
+    const handler = actor.handlers[i];
+    if (!handler) continue;
+    
+    const handlerParams = handler.msgParams.map(p => `${p.name}: ${formatTypeExpr(p.type)}`).join(", ");
+    const effects = handler.effects.length > 0 ? ` [${handler.effects.join(", ")}]` : "";
+    lines.push(`${prefix}${INDENT}on ${handler.msgTypeName}(${handlerParams})${effects} -> ${formatTypeExpr(handler.returnType)} {`);
+    lines.push(formatBlock(handler.body, indent + 2));
+    lines.push(`${prefix}${INDENT}}`);
+    
+    // Add blank line between handlers (except last)
+    if (i < actor.handlers.length - 1) {
+      lines.push("");
+    }
+  }
+  
   lines.push(`${prefix}}`);
   
   return lines.join("\n");

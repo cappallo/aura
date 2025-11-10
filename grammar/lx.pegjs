@@ -71,6 +71,7 @@ TopLevelDeclCore
 	/ SchemaDecl
 	/ TypeDecl
 	/ FnDecl
+	/ ActorDecl
 	/ ContractDecl
 	/ TestDecl
 	/ PropertyDecl
@@ -169,6 +170,34 @@ FnDecl
 				name,
 				typeParams: typeParams || [],
 				params: params || [],
+				returnType: returnSpec.type,
+				effects: returnSpec.effects,
+				body,
+			};
+		}
+
+ActorDecl
+	= "actor" __ name:Ident _ "(" _ params:ParamList? _ ")" __ "{" BlockGap state:ActorState? handlers:ActorHandler* BlockGap "}" Terminator* {
+			return {
+				kind: "ActorDecl",
+				name,
+				params: params || [],
+				stateFields: state || [],
+				handlers: handlers || [],
+			};
+		}
+
+ActorState
+	= "state" __ "{" BlockGap fields:FieldDeclList? BlockGap "}" Terminator+ {
+			return fields || [];
+		}
+
+ActorHandler
+	= BlockGap? "on" __ msgType:Ident _ "(" _ msgParams:ParamList? _ ")" __ returnSpec:ReturnSpec _ body:Block Terminator* {
+			return {
+				kind: "ActorHandler",
+				msgTypeName: msgType,
+				msgParams: msgParams || [],
 				returnType: returnSpec.type,
 				effects: returnSpec.effects,
 				body,

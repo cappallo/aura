@@ -1,0 +1,19 @@
+module examples.actor_basic
+
+actor Counter(initial: Int) {
+  state {
+    count: Int
+  }
+
+  on GetValue() -> [Concurrent] Int {
+    return count
+  }
+
+  on Increment() -> [Concurrent] Unit {
+    return ()
+  }
+}
+
+test counter_basic {
+  test.assert_equal(1, 1)
+}

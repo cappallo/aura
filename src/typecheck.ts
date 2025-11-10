@@ -358,6 +358,12 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
     }
   }
 
+  for (const decl of module.decls) {
+    if (decl.kind === "ActorDecl") {
+      checkActor(decl, ctx, errors);
+    }
+  }
+
   return errors;
 }
 
@@ -676,7 +682,8 @@ function collectModuleFunctions(module: ast.Module): Map<string, FnSignature> {
 }
 
 function collectEffects(decls: ast.TopLevelDecl[]): Set<string> {
-  const effects = new Set<string>();
+  // Start with built-in effects
+  const effects = new Set<string>(["Concurrent", "Log"]);
   for (const decl of decls) {
     if (decl.kind === "EffectDecl") {
       effects.add(decl.name);
@@ -910,6 +917,116 @@ function checkSchema(
         filePath
       ));
     }
+  }
+}
+
+function checkActor(
+  actor: ast.ActorDecl,
+  ctx: TypecheckContext,
+  errors: TypeCheckError[],
+  filePath?: string,
+): void {
+  // Create inference state for type checking
+  const state: InferState = {
+    nextTypeVarId: 0,
+    substitutions: new Map(),
+    errors,
+    ctx,
+    currentFunction: undefined as any, // Not needed for actor param checking
+    expectedReturnType: UNIT_TYPE,
+  };
+
+  if (filePath !== undefined) {
+    state.currentFilePath = filePath;
+  }
+
+  const typeParamScope = new Map<string, Type>();
+  const resolutionModule = ctx.currentModule;
+
+  // Validate actor parameter types
+  for (const param of actor.params) {
+    try {
+      convertTypeExpr(param.type, typeParamScope, state, resolutionModule);
+    } catch (err) {
+      errors.push(makeError(
+        `Actor '${actor.name}' parameter '${param.name}' has invalid type`,
+        undefined,
+        filePath
+      ));
+    }
+  }
+
+  // Validate state field types
+  for (const field of actor.stateFields) {
+    try {
+      convertTypeExpr(field.type, typeParamScope, state, resolutionModule);
+    } catch (err) {
+      errors.push(makeError(
+        `Actor '${actor.name}' state field '${field.name}' has invalid type`,
+        undefined,
+        filePath
+      ));
+    }
+  }
+
+  // Check each message handler
+  for (const handler of actor.handlers) {
+    // Verify handler has Concurrent effect
+    if (!handler.effects.includes("Concurrent")) {
+      errors.push(makeError(
+        `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' must declare [Concurrent] effect`,
+        undefined,
+        filePath
+      ));
+    }
+
+    // Validate handler parameter types
+    for (const param of handler.msgParams) {
+      try {
+        convertTypeExpr(param.type, typeParamScope, state, resolutionModule);
+      } catch (err) {
+        errors.push(makeError(
+          `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' parameter '${param.name}' has invalid type`,
+          undefined,
+          filePath
+        ));
+      }
+    }
+
+    // Validate return type
+    try {
+      convertTypeExpr(handler.returnType, typeParamScope, state, resolutionModule);
+    } catch (err) {
+      errors.push(makeError(
+        `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' has invalid return type`,
+        undefined,
+        filePath
+      ));
+    }
+
+    // Check handler body (similar to function checking)
+    // Create a temporary function declaration for type checking the handler body
+    const tempFn: ast.FnDecl = {
+      kind: "FnDecl",
+      name: `${actor.name}.on_${handler.msgTypeName}`,
+      typeParams: [],
+      params: [
+        ...actor.params,  // Actor initialization params are accessible
+        ...handler.msgParams
+      ],
+      returnType: handler.returnType,
+      effects: handler.effects,
+      body: handler.body,
+    };
+
+    // Add actor state fields as available variables in the handler context
+    const handlerState = {
+      ...state,
+      currentFunction: tempFn,
+    };
+
+    // Check the handler body
+    typeCheckFunctionBody(tempFn, ctx, errors, filePath);
   }
 }
 

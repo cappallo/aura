@@ -8,7 +8,112 @@ export type Value =
   | { kind: "String"; value: string }
   | { kind: "List"; elements: Value[] }
   | { kind: "Ctor"; name: string; fields: Map<string, Value> }
+  | { kind: "ActorRef"; id: number }
   | { kind: "Unit" };
+
+export type ActorMessage = {
+  msgType: string;
+  args: Map<string, Value>;
+};
+
+export class ActorInstance {
+  id: number;
+  decl: ast.ActorDecl;
+  initParams: Map<string, Value>;
+  state: Map<string, Value>;
+  mailbox: ActorMessage[];
+  runtime: Runtime;
+
+  constructor(
+    id: number,
+    decl: ast.ActorDecl,
+    initParams: Map<string, Value>,
+    runtime: Runtime
+  ) {
+    this.id = id;
+    this.decl = decl;
+    this.initParams = initParams;
+    this.state = new Map();
+    this.mailbox = [];
+    this.runtime = runtime;
+    
+    // Initialize state fields to default values
+    for (const field of decl.stateFields) {
+      this.state.set(field.name, getDefaultValue(field.type));
+    }
+  }
+
+  send(msgType: string, args: Map<string, Value>): void {
+    this.mailbox.push({ msgType, args });
+  }
+
+  processMessages(): void {
+    while (this.mailbox.length > 0) {
+      const msg = this.mailbox.shift();
+      if (!msg) break;
+      
+      this.processMessage(msg);
+    }
+  }
+
+  private processMessage(msg: ActorMessage): void {
+    // Find the handler for this message type
+    const handler = this.decl.handlers.find(h => h.msgTypeName === msg.msgType);
+    if (!handler) {
+      throw new RuntimeError(`Actor '${this.decl.name}' has no handler for message type '${msg.msgType}'`);
+    }
+
+    // Build environment with init params, state fields, and message params
+    const env = new Map<string, Value>();
+    
+    // Add init params
+    for (const [key, value] of this.initParams.entries()) {
+      env.set(key, value);
+    }
+    
+    // Add state fields
+    for (const [key, value] of this.state.entries()) {
+      env.set(key, value);
+    }
+    
+    // Add message params
+    for (const [key, value] of msg.args.entries()) {
+      env.set(key, value);
+    }
+
+    // Execute handler body
+    const result = evalBlock(handler.body, env, this.runtime);
+    
+    // Update state after handler execution (state mutations should be captured)
+    // For now, we assume state fields can be reassigned in the handler
+    for (const field of this.decl.stateFields) {
+      const updatedValue = env.get(field.name);
+      if (updatedValue !== undefined) {
+        this.state.set(field.name, updatedValue);
+      }
+    }
+  }
+}
+
+function getDefaultValue(typeExpr: ast.TypeExpr): Value {
+  if (typeExpr.kind === "TypeName") {
+    switch (typeExpr.name) {
+      case "Int":
+        return { kind: "Int", value: 0 };
+      case "Bool":
+        return { kind: "Bool", value: false };
+      case "String":
+        return { kind: "String", value: "" };
+      case "List":
+        return { kind: "List", elements: [] };
+      case "Unit":
+        return { kind: "Unit" };
+      default:
+        return { kind: "Unit" };
+    }
+  }
+  return { kind: "Unit" };
+}
 
 export type Runtime = {
   module: ast.Module;
@@ -17,6 +122,9 @@ export type Runtime = {
   tests: ast.TestDecl[];
   properties: ast.PropertyDecl[];
   typeDecls: Map<string, ast.TypeDecl>;
+  actors: Map<string, ast.ActorDecl>;
+  actorInstances: Map<number, ActorInstance>;
+  nextActorId: number;
   // For multi-module support
   symbolTable?: import("./loader").SymbolTable;
   // Structured logging support
@@ -90,6 +198,7 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
   const tests: ast.TestDecl[] = [];
   const properties: ast.PropertyDecl[] = [];
   const typeDecls = new Map<string, ast.TypeDecl>();
+  const actors = new Map<string, ast.ActorDecl>();
 
   for (const decl of module.decls) {
     if (decl.kind === "FnDecl") {
@@ -103,6 +212,8 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
       tests.push(decl);
     } else if (decl.kind === "PropertyDecl") {
       properties.push(decl);
+    } else if (decl.kind === "ActorDecl") {
+      actors.set(decl.name, decl);
     } else if (
       decl.kind === "AliasTypeDecl" ||
       decl.kind === "RecordTypeDecl" ||
@@ -119,6 +230,9 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
     tests, 
     properties, 
     typeDecls,
+    actors,
+    actorInstances: new Map(),
+    nextActorId: 1,
   };
   if (outputFormat !== undefined) {
     runtime.outputFormat = outputFormat;
@@ -194,6 +308,22 @@ export function buildMultiModuleRuntime(
     }
   }
   
+  const actors = new Map<string, ast.ActorDecl>();
+  for (const resolvedModule of modules) {
+    const module = resolvedModule.ast;
+    const modulePrefix = module.name.join(".");
+    
+    for (const decl of module.decls) {
+      if (decl.kind === "ActorDecl") {
+        const qualifiedName = `${modulePrefix}.${decl.name}`;
+        actors.set(qualifiedName, decl);
+        if (module === primaryModule) {
+          actors.set(decl.name, decl);
+        }
+      }
+    }
+  }
+  
   const runtime: Runtime = {
     module: primaryModule,
     functions,
@@ -201,6 +331,9 @@ export function buildMultiModuleRuntime(
     tests,
     properties,
     typeDecls,
+    actors,
+    actorInstances: new Map(),
+    nextActorId: 1,
     symbolTable,
   };
   if (outputFormat !== undefined) {
@@ -1300,6 +1433,9 @@ function shrinkValue(value: Value): Value[] {
       return value.value ? [{ kind: "Bool", value: false }] : [];
     case "Ctor":
       return shrinkCtor(value);
+    case "ActorRef":
+      // Actor references cannot be shrunk
+      return [];
     case "Unit":
       return [];
   }

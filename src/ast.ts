@@ -25,7 +25,8 @@ export type TopLevelDecl =
   | FnDecl
   | FnContractDecl
   | TestDecl
-  | PropertyDecl;
+  | PropertyDecl
+  | ActorDecl;
 
 export type EffectDecl = {
   kind: "EffectDecl";
@@ -278,4 +279,22 @@ export type FnContractDecl = {
   requires: Expr[];
   ensures: Expr[];
   docComment?: string;
+};
+
+export type ActorDecl = {
+  kind: "ActorDecl";
+  name: string;
+  params: Param[];
+  stateFields: Field[];
+  handlers: ActorHandler[];
+  docComment?: string;
+};
+
+export type ActorHandler = {
+  kind: "ActorHandler";
+  msgTypeName: string;
+  msgParams: Param[];
+  returnType: TypeExpr;
+  effects: string[];
+  body: Block;
 };

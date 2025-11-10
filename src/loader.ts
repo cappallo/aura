@@ -214,7 +214,8 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
         case "FnContractDecl":
         case "TestDecl":
         case "PropertyDecl":
-          // Contracts and tests are not part of the symbol table
+        case "ActorDecl":
+          // Contracts, tests, properties, and actors are not part of the symbol table (yet)
           break;
         
         default:
