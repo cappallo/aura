@@ -98,6 +98,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - 🟡 `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
 - 🟡 Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported**
 - ❌ Actor references and `.send()` syntax (SPEC.md §6.2)
+ - 🟡 Actor references and message dispatch (spawn + handler call helpers implemented; general `.send` syntax pending)
 - 🟡 Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2) - **Basic infrastructure in place**
 - 🟡 Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
 - ❌ Structured async tasks within actors (`async_group`, scoped tasks) (CONCURRENCY.md §4)
@@ -330,6 +331,7 @@ Phase 5 (Long-term): Evolution
   - Added `ActorInstance` class with mailbox infrastructure in interpreter
   - Updated formatter and loader to handle actor declarations
   - Created `examples/actor_basic.lx` demonstrating actor syntax
+- ✅ Added runtime support for spawning actors and dispatching handlers synchronously via generated helpers (`Counter.spawn`, `Counter.Increment`, etc.), including `ActorRef` values and state persistence
 
 With the core language, schemas, most LLM tooling, and basic actor syntax complete, the next priorities are:
 

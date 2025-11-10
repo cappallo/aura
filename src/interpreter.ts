@@ -39,12 +39,17 @@ export class ActorInstance {
     
     // Initialize state fields to default values
     for (const field of decl.stateFields) {
-      this.state.set(field.name, getDefaultValue(field.type));
+      this.state.set(field.name, defaultValueForType(field.type, runtime));
     }
   }
 
   send(msgType: string, args: Map<string, Value>): void {
     this.mailbox.push({ msgType, args });
+  }
+
+  deliverMessage(msgType: string, args: Map<string, Value>): Value {
+    const message: ActorMessage = { msgType, args };
+    return this.processMessage(message);
   }
 
   processMessages(): void {
@@ -56,7 +61,7 @@ export class ActorInstance {
     }
   }
 
-  private processMessage(msg: ActorMessage): void {
+  private processMessage(msg: ActorMessage): Value {
     // Find the handler for this message type
     const handler = this.decl.handlers.find(h => h.msgTypeName === msg.msgType);
     if (!handler) {
@@ -92,27 +97,9 @@ export class ActorInstance {
         this.state.set(field.name, updatedValue);
       }
     }
-  }
-}
 
-function getDefaultValue(typeExpr: ast.TypeExpr): Value {
-  if (typeExpr.kind === "TypeName") {
-    switch (typeExpr.name) {
-      case "Int":
-        return { kind: "Int", value: 0 };
-      case "Bool":
-        return { kind: "Bool", value: false };
-      case "String":
-        return { kind: "String", value: "" };
-      case "List":
-        return { kind: "List", elements: [] };
-      case "Unit":
-        return { kind: "Unit" };
-      default:
-        return { kind: "Unit" };
-    }
+    return result.value;
   }
-  return { kind: "Unit" };
 }
 
 export type Runtime = {
@@ -199,6 +186,7 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
   const properties: ast.PropertyDecl[] = [];
   const typeDecls = new Map<string, ast.TypeDecl>();
   const actors = new Map<string, ast.ActorDecl>();
+  const modulePrefix = module.name.join(".");
 
   for (const decl of module.decls) {
     if (decl.kind === "FnDecl") {
@@ -214,6 +202,9 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
       properties.push(decl);
     } else if (decl.kind === "ActorDecl") {
       actors.set(decl.name, decl);
+      if (modulePrefix) {
+        actors.set(`${modulePrefix}.${decl.name}`, decl);
+      }
     } else if (
       decl.kind === "AliasTypeDecl" ||
       decl.kind === "RecordTypeDecl" ||
@@ -1109,6 +1100,11 @@ function jsValueToValue(jsValue: unknown): Value {
 }
 
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const actorSpecial = tryCallActorFunction(expr, env, runtime);
+  if (actorSpecial !== null) {
+    return actorSpecial;
+  }
+
   let calleeName = expr.callee;
   
   // Resolve identifier if we have a symbol table
@@ -1132,6 +1128,142 @@ function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
 
   const result = evalBlock(fn.body, callEnv, runtime);
   return result.value;
+}
+
+function tryCallActorFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value | null {
+  const spawnTarget = resolveActorSpawn(expr.callee, runtime);
+  if (spawnTarget) {
+    return executeActorSpawn(spawnTarget.actorName, expr, env, runtime);
+  }
+
+  const handlerTarget = resolveActorHandler(expr.callee, runtime);
+  if (handlerTarget) {
+    return executeActorHandler(handlerTarget.actorName, handlerTarget.handlerName, expr, env, runtime);
+  }
+
+  return null;
+}
+
+type ActorSpawnResolution = { actorName: string };
+type ActorHandlerResolution = { actorName: string; handlerName: string };
+
+function resolveActorSpawn(callee: string, runtime: Runtime): ActorSpawnResolution | null {
+  if (!callee.endsWith(".spawn")) {
+    return null;
+  }
+  const actorPart = callee.slice(0, -".spawn".length);
+  if (!actorPart) {
+    return null;
+  }
+  const actorName = resolveActorIdentifier(actorPart, runtime);
+  if (!actorName) {
+    return null;
+  }
+  return { actorName };
+}
+
+function resolveActorHandler(callee: string, runtime: Runtime): ActorHandlerResolution | null {
+  const lastDot = callee.lastIndexOf(".");
+  if (lastDot === -1) {
+    return null;
+  }
+  const actorPart = callee.slice(0, lastDot);
+  const handlerName = callee.slice(lastDot + 1);
+  if (!actorPart || !handlerName || handlerName === "spawn") {
+    return null;
+  }
+  const actorName = resolveActorIdentifier(actorPart, runtime);
+  if (!actorName) {
+    return null;
+  }
+  return { actorName, handlerName };
+}
+
+function resolveActorIdentifier(name: string, runtime: Runtime): string | null {
+  if (runtime.actors.has(name)) {
+    return name;
+  }
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    const resolved = resolveIdentifier(name, runtime.module, runtime.symbolTable);
+    if (runtime.actors.has(resolved)) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+function executeActorSpawn(
+  actorName: string,
+  expr: ast.CallExpr,
+  env: Env,
+  runtime: Runtime,
+): Value {
+  const actorDecl = runtime.actors.get(actorName);
+  if (!actorDecl) {
+    throw new RuntimeError(`Unknown actor '${actorName}'`);
+  }
+
+  const paramNames = actorDecl.params.map((param) => param.name);
+  const evaluated = bindCallArguments(expr, paramNames, env, runtime);
+  if (evaluated.alignment.issues.length > 0) {
+    const message = describeCallArgIssue(expr.callee, evaluated.alignment.issues[0]!);
+    throw new RuntimeError(message);
+  }
+
+  const values = new Map<string, Value>();
+  for (const param of actorDecl.params) {
+    const value = expectValue(evaluated.values, param.name, expr.callee);
+    values.set(param.name, value);
+  }
+
+  const id = runtime.nextActorId;
+  runtime.nextActorId += 1;
+  const instance = new ActorInstance(id, actorDecl, values, runtime);
+  runtime.actorInstances.set(id, instance);
+  return makeActorRefValue(id);
+}
+
+function executeActorHandler(
+  actorName: string,
+  handlerName: string,
+  expr: ast.CallExpr,
+  env: Env,
+  runtime: Runtime,
+): Value {
+  const actorDecl = runtime.actors.get(actorName);
+  if (!actorDecl) {
+    throw new RuntimeError(`Unknown actor '${actorName}'`);
+  }
+  const handler = actorDecl.handlers.find((candidate) => candidate.msgTypeName === handlerName);
+  if (!handler) {
+    throw new RuntimeError(`Actor '${actorDecl.name}' has no handler named '${handlerName}'`);
+  }
+
+  const paramNames = ["actor", ...handler.msgParams.map((param) => param.name)];
+  const evaluated = bindCallArguments(expr, paramNames, env, runtime);
+  if (evaluated.alignment.issues.length > 0) {
+    const message = describeCallArgIssue(expr.callee, evaluated.alignment.issues[0]!);
+    throw new RuntimeError(message);
+  }
+
+  const actorValue = expectValue(evaluated.values, "actor", expr.callee);
+  if (actorValue.kind !== "ActorRef") {
+    throw new RuntimeError(`First argument to '${expr.callee}' must be an ActorRef`);
+  }
+
+  const instance = runtime.actorInstances.get(actorValue.id);
+  if (!instance) {
+    throw new RuntimeError(`Actor instance ${actorValue.id} is not running`);
+  }
+
+  const messageArgs = new Map<string, Value>();
+  for (const param of handler.msgParams) {
+    const value = expectValue(evaluated.values, param.name, expr.callee);
+    messageArgs.set(param.name, value);
+  }
+
+  return instance.deliverMessage(handler.msgTypeName, messageArgs);
 }
 
 type ParameterGenerationResult =
@@ -1310,6 +1442,8 @@ function generateFromTypeName(
         return { kind: "String", value: randomString(rng) };
       case "Unit":
         return { kind: "Unit" };
+      case "ActorRef":
+        return makeActorRefValue(-1);
       default:
         break;
     }
@@ -1692,6 +1826,8 @@ function defaultValueForType(typeExpr: ast.TypeExpr, runtime: Runtime): Value {
         return { kind: "String", value: "" };
       case "Unit":
         return { kind: "Unit" };
+      case "ActorRef":
+        return makeActorRefValue(-1);
       case "List":
         return { kind: "List", elements: [] };
       default:
@@ -1753,6 +1889,10 @@ function randomString(rng: () => number): string {
     result += RANDOM_STRING_CHARS[index] ?? "a";
   }
   return result;
+}
+
+function makeActorRefValue(id: number): Value {
+  return { kind: "ActorRef", id };
 }
 
 function makeCtor(name: string, entries?: [string, Value][]): Value {
@@ -1881,6 +2021,10 @@ function valueEquals(a: Value, b: Value): boolean {
       }
       return true;
     }
+    case "ActorRef": {
+      const bb = b as typeof a;
+      return a.id === bb.id;
+    }
     default:
       return false;
   }
@@ -1903,6 +2047,8 @@ export function prettyValue(value: Value): unknown {
       }
       return { [value.name]: obj };
     }
+    case "ActorRef":
+      return { ActorRef: value.id };
     default:
       return null;
   }

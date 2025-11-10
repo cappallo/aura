@@ -5,15 +5,28 @@ actor Counter(initial: Int) {
     count: Int
   }
 
+  on Increment() -> [Concurrent] Unit {
+    let count = count + 1
+  }
+
   on GetValue() -> [Concurrent] Int {
     return count
   }
+}
 
-  on Increment() -> [Concurrent] Unit {
-    return ()
-  }
+fn run_counter(initial: Int) -> [Concurrent] Int {
+  let counter = Counter.spawn(initial)
+  Counter.Increment(counter)
+  Counter.Increment(counter)
+  return Counter.GetValue(counter)
 }
 
 test counter_basic {
-  test.assert_equal(1, 1)
+  let counter = Counter.spawn(0)
+  Counter.Increment(counter)
+  let value = Counter.GetValue(counter)
+  test.assert_equal(1, value)
+
+  let total = run_counter(0)
+  test.assert_equal(2, total)
 }
