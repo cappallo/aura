@@ -1,5 +1,7 @@
 module examples.actor_basic
 
+type CounterMsg = Increment | Add { amount: Int } | AddPair { left: Int, right: Int } | GetValue
+
 actor Counter(initial: Int) {
   state {
     count: Int
@@ -9,6 +11,14 @@ actor Counter(initial: Int) {
     let count = count + 1
   }
 
+  on Add(amount: Int) -> [Concurrent] Unit {
+    let count = count + amount
+  }
+
+  on AddPair(left: Int, right: Int) -> [Concurrent] Unit {
+    let count = count + left + right
+  }
+
   on GetValue() -> [Concurrent] Int {
     return count
   }
@@ -16,17 +26,24 @@ actor Counter(initial: Int) {
 
 fn run_counter(initial: Int) -> [Concurrent] Int {
   let counter = Counter.spawn(initial)
-  Counter.Increment(counter)
-  Counter.Increment(counter)
+  counter.send(Increment { })
+  counter.send(Add { amount: 1 })
+  counter.send(AddPair { left: 1, right: 2 })
   return Counter.GetValue(counter)
 }
 
 test counter_basic {
   let counter = Counter.spawn(0)
-  Counter.Increment(counter)
+  counter.send(Increment { })
+  counter.send(Add { amount: 2 })
   let value = Counter.GetValue(counter)
-  test.assert_equal(1, value)
+  test.assert_equal(3, value)
 
-  let total = run_counter(0)
-  test.assert_equal(2, total)
+  counter.send(AddPair { left: 3, right: 4 })
+  Counter.Increment(counter)
+  let total = Counter.GetValue(counter)
+  test.assert_equal(11, total)
+
+  let runTotal = run_counter(0)
+  test.assert_equal(5, runTotal)
 }

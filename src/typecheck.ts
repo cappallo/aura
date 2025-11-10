@@ -1348,6 +1348,11 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
     argTypes.set(callArg, inferExpr(callArg.expr, env, state));
   }
 
+  const actorSendType = inferActorSendCall(expr, env, state);
+  if (actorSendType) {
+    return actorSendType;
+  }
+
   const builtin = BUILTIN_FUNCTIONS[expr.callee];
   if (builtin) {
     const alignment = alignCallArguments(expr, builtin.paramNames);
@@ -1413,6 +1418,55 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
   }
 
   return applySubstitution(instantiated.returnType, state);
+}
+
+function inferActorSendCall(expr: ast.CallExpr, env: TypeEnv, state: InferState): Type | null {
+  const targetName = extractActorSendTarget(expr.callee);
+  if (!targetName) {
+    return null;
+  }
+
+  if (state.ctx.functions.has(expr.callee)) {
+    return null;
+  }
+
+  let resolvedName = expr.callee;
+  if (state.ctx.currentModule && state.ctx.symbolTable) {
+    resolvedName = resolveIdentifier(expr.callee, state.ctx.currentModule, state.ctx.symbolTable);
+  }
+  if (state.ctx.functions.has(resolvedName)) {
+    return null;
+  }
+
+  const actorType = env.get(targetName);
+  if (!actorType) {
+    state.errors.push(makeError(
+      `Unknown actor reference '${targetName}' in call to '${expr.callee}'`,
+      expr.loc,
+      state.currentFilePath,
+    ));
+    return UNIT_TYPE;
+  }
+
+  unify(actorType, ACTOR_REF_TYPE, state, `'.send' requires an ActorRef target`, expr.loc);
+
+  const alignment = alignCallArguments(expr, ["message"]);
+  reportCallArgIssues(expr, expr.callee, alignment.issues, state.errors, state.currentFilePath);
+
+  verifyEffectSubset(new Set(["Concurrent"]), state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
+
+  return UNIT_TYPE;
+}
+
+function extractActorSendTarget(callee: string): string | null {
+  if (!callee.endsWith(".send")) {
+    return null;
+  }
+  const prefix = callee.slice(0, -".send".length);
+  if (!prefix || prefix.includes(".")) {
+    return null;
+  }
+  return prefix;
 }
 
 function inferRecordExpr(expr: ast.RecordExpr, env: TypeEnv, state: InferState): Type {

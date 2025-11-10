@@ -97,8 +97,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 **Note:** See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design specification.
 - 🟡 `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
 - 🟡 Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported**
-- ❌ Actor references and `.send()` syntax (SPEC.md §6.2)
- - 🟡 Actor references and message dispatch (spawn + handler call helpers implemented; general `.send` syntax pending)
+- ✅ Actor references and `.send()` syntax (SPEC.md §6.2) - **`counter.send(MessageCtor { ... })` supported with ActorRef runtime + typechecking (synchronous mailbox delivery)**
+- 🟡 Actor references and message dispatch (spawn + handler call helpers implemented; deterministic scheduling still pending)
 - 🟡 Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2) - **Basic infrastructure in place**
 - 🟡 Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
 - ❌ Structured async tasks within actors (`async_group`, scoped tasks) (CONCURRENCY.md §4)
@@ -305,7 +305,7 @@ Phase 4 (Mid-term): Concurrency & Tools
 ├─ Actor model implementation (CONCURRENCY.md) → Priority 8 (IN PROGRESS)
 │  ├─ Basic actor declarations with typed state → ✅ Syntax & typechecking complete
 │  ├─ Message protocols and handlers → ✅ Syntax & typechecking complete
-│  ├─ Actor spawning and message sending → ❌ Runtime not implemented
+│  ├─ Actor spawning and message sending → 🟡 Runtime implemented for synchronous `.send` + helper dispatch
 │  ├─ Structured async tasks within actors → ❌ Not started
 │  ├─ Supervision trees → ❌ Not started
 │  └─ Deterministic scheduling for tests → ❌ Not started
@@ -332,15 +332,18 @@ Phase 5 (Long-term): Evolution
   - Updated formatter and loader to handle actor declarations
   - Created `examples/actor_basic.lx` demonstrating actor syntax
 - ✅ Added runtime support for spawning actors and dispatching handlers synchronously via generated helpers (`Counter.spawn`, `Counter.Increment`, etc.), including `ActorRef` values and state persistence
+- ✅ Added actor `.send` message syntax
+  - Parser + typechecker recognize `actorVar.send(MessageCtor { ... })` and enforce the `Concurrent` effect
+  - Interpreter converts constructor payloads into handler arguments, enqueues them, and processes the mailbox immediately
+  - Updated `examples/actor_basic.lx` to cover `.send` plus helper-style handler invocations
 
 With the core language, schemas, most LLM tooling, and basic actor syntax complete, the next priorities are:
 
 1. **Actor Runtime Implementation** (Priority 8, continuing):
-   - Implement actor spawning builtins
-   - Add `.send()` message passing syntax
-   - Implement message dispatch and processing
-   - Add actor reference type (`ActorRef<MsgType>`)
-   - Test full actor lifecycle (spawn, send, process)
+   - Expand mailbox scheduling (asynchronous queue processing + deterministic test mode)
+   - Implement structured async tasks within actors (`async_group`, scoped tasks)
+   - Add richer actor reference typing (`ActorRef<MsgType>`) and lifecycle hooks
+   - Test full actor lifecycle (spawn, send, supervised failure scenarios)
    
 2. **LLM Tooling Enhancements** (Priority 7 completion):
    - Deterministic execution mode / seedable RNG

@@ -1100,6 +1100,11 @@ function jsValueToValue(jsValue: unknown): Value {
 }
 
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const actorSendResult = tryCallActorSend(expr, env, runtime);
+  if (actorSendResult !== null) {
+    return actorSendResult;
+  }
+
   const actorSpecial = tryCallActorFunction(expr, env, runtime);
   if (actorSpecial !== null) {
     return actorSpecial;
@@ -1128,6 +1133,108 @@ function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
 
   const result = evalBlock(fn.body, callEnv, runtime);
   return result.value;
+}
+
+function tryCallActorSend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value | null {
+  if (runtime.functions.has(expr.callee)) {
+    return null;
+  }
+
+  if (runtime.symbolTable) {
+    const { resolveIdentifier } = require("./loader");
+    const resolved = resolveIdentifier(expr.callee, runtime.module, runtime.symbolTable);
+    if (runtime.functions.has(resolved)) {
+      return null;
+    }
+  }
+
+  const targetName = resolveActorSendTarget(expr.callee);
+  if (!targetName) {
+    return null;
+  }
+
+  const actorValue = env.get(targetName);
+  if (!actorValue) {
+    return null;
+  }
+  if (actorValue.kind !== "ActorRef") {
+    throw new RuntimeError(`'${targetName}.send' expects an ActorRef but found ${actorValue.kind}`);
+  }
+
+  const instance = runtime.actorInstances.get(actorValue.id);
+  if (!instance) {
+    throw new RuntimeError(`Actor instance ${actorValue.id} is not running`);
+  }
+
+  const evaluated = bindCallArguments(expr, ["message"], env, runtime);
+  if (evaluated.alignment.issues.length > 0) {
+    const message = describeCallArgIssue(expr.callee, evaluated.alignment.issues[0]!);
+    throw new RuntimeError(message);
+  }
+
+  const messageValue = expectValue(evaluated.values, "message", expr.callee);
+  if (messageValue.kind !== "Ctor") {
+    throw new RuntimeError(`Messages sent with '${expr.callee}' must be constructor values`);
+  }
+
+  const handler = instance.decl.handlers.find((candidate) => candidate.msgTypeName === messageValue.name);
+  if (!handler) {
+    throw new RuntimeError(`Actor '${instance.decl.name}' has no handler for message '${messageValue.name}'`);
+  }
+
+  const args = buildActorMessageArgs(handler, messageValue);
+  instance.send(handler.msgTypeName, args);
+  instance.processMessages();
+  return { kind: "Unit" };
+}
+
+function resolveActorSendTarget(callee: string): string | null {
+  if (!callee.endsWith(".send")) {
+    return null;
+  }
+  const prefix = callee.slice(0, -".send".length);
+  if (!prefix || prefix.includes(".")) {
+    return null;
+  }
+  return prefix;
+}
+
+function buildActorMessageArgs(handler: ast.ActorHandler, message: Value): Map<string, Value> {
+  if (message.kind !== "Ctor") {
+    throw new RuntimeError("Actor messages must be constructor values");
+  }
+  const args = new Map<string, Value>();
+  if (handler.msgParams.length === 0) {
+    return args;
+  }
+
+  if (shouldBindWholeMessage(handler)) {
+    const param = handler.msgParams[0]!;
+    args.set(param.name, message);
+    return args;
+  }
+
+  for (const param of handler.msgParams) {
+    const fieldValue = message.fields.get(param.name);
+    if (fieldValue === undefined) {
+      throw new RuntimeError(
+        `Message '${message.name}' is missing field '${param.name}' required by handler 'on ${handler.msgTypeName}'`,
+      );
+    }
+    args.set(param.name, fieldValue);
+  }
+  return args;
+}
+
+function shouldBindWholeMessage(handler: ast.ActorHandler): boolean {
+  if (handler.msgParams.length !== 1) {
+    return false;
+  }
+  const param = handler.msgParams[0]!;
+  if (param.type.kind !== "TypeName") {
+    return false;
+  }
+  return param.type.name === handler.msgTypeName && param.type.typeArgs.length === 0;
 }
 
 function tryCallActorFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value | null {
