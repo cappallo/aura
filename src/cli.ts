@@ -6,7 +6,16 @@ import process from "process";
 import { parseModuleFromFile, parseModule } from "./parser";
 import { parseModuleFromAstFile } from "./ast_json";
 import { typecheckModule, typecheckModules } from "./typecheck";
-import { buildRuntime, buildMultiModuleRuntime, callFunction, prettyValue, runTests, Value, RuntimeError } from "./interpreter";
+import {
+  buildRuntime,
+  buildMultiModuleRuntime,
+  callFunction,
+  prettyValue,
+  runTests,
+  Value,
+  RuntimeError,
+  SchedulerMode,
+} from "./interpreter";
 import { loadModules, buildSymbolTable, generateTypesFromSchemas } from "./loader";
 import * as ast from "./ast";
 import { StructuredOutput, formatStructuredOutput } from "./structured";
@@ -18,6 +27,7 @@ export type InputFormat = "source" | "ast";
 export type CliContext = {
   format: OutputFormat;
   input: InputFormat;
+  scheduler: SchedulerMode;
 };
 
 function main() {
@@ -30,8 +40,8 @@ function main() {
 
   try {
     // Parse global flags
-    const { args, format, input } = parseGlobalFlags(rest);
-    const ctx: CliContext = { format, input };
+    const { args, format, input, scheduler } = parseGlobalFlags(rest);
+    const ctx: CliContext = { format, input, scheduler };
 
     switch (command) {
       case "run":
@@ -56,9 +66,15 @@ function main() {
   }
 }
 
-function parseGlobalFlags(args: string[]): { args: string[]; format: OutputFormat; input: InputFormat } {
+function parseGlobalFlags(args: string[]): {
+  args: string[];
+  format: OutputFormat;
+  input: InputFormat;
+  scheduler: SchedulerMode;
+} {
   let format: OutputFormat = "text";
   let input: InputFormat = "source";
+  let scheduler: SchedulerMode = "immediate";
   const remaining: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -89,12 +105,19 @@ function parseGlobalFlags(args: string[]): { args: string[]; format: OutputForma
     } else if (arg.startsWith("--input=")) {
       const value = arg.substring(8);
       input = parseInputFormat(value);
+    } else if (arg === "--scheduler" && i + 1 < args.length) {
+      const value = args[i + 1]!;
+      scheduler = parseSchedulerMode(value);
+      i += 1;
+    } else if (arg.startsWith("--scheduler=")) {
+      const value = arg.substring(12);
+      scheduler = parseSchedulerMode(value);
     } else {
       remaining.push(arg);
     }
   }
 
-  return { args: remaining, format, input };
+  return { args: remaining, format, input, scheduler };
 }
 
 function parseInputFormat(value: string): InputFormat {
@@ -102,6 +125,14 @@ function parseInputFormat(value: string): InputFormat {
     return value;
   }
   console.error(`Invalid input format: ${value}. Must be 'source' or 'ast'.`);
+  process.exit(1);
+}
+
+function parseSchedulerMode(value: string): SchedulerMode {
+  if (value === "immediate" || value === "deterministic") {
+    return value;
+  }
+  console.error(`Invalid scheduler: ${value}. Must be 'immediate' or 'deterministic'.`);
   process.exit(1);
 }
 
@@ -153,8 +184,8 @@ function handleRun(args: string[], ctx: CliContext) {
   }
 
   const runtime = modules && symbolTable 
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format)
-    : buildRuntime(module, ctx.format);
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
+    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
 
   const [moduleName, functionName] = splitQualifiedName(fnName);
   if (moduleName && moduleName !== module.name.join(".")) {
@@ -199,9 +230,9 @@ function handleTest(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
-  const runtime = modules && symbolTable
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format)
-    : buildRuntime(module, ctx.format);
+  const runtime = modules && symbolTable 
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
+    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
   const outcomes = runTests(runtime);
 
   let failures = 0;
@@ -326,9 +357,9 @@ function handleExplain(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
-  const runtime = modules && symbolTable
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format)
-    : buildRuntime(module, ctx.format);
+  const runtime = modules && symbolTable 
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
+    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
 
   // Enable tracing
   runtime.tracing = true;
@@ -592,6 +623,7 @@ function printUsage() {
   console.log("  --format=text    Output human-readable text (default)");
   console.log("  --input=source   Treat input file as .lx source (default)");
   console.log("  --input=ast      Treat input file as JSON AST");
+  console.log("  --scheduler=immediate|deterministic  Control actor mailbox scheduling (default: immediate)");
 }
 
 main();

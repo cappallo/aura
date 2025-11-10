@@ -29,6 +29,7 @@ runCommand("node", [cliPath, "test", "examples/parallel.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
 runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_basic.lx"]);
+runCommand("node", [cliPath, "test", "--scheduler=deterministic", "examples/actor_scheduler.lx"]);
 runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
 runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
 

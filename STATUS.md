@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 10, 2025  
+**Last Updated:** November 11, 2025  
 **Overall Progress:** ~77% (Core language ~85% complete, LLM-first tooling ~75% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -343,10 +343,16 @@ Phase 5 (Long-term): Evolution
   - Typechecker links `on Message` handlers to ADT constructors, checking field presence and parameter types (or whole-message binding)
   - Added `examples/actor_type_error.lx` and CI gate to prove mismatches fail fast
 
+**New Work (November 11, 2025):**
+- ✅ Added deterministic actor scheduler + mailbox queue
+  - Runtime now supports queued delivery with `--scheduler=immediate|deterministic`
+  - New `Concurrent.step()` / `Concurrent.flush()` builtins let code process one or all pending messages (calls still require `[Concurrent]`)
+  - Added `examples/actor_scheduler.lx` and CI coverage via `npm test`
+
 With the core language, schemas, most LLM tooling, and basic actor syntax complete, the next priorities are:
 
 1. **Actor Runtime Implementation** (Priority 8, continuing):
-   - Expand mailbox scheduling (asynchronous queue processing + deterministic test mode)
+   - ✅ Expand mailbox scheduling (asynchronous queue processing + deterministic test mode via CLI `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
    - Implement structured async tasks within actors (`async_group`, scoped tasks)
    - Add richer actor reference typing (`ActorRef<MsgType>`) and lifecycle hooks
    - Test full actor lifecycle (spawn, send, supervised failure scenarios)

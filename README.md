@@ -34,6 +34,8 @@ Arguments to `lx run` and `lx explain` are parsed as JSON and converted to inter
 
 **AST input:** Use `--input=ast` to treat the file as JSON that already matches the Lx AST schema. This lets LLMs emit structured modules that can be executed directly without going through the parser. See `examples/ast_demo.json` for a complete sample.
 
+**Deterministic actor scheduling:** Pass `--scheduler=deterministic` to keep actor messages queued instead of processed immediately. Use the new `Concurrent.step()` (process one message, returns `Bool`) and `Concurrent.flush()` (drain the queue, returns `Int`) builtins—callers must declare the `[Concurrent]` effect. This makes mailbox delivery reproducible and testable; see `examples/actor_scheduler.lx`.
+
 **Holes:** Use `hole("label")` inside an expression to mark unfinished code. The typechecker reports any remaining holes (with their labels and locations) so you can commit partial work safely.
 
 **Patch-based edits:** Use `lx patch-body` to replace a function body by referencing the module + symbol name. Only the targeted function changes, which keeps diffs small for LLM workflows.
@@ -66,6 +68,9 @@ lx run --input=ast examples/ast_demo.json app.ast_demo.add 2 3
 # Patch a function body in-place
 lx patch-body examples/median.lx app.stats.median examples/patches/median_body.lxsnip
 lx check examples/median.lx
+
+# Deterministic actor scheduling
+lx test --scheduler=deterministic examples/actor_scheduler.lx
 ```
 
 ### Data-parallel primitives

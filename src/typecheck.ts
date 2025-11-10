@@ -226,6 +226,18 @@ const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([STRING_TYPE, payload], UNIT_TYPE);
     },
   },
+  "Concurrent.flush": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Concurrent"]),
+    instantiateType: () => makeFunctionType([], INT_TYPE),
+  },
+  "Concurrent.step": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Concurrent"]),
+    instantiateType: () => makeFunctionType([], BOOL_TYPE),
+  },
   "str.len": {
     arity: 1,
     paramNames: ["text"],

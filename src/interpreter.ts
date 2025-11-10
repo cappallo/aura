@@ -2,6 +2,8 @@ import * as ast from "./ast";
 import { alignCallArguments, CallArgIssue } from "./callargs";
 import { StructuredLog } from "./structured";
 
+export type SchedulerMode = "immediate" | "deterministic";
+
 export type Value =
   | { kind: "Int"; value: number }
   | { kind: "Bool"; value: boolean }
@@ -14,6 +16,10 @@ export type Value =
 export type ActorMessage = {
   msgType: string;
   args: Map<string, Value>;
+};
+
+type PendingActorDelivery = {
+  actorId: number;
 };
 
 export class ActorInstance {
@@ -45,6 +51,7 @@ export class ActorInstance {
 
   send(msgType: string, args: Map<string, Value>): void {
     this.mailbox.push({ msgType, args });
+    scheduleActorDelivery(this.runtime, this.id);
   }
 
   deliverMessage(msgType: string, args: Map<string, Value>): Value {
@@ -52,13 +59,13 @@ export class ActorInstance {
     return this.processMessage(message);
   }
 
-  processMessages(): void {
-    while (this.mailbox.length > 0) {
-      const msg = this.mailbox.shift();
-      if (!msg) break;
-      
-      this.processMessage(msg);
+  processNextQueuedMessage(): boolean {
+    const msg = this.mailbox.shift();
+    if (!msg) {
+      return false;
     }
+    this.processMessage(msg);
+    return true;
   }
 
   private processMessage(msg: ActorMessage): Value {
@@ -112,6 +119,9 @@ export type Runtime = {
   actors: Map<string, ast.ActorDecl>;
   actorInstances: Map<number, ActorInstance>;
   nextActorId: number;
+  schedulerMode: SchedulerMode;
+  pendingActorDeliveries: PendingActorDelivery[];
+  isProcessingActorMessages: boolean;
   // For multi-module support
   symbolTable?: import("./loader").SymbolTable;
   // Structured logging support
@@ -121,6 +131,10 @@ export type Runtime = {
   traces?: import("./structured").StructuredTrace[];
   tracing?: boolean;
   traceDepth?: number;
+};
+
+export type RuntimeOptions = {
+  schedulerMode?: SchedulerMode;
 };
 
 type FnContract = {
@@ -172,6 +186,8 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   parallel_for_each: ["list", "action"],
   "json.encode": ["value"],
   "json.decode": ["text"],
+  "Concurrent.flush": [],
+  "Concurrent.step": [],
 };
 
 function getBuiltinParamNames(name: string): string[] {
@@ -182,7 +198,11 @@ function getBuiltinParamNames(name: string): string[] {
   return names;
 }
 
-export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json"): Runtime {
+export function buildRuntime(
+  module: ast.Module,
+  outputFormat?: "text" | "json",
+  options?: RuntimeOptions,
+): Runtime {
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
   const tests: ast.TestDecl[] = [];
@@ -227,6 +247,9 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
     actors,
     actorInstances: new Map(),
     nextActorId: 1,
+    schedulerMode: options?.schedulerMode ?? "immediate",
+    pendingActorDeliveries: [],
+    isProcessingActorMessages: false,
   };
   if (outputFormat !== undefined) {
     runtime.outputFormat = outputFormat;
@@ -243,7 +266,8 @@ export function buildRuntime(module: ast.Module, outputFormat?: "text" | "json")
 export function buildMultiModuleRuntime(
   modules: import("./loader").ResolvedModule[],
   symbolTable: import("./loader").SymbolTable,
-  outputFormat?: "text" | "json"
+  outputFormat?: "text" | "json",
+  options?: RuntimeOptions,
 ): Runtime {
   const functions = new Map<string, ast.FnDecl>();
   const contracts = new Map<string, FnContract>();
@@ -328,6 +352,9 @@ export function buildMultiModuleRuntime(
     actors,
     actorInstances: new Map(),
     nextActorId: 1,
+    schedulerMode: options?.schedulerMode ?? "immediate",
+    pendingActorDeliveries: [],
+    isProcessingActorMessages: false,
     symbolTable,
   };
   if (outputFormat !== undefined) {
@@ -389,6 +416,53 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
   runtime.traceDepth = oldDepth;
 
   return returnValue;
+}
+
+function scheduleActorDelivery(runtime: Runtime, actorId: number): void {
+  runtime.pendingActorDeliveries.push({ actorId });
+  if (runtime.schedulerMode === "immediate") {
+    processActorDeliveries(runtime);
+  }
+}
+
+function processActorDeliveries(runtime: Runtime, limit?: number): number {
+  if (runtime.isProcessingActorMessages) {
+    return 0;
+  }
+  runtime.isProcessingActorMessages = true;
+  let processed = 0;
+  try {
+    while (runtime.pendingActorDeliveries.length > 0) {
+      const entry = runtime.pendingActorDeliveries.shift();
+      if (!entry) {
+        break;
+      }
+      const instance = runtime.actorInstances.get(entry.actorId);
+      if (!instance) {
+        continue;
+      }
+      const delivered = instance.processNextQueuedMessage();
+      if (!delivered) {
+        continue;
+      }
+      processed += 1;
+      if (limit !== undefined && processed >= limit) {
+        break;
+      }
+    }
+  } finally {
+    runtime.isProcessingActorMessages = false;
+  }
+
+  if (limit !== undefined && processed >= limit) {
+    return processed;
+  }
+
+  if (runtime.pendingActorDeliveries.length > 0) {
+    processed += processActorDeliveries(runtime, limit);
+  }
+
+  return processed;
 }
 
 export function runTests(runtime: Runtime): TestOutcome[] {
@@ -661,6 +735,10 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinJsonEncode(expr, env, runtime);
     case "json.decode":
       return builtinJsonDecode(expr, env, runtime);
+    case "Concurrent.flush":
+      return builtinConcurrentFlush(expr, env, runtime);
+    case "Concurrent.step":
+      return builtinConcurrentStep(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -1162,6 +1240,18 @@ function builtinJsonDecode(expr: ast.CallExpr, env: Env, runtime: Runtime): Valu
   }
 }
 
+function builtinConcurrentFlush(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("Concurrent.flush"), env, runtime);
+  const processed = processActorDeliveries(runtime);
+  return { kind: "Int", value: processed };
+}
+
+function builtinConcurrentStep(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("Concurrent.step"), env, runtime);
+  const processed = processActorDeliveries(runtime, 1);
+  return makeBool(processed > 0);
+}
+
 function valueToJsValue(value: Value): unknown {
   switch (value.kind) {
     case "Int":
@@ -1307,7 +1397,6 @@ function tryCallActorSend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
 
   const args = buildActorMessageArgs(handler, messageValue);
   instance.send(handler.msgTypeName, args);
-  instance.processMessages();
   return { kind: "Unit" };
 }
 

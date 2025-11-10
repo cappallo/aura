@@ -1,0 +1,32 @@
+module examples.actor_scheduler
+
+type CounterMsg = Increment | Get
+
+actor Counter(start: Int) {
+  state {
+    value: Int
+  }
+
+  on Increment() -> [Concurrent] Unit {
+    let value = value + 1
+  }
+
+  on Get() -> [Concurrent] Int {
+    return value
+  }
+}
+
+test deterministic_mailbox {
+  let counter = Counter.spawn(0)
+  counter.send(Increment { })
+  test.assert_equal(true, Concurrent.step())
+  test.assert_equal(1, Counter.Get(counter))
+
+  counter.send(Increment { })
+  counter.send(Increment { })
+  test.assert_equal(2, Concurrent.flush())
+  test.assert_equal(3, Counter.Get(counter))
+
+  test.assert_equal(false, Concurrent.step())
+  test.assert_equal(0, Concurrent.flush())
+}
