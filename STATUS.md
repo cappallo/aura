@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 9, 2025  
+**Last Updated:** November 10, 2025  
 **Overall Progress:** ~77% (Core language ~85% complete, LLM-first tooling ~75% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -39,7 +39,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Field access
 
 ### 4. Interpreter
-- ✅ Expression evaluation (~1940 lines total interpreter)
+- ✅ Expression evaluation (~2300 lines total interpreter)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
