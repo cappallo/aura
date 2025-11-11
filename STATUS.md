@@ -414,7 +414,11 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 1. Update AST definitions in `src/ast.ts`
 2. Extend grammar in `grammar/lx.pegjs`
 3. Update typechecker in `src/typecheck.ts`
-4. Extend interpreter in `src/interpreter.ts`
+4. Extend interpreter:
+   - Add evaluation logic in `src/interpreter/evaluation.ts`
+   - Update runtime setup in `src/interpreter/runtime.ts` if needed
+   - Add value operations in `src/interpreter/values.ts` if needed
+   - Export from `src/interpreter.ts` if adding public APIs
 5. Add example file in `examples/`
 6. Update this STATUS.md
 

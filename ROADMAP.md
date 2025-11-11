@@ -87,7 +87,16 @@ lx-core/
     types.ts
     parser.ts
     typecheck.ts
-    interpreter.ts
+    interpreter.ts         # Barrel export
+    interpreter/
+      types.ts
+      values.ts
+      errors.ts
+      evaluation.ts
+      runtime.ts
+      actors.ts
+      properties.ts
+      rng.ts
     cli.ts
   grammar.lx.pegjs
   examples/
@@ -668,36 +677,71 @@ Not fancy, but it demonstrates the pipeline and gives you a place to extend towa
 
 ---
 
-## 7. Interpreter (src/interpreter.ts)
+## 7. Interpreter (src/interpreter/)
 
-Very small, expression-only evaluator with an explicit environment:
+**Note:** The interpreter has been refactored into multiple focused modules for maintainability.
+
+### Module Organization
+
+The interpreter is now organized into the following files:
+
+- **`src/interpreter.ts`** - Barrel export providing public API
+- **`src/interpreter/types.ts`** - Core type definitions (`Value`, `Runtime`, `Env`, `EvalResult`, etc.)
+- **`src/interpreter/values.ts`** - Value construction, comparison, conversion utilities
+- **`src/interpreter/errors.ts`** - `RuntimeError` class
+- **`src/interpreter/evaluation.ts`** - Expression and statement evaluation logic
+- **`src/interpreter/runtime.ts`** - Runtime setup and test execution
+- **`src/interpreter/actors.ts`** - Actor system implementation
+- **`src/interpreter/properties.ts`** - Property-based testing with generation and shrinking
+- **`src/interpreter/rng.ts`** - Seeded RNG for deterministic testing
+
+### Public API (src/interpreter.ts)
 
 ```ts
-// src/interpreter.ts
+// Barrel export for clean imports
+export type {
+  SchedulerMode,
+  Value,
+  ActorMessage,
+  Runtime,
+  RuntimeOptions,
+} from "./interpreter/types";
+export { ActorInstance } from "./interpreter/actors";
+export { buildRuntime, buildMultiModuleRuntime, callFunction, runTests } from "./interpreter/runtime";
+export { prettyValue } from "./interpreter/values";
+export { RuntimeError } from "./interpreter/errors";
+```
 
-import {
-  Module,
-  Expr,
-  Stmt,
-  FnDecl,
-  Block,
-} from "./ast";
+### Example: Core Types (src/interpreter/types.ts)
 
+```ts
 export type Value =
   | { kind: "Int"; value: number }
   | { kind: "Bool"; value: boolean }
   | { kind: "String"; value: string }
   | { kind: "List"; elements: Value[] }
-  | { kind: "Record"; typeName: string; fields: Map<string, Value> }
+  | { kind: "Ctor"; name: string; fields: Map<string, Value> }
+  | { kind: "ActorRef"; id: number }
   | { kind: "Unit" };
 
 export type Env = Map<string, Value>;
 
-export type FnEnv = Map<string, FnDecl>;
+export type Runtime = {
+  module: ast.Module;
+  functions: Map<string, ast.FnDecl>;
+  contracts: Map<string, FnContract>;
+  tests: ast.TestDecl[];
+  properties: ast.PropertyDecl[];
+  typeDecls: Map<string, ast.TypeDecl>;
+  actors: Map<string, ast.ActorDecl>;
+  actorInstances: Map<number, ActorInstance>;
+  // ... additional runtime state
+};
+```
 
-export function evalModule(mod: Module): { functions: FnEnv } {
-  const fns: FnEnv = new Map();
-  for (const decl of mod.decls) {
+### Example: Evaluation (src/interpreter/evaluation.ts)
+
+Simple expression evaluator with explicit environment:
     if (decl.kind === "FnDecl") {
       fns.set(decl.name, decl);
     }

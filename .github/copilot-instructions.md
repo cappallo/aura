@@ -20,7 +20,14 @@ When implementing features for the Lx programming language:
    - Update AST definitions in `src/ast.ts` if needed
    - Extend grammar in `grammar/lx.pegjs` for new syntax
    - Update typechecker in `src/typecheck.ts` for new validations
-   - Extend interpreter in `src/interpreter.ts` for runtime behavior
+   - Extend interpreter for runtime behavior:
+     - Core evaluation logic: `src/interpreter/evaluation.ts`
+     - Runtime setup: `src/interpreter/runtime.ts`
+     - Type definitions: `src/interpreter/types.ts`
+     - Value operations: `src/interpreter/values.ts`
+     - Actor system: `src/interpreter/actors.ts`
+     - Property testing: `src/interpreter/properties.ts`
+     - Main exports: `src/interpreter.ts` (barrel file)
    - Add builtin functions if needed (both in typecheck and interpreter)
 
 4. **Testing requirements:**
@@ -76,12 +83,27 @@ When implementing features for the Lx programming language:
 
 ## Interpreter Guidelines
 
-- Use `Value` union type for all runtime values
+The interpreter is organized into multiple focused modules:
+
+### Module Structure
+- **`src/interpreter/types.ts`** - Core type definitions (`Value`, `Runtime`, `Env`, `EvalResult`)
+- **`src/interpreter/values.ts`** - Value construction, comparison, conversion, and defaults
+- **`src/interpreter/errors.ts`** - `RuntimeError` class
+- **`src/interpreter/evaluation.ts`** - Expression and statement evaluation (`evalExpr`, `evalBlock`, `evalStmt`)
+- **`src/interpreter/runtime.ts`** - Runtime setup (`buildRuntime`, `callFunction`, `runTests`)
+- **`src/interpreter/actors.ts`** - Actor system (`ActorInstance`, message delivery, scheduling)
+- **`src/interpreter/properties.ts`** - Property-based testing (`runProperty`, generation, shrinking)
+- **`src/interpreter/rng.ts`** - Seeded RNG for deterministic testing
+- **`src/interpreter.ts`** - Barrel export for public API
+
+### Key Conventions
+- Use `Value` union type for all runtime values (defined in `types.ts`)
 - Return `EvalResult` (value or return) from blocks/statements
 - Pass `Runtime` context through all eval functions
-- Implement builtins as special cases in `evalExpr`
-- Use `RuntimeError` for execution failures
+- Implement builtins in `evaluation.ts` with parameter metadata in `BUILTIN_PARAM_NAMES`
+- Use `RuntimeError` for execution failures (defined in `errors.ts`)
 - Support `result` binding in contract `ensures` clauses
+- Actor instances receive `evalBlock` as a callback to avoid circular dependencies
 
 ## Example Structure
 
