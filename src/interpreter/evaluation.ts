@@ -1,157 +1,28 @@
-import * as ast from "./ast";
-import { alignCallArguments, CallArgIssue } from "./callargs";
-import { StructuredLog } from "./structured";
+import * as ast from "../ast";
+import { alignCallArguments, CallArgIssue } from "../callargs";
+import { ActorInstance, processActorDeliveries } from "./actors";
+import { RuntimeError } from "./errors";
+import { Env, EvalResult, MatchEnv, Runtime, TestOutcome, Value } from "./types";
+import {
+  buildTypeArgMap,
+  defaultValueForType,
+  findTypeDecl,
+  jsValueToValue,
+  makeActorRefValue,
+  makeBool,
+  makeCtor,
+  makeInt,
+  prettyValue,
+  substituteTypeExpr,
+  valueEquals,
+  valueToJsValue,
+} from "./values";
 
-export type SchedulerMode = "immediate" | "deterministic";
-
-export type Value =
-  | { kind: "Int"; value: number }
-  | { kind: "Bool"; value: boolean }
-  | { kind: "String"; value: string }
-  | { kind: "List"; elements: Value[] }
-  | { kind: "Ctor"; name: string; fields: Map<string, Value> }
-  | { kind: "ActorRef"; id: number }
-  | { kind: "Unit" };
-
-export type ActorMessage = {
-  msgType: string;
-  args: Map<string, Value>;
-};
-
-type PendingActorDelivery = {
-  actorId: number;
-};
-
-export class ActorInstance {
-  id: number;
-  decl: ast.ActorDecl;
-  initParams: Map<string, Value>;
-  state: Map<string, Value>;
-  mailbox: ActorMessage[];
-  runtime: Runtime;
-
-  constructor(
-    id: number,
-    decl: ast.ActorDecl,
-    initParams: Map<string, Value>,
-    runtime: Runtime
-  ) {
-    this.id = id;
-    this.decl = decl;
-    this.initParams = initParams;
-    this.state = new Map();
-    this.mailbox = [];
-    this.runtime = runtime;
-    
-    // Initialize state fields to default values
-    for (const field of decl.stateFields) {
-      this.state.set(field.name, defaultValueForType(field.type, runtime));
-    }
-  }
-
-  send(msgType: string, args: Map<string, Value>): void {
-    this.mailbox.push({ msgType, args });
-    scheduleActorDelivery(this.runtime, this.id);
-  }
-
-  deliverMessage(msgType: string, args: Map<string, Value>): Value {
-    const message: ActorMessage = { msgType, args };
-    return this.processMessage(message);
-  }
-
-  processNextQueuedMessage(): boolean {
-    const msg = this.mailbox.shift();
-    if (!msg) {
-      return false;
-    }
-    this.processMessage(msg);
-    return true;
-  }
-
-  private processMessage(msg: ActorMessage): Value {
-    // Find the handler for this message type
-    const handler = this.decl.handlers.find(h => h.msgTypeName === msg.msgType);
-    if (!handler) {
-      throw new RuntimeError(`Actor '${this.decl.name}' has no handler for message type '${msg.msgType}'`);
-    }
-
-    // Build environment with init params, state fields, and message params
-    const env = new Map<string, Value>();
-    
-    // Add init params
-    for (const [key, value] of this.initParams.entries()) {
-      env.set(key, value);
-    }
-    
-    // Add state fields
-    for (const [key, value] of this.state.entries()) {
-      env.set(key, value);
-    }
-    
-    // Add message params
-    for (const [key, value] of msg.args.entries()) {
-      env.set(key, value);
-    }
-
-    // Execute handler body
-    const result = evalBlock(handler.body, env, this.runtime);
-    
-    // Update state after handler execution (state mutations should be captured)
-    // For now, we assume state fields can be reassigned in the handler
-    for (const field of this.decl.stateFields) {
-      const updatedValue = env.get(field.name);
-      if (updatedValue !== undefined) {
-        this.state.set(field.name, updatedValue);
-      }
-    }
-
-    return result.value;
-  }
-}
-
-export type Runtime = {
-  module: ast.Module;
-  functions: Map<string, ast.FnDecl>;
-  contracts: Map<string, FnContract>;
-  tests: ast.TestDecl[];
-  properties: ast.PropertyDecl[];
-  typeDecls: Map<string, ast.TypeDecl>;
-  actors: Map<string, ast.ActorDecl>;
-  actorInstances: Map<number, ActorInstance>;
-  nextActorId: number;
-  schedulerMode: SchedulerMode;
-  pendingActorDeliveries: PendingActorDelivery[];
-  isProcessingActorMessages: boolean;
-  // For multi-module support
-  symbolTable?: import("./loader").SymbolTable;
-  // Structured logging support
-  outputFormat?: "text" | "json";
-  logs?: StructuredLog[];
-  // Execution tracing support
-  traces?: import("./structured").StructuredTrace[];
-  tracing?: boolean;
-  traceDepth?: number;
-  // Deterministic RNG for testing
-  rng: SeededRNG | null;
-};
-
-export type RuntimeOptions = {
-  schedulerMode?: SchedulerMode;
-  seed?: number;
-};
-
-type FnContract = {
-  requires: ast.Expr[];
-  ensures: ast.Expr[];
-};
-
-type Env = Map<string, Value>;
-
-type EvalResult =
-  | { type: "value"; value: Value }
-  | { type: "return"; value: Value };
-
-type MatchEnv = Env;
+const DEFAULT_PROPERTY_RUNS = 50;
+const MAX_SHRINK_ATTEMPTS = 100;
+const MAX_GENERATION_ATTEMPTS = 100;
+const MAX_GENERATION_DEPTH = 4;
+const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
 type AsyncTask = {
   env: Env;
@@ -164,46 +35,6 @@ type AsyncTask = {
 type AsyncGroupContext = {
   tasks: AsyncTask[];
 };
-
-type TestOutcome = {
-  kind: "test" | "property";
-  name: string;
-  success: boolean;
-  error?: unknown;
-};
-
-/**
- * Seeded pseudo-random number generator using xorshift32 algorithm.
- * Provides deterministic random sequences for testing.
- */
-class SeededRNG {
-  private state: number;
-
-  constructor(seed: number) {
-    // Ensure seed is a non-zero 32-bit integer
-    this.state = seed === 0 ? 1 : seed >>> 0;
-  }
-
-  /**
-   * Generate next random number in [0, 1) range
-   */
-  next(): number {
-    // xorshift32 algorithm
-    let x = this.state;
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    this.state = x >>> 0; // Keep as unsigned 32-bit int
-    // Convert to [0, 1) range
-    return this.state / 0x100000000;
-  }
-}
-
-const DEFAULT_PROPERTY_RUNS = 50;
-const MAX_SHRINK_ATTEMPTS = 100;
-const MAX_GENERATION_ATTEMPTS = 100;
-const MAX_GENERATION_DEPTH = 4;
-const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
 const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.len": ["list"],
@@ -238,176 +69,6 @@ function getBuiltinParamNames(name: string): string[] {
     throw new RuntimeError(`Internal error: missing parameter metadata for builtin '${name}'`);
   }
   return names;
-}
-
-export function buildRuntime(
-  module: ast.Module,
-  outputFormat?: "text" | "json",
-  options?: RuntimeOptions,
-): Runtime {
-  const functions = new Map<string, ast.FnDecl>();
-  const contracts = new Map<string, FnContract>();
-  const tests: ast.TestDecl[] = [];
-  const properties: ast.PropertyDecl[] = [];
-  const typeDecls = new Map<string, ast.TypeDecl>();
-  const actors = new Map<string, ast.ActorDecl>();
-  const modulePrefix = module.name.join(".");
-
-  for (const decl of module.decls) {
-    if (decl.kind === "FnDecl") {
-      functions.set(decl.name, decl);
-    } else if (decl.kind === "FnContractDecl") {
-      contracts.set(decl.name, {
-        requires: decl.requires,
-        ensures: decl.ensures,
-      });
-    } else if (decl.kind === "TestDecl") {
-      tests.push(decl);
-    } else if (decl.kind === "PropertyDecl") {
-      properties.push(decl);
-    } else if (decl.kind === "ActorDecl") {
-      actors.set(decl.name, decl);
-      if (modulePrefix) {
-        actors.set(`${modulePrefix}.${decl.name}`, decl);
-      }
-    } else if (
-      decl.kind === "AliasTypeDecl" ||
-      decl.kind === "RecordTypeDecl" ||
-      decl.kind === "SumTypeDecl"
-    ) {
-      typeDecls.set(decl.name, decl);
-    }
-  }
-
-  const runtime: Runtime = { 
-    module, 
-    functions, 
-    contracts, 
-    tests, 
-    properties, 
-    typeDecls,
-    actors,
-    actorInstances: new Map(),
-    nextActorId: 1,
-    schedulerMode: options?.schedulerMode ?? "immediate",
-    pendingActorDeliveries: [],
-    isProcessingActorMessages: false,
-    rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
-  };
-  if (outputFormat !== undefined) {
-    runtime.outputFormat = outputFormat;
-    if (outputFormat === "json") {
-      runtime.logs = [];
-    }
-  }
-  return runtime;
-}
-
-/**
- * Build runtime from multiple modules with cross-module symbol resolution
- */
-export function buildMultiModuleRuntime(
-  modules: import("./loader").ResolvedModule[],
-  symbolTable: import("./loader").SymbolTable,
-  outputFormat?: "text" | "json",
-  options?: RuntimeOptions,
-): Runtime {
-  const functions = new Map<string, ast.FnDecl>();
-  const contracts = new Map<string, FnContract>();
-  const tests: ast.TestDecl[] = [];
-  const properties: ast.PropertyDecl[] = [];
-  const typeDecls = new Map<string, ast.TypeDecl>();
-  
-  // Primary module is the last one loaded
-  const primaryModule = modules[modules.length - 1]!.ast;
-  
-  // Collect functions from all modules with qualified names
-  for (const resolvedModule of modules) {
-    const module = resolvedModule.ast;
-    const modulePrefix = module.name.join(".");
-    
-    for (const decl of module.decls) {
-      if (decl.kind === "FnDecl") {
-        const qualifiedName = `${modulePrefix}.${decl.name}`;
-        functions.set(qualifiedName, decl);
-        // Also add unqualified name if it's the primary module
-        if (module === primaryModule) {
-          functions.set(decl.name, decl);
-        }
-      } else if (decl.kind === "FnContractDecl") {
-        const qualifiedName = `${modulePrefix}.${decl.name}`;
-        contracts.set(qualifiedName, {
-          requires: decl.requires,
-          ensures: decl.ensures,
-        });
-        if (module === primaryModule) {
-          contracts.set(decl.name, {
-            requires: decl.requires,
-            ensures: decl.ensures,
-          });
-        }
-        } else if (decl.kind === "TestDecl") {
-        // Only run tests from the primary module
-        if (module === primaryModule) {
-          tests.push(decl);
-        }
-        } else if (decl.kind === "PropertyDecl") {
-          if (module === primaryModule) {
-            properties.push(decl);
-          }
-        } else if (
-          decl.kind === "AliasTypeDecl" ||
-          decl.kind === "RecordTypeDecl" ||
-          decl.kind === "SumTypeDecl"
-        ) {
-          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
-          typeDecls.set(qualifiedName, decl);
-          if (module === primaryModule) {
-            typeDecls.set(decl.name, decl);
-          }
-      }
-    }
-  }
-  
-  const actors = new Map<string, ast.ActorDecl>();
-  for (const resolvedModule of modules) {
-    const module = resolvedModule.ast;
-    const modulePrefix = module.name.join(".");
-    
-    for (const decl of module.decls) {
-      if (decl.kind === "ActorDecl") {
-        const qualifiedName = `${modulePrefix}.${decl.name}`;
-        actors.set(qualifiedName, decl);
-        if (module === primaryModule) {
-          actors.set(decl.name, decl);
-        }
-      }
-    }
-  }
-  
-  const runtime: Runtime = {
-    module: primaryModule,
-    functions,
-    contracts,
-    tests,
-    properties,
-    typeDecls,
-    actors,
-    actorInstances: new Map(),
-    nextActorId: 1,
-    schedulerMode: options?.schedulerMode ?? "immediate",
-    pendingActorDeliveries: [],
-    isProcessingActorMessages: false,
-    symbolTable,
-    rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
-  };
-  if (outputFormat !== undefined) {
-    runtime.outputFormat = outputFormat;
-    if (outputFormat === "json") {
-      runtime.logs = [];
-    }
-  }
-  return runtime;
 }
 
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
@@ -460,53 +121,6 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
   runtime.traceDepth = oldDepth;
 
   return returnValue;
-}
-
-function scheduleActorDelivery(runtime: Runtime, actorId: number): void {
-  runtime.pendingActorDeliveries.push({ actorId });
-  if (runtime.schedulerMode === "immediate") {
-    processActorDeliveries(runtime);
-  }
-}
-
-function processActorDeliveries(runtime: Runtime, limit?: number): number {
-  if (runtime.isProcessingActorMessages) {
-    return 0;
-  }
-  runtime.isProcessingActorMessages = true;
-  let processed = 0;
-  try {
-    while (runtime.pendingActorDeliveries.length > 0) {
-      const entry = runtime.pendingActorDeliveries.shift();
-      if (!entry) {
-        break;
-      }
-      const instance = runtime.actorInstances.get(entry.actorId);
-      if (!instance) {
-        continue;
-      }
-      const delivered = instance.processNextQueuedMessage();
-      if (!delivered) {
-        continue;
-      }
-      processed += 1;
-      if (limit !== undefined && processed >= limit) {
-        break;
-      }
-    }
-  } finally {
-    runtime.isProcessingActorMessages = false;
-  }
-
-  if (limit !== undefined && processed >= limit) {
-    return processed;
-  }
-
-  if (runtime.pendingActorDeliveries.length > 0) {
-    processed += processActorDeliveries(runtime, limit);
-  }
-
-  return processed;
 }
 
 export function runTests(runtime: Runtime): TestOutcome[] {
@@ -815,17 +429,6 @@ function evalBinary(expr: ast.BinaryExpr, env: Env, runtime: Runtime): Value {
   }
 }
 
-function makeInt(value: number | Value): Value {
-  if (typeof value === "number") {
-    return { kind: "Int", value };
-  }
-  return value;
-}
-
-function makeBool(value: boolean): Value {
-  return { kind: "Bool", value };
-}
-
 function binaryIntOp(left: Value, right: Value, op: (a: number, b: number) => number | boolean): number {
   if (left.kind !== "Int" || right.kind !== "Int") {
     throw new RuntimeError("Arithmetic operations require integer operands");
@@ -981,7 +584,7 @@ function getArgumentByName(
 function resolveFunctionReference(name: string, runtime: Runtime, context: string): ast.FnDecl {
   let resolvedName = name;
   if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
+    const { resolveIdentifier } = require("../loader");
     resolvedName = resolveIdentifier(name, runtime.module, runtime.symbolTable);
   }
   const fn = runtime.functions.get(resolvedName);
@@ -1403,66 +1006,6 @@ function builtinConcurrentStep(expr: ast.CallExpr, env: Env, runtime: Runtime): 
   return makeBool(processed > 0);
 }
 
-function valueToJsValue(value: Value): unknown {
-  switch (value.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return value.value;
-    case "Unit":
-      return null;
-    case "List":
-      return value.elements.map(valueToJsValue);
-    case "Ctor": {
-      // For all constructors, use the standard _constructor format
-      const obj: Record<string, unknown> = { _constructor: value.name };
-      for (const [fieldName, fieldValue] of value.fields.entries()) {
-        obj[fieldName] = valueToJsValue(fieldValue);
-      }
-      return obj;
-    }
-  }
-}
-
-function jsValueToValue(jsValue: unknown): Value {
-  if (jsValue === null || jsValue === undefined) {
-    return { kind: "Unit" };
-  }
-  if (typeof jsValue === "number") {
-    return { kind: "Int", value: Math.floor(jsValue) };
-  }
-  if (typeof jsValue === "boolean") {
-    return { kind: "Bool", value: jsValue };
-  }
-  if (typeof jsValue === "string") {
-    return { kind: "String", value: jsValue };
-  }
-  if (Array.isArray(jsValue)) {
-    return { kind: "List", elements: jsValue.map(jsValueToValue) };
-  }
-  if (typeof jsValue === "object") {
-    const obj = jsValue as Record<string, unknown>;
-    const constructor = obj._constructor;
-    if (typeof constructor === "string") {
-      // Convert back to constructor
-      const fields = new Map<string, Value>();
-      for (const [key, val] of Object.entries(obj)) {
-        if (key !== "_constructor") {
-          fields.set(key, jsValueToValue(val));
-        }
-      }
-      return { kind: "Ctor", name: constructor, fields };
-    }
-    // Generic object - convert to record-like constructor
-    const fields = new Map<string, Value>();
-    for (const [key, val] of Object.entries(obj)) {
-      fields.set(key, jsValueToValue(val));
-    }
-    return { kind: "Ctor", name: "Object", fields };
-  }
-  return { kind: "Unit" };
-}
-
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   const actorSendResult = tryCallActorSend(expr, env, runtime);
   if (actorSendResult !== null) {
@@ -1478,7 +1021,7 @@ function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
   
   // Resolve identifier if we have a symbol table
   if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
+    const { resolveIdentifier } = require("../loader");
     calleeName = resolveIdentifier(expr.callee, runtime.module, runtime.symbolTable);
   }
   
@@ -1505,7 +1048,7 @@ function tryCallActorSend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
   }
 
   if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
+    const { resolveIdentifier } = require("../loader");
     const resolved = resolveIdentifier(expr.callee, runtime.module, runtime.symbolTable);
     if (runtime.functions.has(resolved)) {
       return null;
@@ -1654,7 +1197,7 @@ function resolveActorIdentifier(name: string, runtime: Runtime): string | null {
     return name;
   }
   if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
+    const { resolveIdentifier } = require("../loader");
     const resolved = resolveIdentifier(name, runtime.module, runtime.symbolTable);
     if (runtime.actors.has(resolved)) {
       return resolved;
@@ -1689,7 +1232,7 @@ function executeActorSpawn(
 
   const id = runtime.nextActorId;
   runtime.nextActorId += 1;
-  const instance = new ActorInstance(id, actorDecl, values, runtime);
+  const instance = new ActorInstance(id, actorDecl, values, runtime, evalBlock);
   runtime.actorInstances.set(id, instance);
   return makeActorRefValue(id);
 }
@@ -2226,123 +1769,6 @@ function shrinkCounterexample(
   return currentEnv;
 }
 
-function findTypeDecl(runtime: Runtime, name: string): ast.TypeDecl | undefined {
-  if (runtime.typeDecls.has(name)) {
-    return runtime.typeDecls.get(name);
-  }
-  if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
-    const qualified = resolveIdentifier(name, runtime.module, runtime.symbolTable);
-    return runtime.typeDecls.get(qualified);
-  }
-  return undefined;
-}
-
-function buildTypeArgMap(params: string[], args: ast.TypeExpr[]): Map<string, ast.TypeExpr> {
-  const map = new Map<string, ast.TypeExpr>();
-  for (let i = 0; i < params.length; i += 1) {
-    const paramName = params[i]!;
-    const arg = args[i] ?? { kind: "TypeName", name: "Int", typeArgs: [] };
-    map.set(paramName, arg);
-  }
-  return map;
-}
-
-function substituteTypeExpr(
-  typeExpr: ast.TypeExpr,
-  substitutions: Map<string, ast.TypeExpr>,
-  depth = 0,
-): ast.TypeExpr {
-  if (depth > 10) {
-    return typeExpr;
-  }
-
-  if (typeExpr.kind === "TypeName") {
-    if (typeExpr.typeArgs.length > 0) {
-      return {
-        kind: "TypeName",
-        name: typeExpr.name,
-        typeArgs: typeExpr.typeArgs.map((arg) => substituteTypeExpr(arg, substitutions, depth + 1)),
-      };
-    }
-    const replacement = substitutions.get(typeExpr.name);
-    if (replacement) {
-      return substituteTypeExpr(replacement, substitutions, depth + 1);
-    }
-    return typeExpr;
-  }
-
-  if (typeExpr.kind === "OptionalType") {
-    return {
-      kind: "OptionalType",
-      inner: substituteTypeExpr(typeExpr.inner, substitutions, depth + 1),
-    };
-  }
-
-  return typeExpr;
-}
-
-function defaultValueForType(typeExpr: ast.TypeExpr, runtime: Runtime): Value {
-  if (typeExpr.kind === "OptionalType") {
-    return makeCtor("None");
-  }
-
-  if (typeExpr.kind === "TypeName") {
-    switch (typeExpr.name) {
-      case "Int":
-        return { kind: "Int", value: 0 };
-      case "Bool":
-        return { kind: "Bool", value: false };
-      case "String":
-        return { kind: "String", value: "" };
-      case "Unit":
-        return { kind: "Unit" };
-      case "ActorRef":
-        return makeActorRefValue(-1);
-      case "List":
-        return { kind: "List", elements: [] };
-      default:
-        break;
-    }
-
-    const decl = findTypeDecl(runtime, typeExpr.name);
-    if (!decl) {
-      return { kind: "Unit" };
-    }
-
-    if (decl.kind === "AliasTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const target = substituteTypeExpr(decl.target, substitutions);
-      return defaultValueForType(target, runtime);
-    }
-
-    if (decl.kind === "RecordTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const fields = new Map<string, Value>();
-      for (const field of decl.fields) {
-        const fieldType = substituteTypeExpr(field.type, substitutions);
-        fields.set(field.name, defaultValueForType(fieldType, runtime));
-      }
-      return { kind: "Ctor", name: decl.name, fields };
-    }
-
-    if (decl.kind === "SumTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const variant = decl.variants.find((candidate) => candidate.fields.length === 0) ?? decl.variants[0];
-      if (!variant) {
-        return { kind: "Unit" };
-      }
-      const fields = new Map<string, Value>();
-      for (const field of variant.fields) {
-        const fieldType = substituteTypeExpr(field.type, substitutions);
-        fields.set(field.name, defaultValueForType(fieldType, runtime));
-      }
-      return { kind: "Ctor", name: variant.name, fields };
-    }
-  }
-
-  return { kind: "Unit" };
-}
 
 function randomInt(rng: () => number): number {
   return Math.floor(rng() * 41) - 20;
@@ -2360,20 +1786,6 @@ function randomString(rng: () => number): string {
     result += RANDOM_STRING_CHARS[index] ?? "a";
   }
   return result;
-}
-
-function makeActorRefValue(id: number): Value {
-  return { kind: "ActorRef", id };
-}
-
-function makeCtor(name: string, entries?: [string, Value][]): Value {
-  const fields = new Map<string, Value>();
-  if (entries) {
-    for (const [fieldName, fieldValue] of entries) {
-      fields.set(fieldName, fieldValue);
-    }
-  }
-  return { kind: "Ctor", name, fields };
 }
 
 function evalRecord(expr: ast.RecordExpr, env: Env, runtime: Runtime): Value {
@@ -2454,77 +1866,6 @@ function enforceContractClauses(
   }
 }
 
-function valueEquals(a: Value, b: Value): boolean {
-  if (a.kind !== b.kind) {
-    return false;
-  }
-  switch (a.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return a.value === (b as typeof a).value;
-    case "Unit":
-      return true;
-    case "List": {
-      const bb = b as typeof a;
-      if (a.elements.length !== bb.elements.length) {
-        return false;
-      }
-      for (let i = 0; i < a.elements.length; i += 1) {
-        const left = a.elements[i];
-        const right = bb.elements[i];
-        if (left === undefined || right === undefined || !valueEquals(left, right)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case "Ctor": {
-      const bb = b as typeof a;
-      if (a.name !== bb.name || a.fields.size !== bb.fields.size) {
-        return false;
-      }
-      for (const [key, val] of a.fields.entries()) {
-        const other = bb.fields.get(key);
-        if (!other || !valueEquals(val, other)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case "ActorRef": {
-      const bb = b as typeof a;
-      return a.id === bb.id;
-    }
-    default:
-      return false;
-  }
-}
-
-export function prettyValue(value: Value): unknown {
-  switch (value.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return value.value;
-    case "Unit":
-      return null;
-    case "List":
-      return value.elements.map((element) => prettyValue(element));
-    case "Ctor": {
-      const obj: Record<string, unknown> = {};
-      for (const [key, fieldValue] of value.fields.entries()) {
-        obj[key] = prettyValue(fieldValue);
-      }
-      return { [value.name]: obj };
-    }
-    case "ActorRef":
-      return { ActorRef: value.id };
-    default:
-      return null;
-  }
-}
-
 function addTrace(
   runtime: Runtime,
   stepType: "call" | "return" | "let" | "expr" | "match",
@@ -2535,10 +1876,10 @@ function addTrace(
   if (!runtime.tracing || !runtime.traces) {
     return;
   }
-  
+
   const depth = runtime.traceDepth ?? 0;
-  const { sourceLocationToErrorLocation } = require("./structured");
-  
+  const { sourceLocationToErrorLocation } = require("../structured");
+
   runtime.traces.push({
     kind: "trace",
     stepType,
@@ -2547,11 +1888,4 @@ function addTrace(
     location: location ? sourceLocationToErrorLocation(location) : undefined,
     depth,
   });
-}
-
-export class RuntimeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RuntimeError";
-  }
 }
