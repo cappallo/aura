@@ -1,0 +1,25 @@
+module examples.async_group_type_error
+
+fn bad_async_group() -> Unit {
+  async_group {
+    async {
+      let marker = 1
+    }
+  }
+}
+
+fn task_with_return() -> [Concurrent] Int {
+  let value = 1
+  async_group {
+    async {
+      return value
+    }
+  }
+  return value
+}
+
+fn orphan_async() -> [Concurrent] Unit {
+  async {
+    let value = 1
+  }
+}

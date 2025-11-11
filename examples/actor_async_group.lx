@@ -1,0 +1,41 @@
+module examples.actor_async_group
+
+type CounterMsg = Add { amount: Int } | AddWithBonus { amount: Int } | Get
+
+actor Counter() {
+  state {
+    total: Int
+  }
+
+  on Add(amount: Int) -> [Concurrent] Unit {
+    async_group {
+      async {
+        let total = total + amount
+      }
+    }
+  }
+
+  on AddWithBonus(amount: Int) -> [Concurrent] Unit {
+    async_group {
+      async {
+        let total = total + amount
+      }
+      async {
+        let total = total + 1
+      }
+    }
+  }
+
+  on Get() -> [Concurrent] Int {
+    return total
+  }
+}
+
+test counter_async_group {
+  let counter = Counter.spawn()
+  counter.send(Add { amount: 4 })
+  counter.send(AddWithBonus { amount: 5 })
+  Concurrent.flush()
+  let total = Counter.Get(counter)
+  test.assert_equal(10, total)
+}

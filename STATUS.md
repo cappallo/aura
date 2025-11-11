@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 11, 2025  
+**Last Updated:** November 10, 2025  
 **Overall Progress:** ~77% (Core language ~85% complete, LLM-first tooling ~75% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -10,8 +10,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## ✅ Fully Implemented (Core v0.1)
 
 ### 1. Language Infrastructure
-- ✅ PEG parser (Peggy-based) with ~675 lines grammar
-- ✅ Full AST definitions in TypeScript (300 lines)
+- ✅ PEG parser (Peggy-based) with ~706 lines grammar
+- ✅ Full AST definitions in TypeScript (~320 lines)
 - ✅ Parser wrapper with error handling
 - ✅ CLI with `run`, `test`, `check`, `format`, `explain`, and `patch-body` commands
 - ✅ Build system with automatic parser generation
@@ -39,7 +39,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Field access
 
 ### 4. Interpreter
-- ✅ Expression evaluation (~2300 lines total interpreter)
+- ✅ Expression evaluation (~2432 lines total interpreter)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
@@ -96,17 +96,17 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ### 1. Actors & Concurrency (§6 of SPEC, CONCURRENCY.md)
 **Note:** See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design specification.
-- 🟡 `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
-- 🟡 Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported**
-- ✅ Actor references and `.send()` syntax (SPEC.md §6.2) - **`counter.send(MessageCtor { ... })` supported with ActorRef runtime + typechecking (synchronous mailbox delivery)**
-- 🟡 Actor references and message dispatch (spawn + handler call helpers implemented; deterministic scheduling still pending)
+- ✅ `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
+- ✅ Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported, validated in typechecker**
+- ✅ Actor references and `.send()` syntax (SPEC.md §6.2) - **`counter.send(MessageCtor { ... })` supported with ActorRef runtime + typechecking**
+- ✅ Actor message dispatch (spawn + handler call helpers implemented)
 - ✅ Handler message validation ensures `on Message` definitions align with ADT constructors and field types
-- 🟡 Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2) - **Basic infrastructure in place**
-- 🟡 Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
-- ❌ Structured async tasks within actors (`async_group`, scoped tasks) (CONCURRENCY.md §4)
+- ✅ Mailbox semantics (ordered, at-least-once delivery) (CONCURRENCY.md §2.2) - **Queueing infrastructure implemented**
+- ✅ Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
+- 🟡 Structured async tasks within actors (`async_group`, scoped tasks) — syntax/typechecking/runtime sequential execution implemented (CONCURRENCY.md §4); concurrent execution with cancellation pending
 - 🟡 Data-parallel primitives (`parallel_map`, `parallel_fold`, `parallel_for_each`) (CONCURRENCY.md §5) - **Builtins + purity checks implemented; real parallel execution pending**
 - ❌ Supervision trees and failure handling (CONCURRENCY.md §7)
-- ❌ Deterministic scheduling mode for testing (CONCURRENCY.md §8)
+- ✅ Deterministic scheduling mode for testing (CONCURRENCY.md §8) - **`--scheduler=immediate|deterministic` flag + `Concurrent.step/flush` builtins**
 - ✅ `Concurrent` effect for actor/task operations (CONCURRENCY.md §6) - **Built-in effect added**
 
 ### 2. Refactors (§10.1 of SPEC)
@@ -134,9 +134,9 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §3.3 | Types (Product/Sum/Alias) | ✅ Complete |
 | §3.4 | Functions & effects | ✅ Complete |
 | §4 | Type system | ✅ Complete |
-| §5 | Effect system | 🟡 Declarations + checking, no polymorphism |
-| §6 + CONCURRENCY.md | Actors & Concurrency | 🟡 Syntax & typechecking, runtime partially implemented |
-| §7.1-7.2 | Contracts | 🟡 Runtime only, no SMT verification |
+| §5 | Effect system | 🟡 Declarations + checking complete; effect polymorphism not implemented |
+| §6 + CONCURRENCY.md | Actors & Concurrency | 🟡 Core features complete (syntax, typechecking, mailbox, scheduling); supervision trees pending |
+| §7.1-7.2 | Contracts | 🟡 Runtime enforcement complete; static SMT verification not implemented |
 | §7.3 | Tests | ✅ Complete |
 | §7.4 | Properties | ✅ Complete |
 | §8 | Schemas & I/O | ✅ Complete (HTTP bindings future enhancement) |
@@ -147,7 +147,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 30+ example files including:
+The implementation successfully runs 36 example files including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -271,7 +271,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Design JSON AST input format for direct LLM generation (THOUGHTS.md §1.2)
 - [x] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [x] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
-- [x] Add named arguments support (THOUGHTS.md §1.3)
+- [x] Add named arguments support (`name: value` syntax in calls) (THOUGHTS.md §1.3)
 - [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
 
 **Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Patch-based editing is implemented via `lx patch-body` command which rewrites function bodies by symbol ID. AST input format (`--input=ast`) allows direct JSON AST execution. All core LLM tooling commands (`format`, `explain`, `patch-body`) are fully functional in the CLI.
@@ -305,16 +305,16 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 └─ AST input format → ✅ Complete (Priority 7)
 
 Phase 4 (Mid-term): Concurrency & Tools
-├─ Actor model implementation (CONCURRENCY.md) → Priority 8 (IN PROGRESS)
-│  ├─ Basic actor declarations with typed state → ✅ Syntax & typechecking complete
-│  ├─ Message protocols and handlers → ✅ Syntax & typechecking complete
-│  ├─ Actor spawning and message sending → 🟡 Runtime implemented for synchronous `.send` + helper dispatch
-│  ├─ Structured async tasks within actors → ❌ Not started
-│  ├─ Supervision trees → ❌ Not started
-│  └─ Deterministic scheduling for tests → ❌ Not started
+├─ Actor model implementation (CONCURRENCY.md) → Priority 8 (MOSTLY COMPLETE)
+│  ├─ Basic actor declarations with typed state → ✅ Complete
+│  ├─ Message protocols and handlers → ✅ Complete
+│  ├─ Actor spawning and message sending → ✅ Complete (`.send` + mailbox queuing)
+│  ├─ Deterministic scheduling for tests → ✅ Complete (`--scheduler` flag + `Concurrent.step/flush`)
+│  ├─ Structured async tasks within actors → 🟡 Syntax + sequential runtime; concurrent execution pending
+│  └─ Supervision trees → ❌ Not started
 ├─ Data-parallel primitives (parallel_map, parallel_fold, parallel_for_each) → 🟡 Builtins/purity checks done; parallel scheduler TBD
-├─ Refactor operations (SPEC.md §10.1) → Not started
-└─ Effect polymorphism (SPEC.md §5.3) → Not started
+├─ Refactor operations (SPEC.md §10.1) → ❌ Not started
+└─ Effect polymorphism (SPEC.md §5.3) → ❌ Not started
 
 Phase 5 (Long-term): Evolution
 ├─ Schema migrations (SPEC.md §10.2)
@@ -337,25 +337,29 @@ Phase 5 (Long-term): Evolution
 - ✅ Added runtime support for spawning actors and dispatching handlers synchronously via generated helpers (`Counter.spawn`, `Counter.Increment`, etc.), including `ActorRef` values and state persistence
 - ✅ Added actor `.send` message syntax
   - Parser + typechecker recognize `actorVar.send(MessageCtor { ... })` and enforce the `Concurrent` effect
-  - Interpreter converts constructor payloads into handler arguments, enqueues them, and processes the mailbox immediately
+  - Interpreter converts constructor payloads into handler arguments and enqueues them in the mailbox
   - Updated `examples/actor_basic.lx` to cover `.send` plus helper-style handler invocations
 - ✅ Validated actor handler message schemas
   - Typechecker links `on Message` handlers to ADT constructors, checking field presence and parameter types (or whole-message binding)
   - Added `examples/actor_type_error.lx` and CI gate to prove mismatches fail fast
 
-**New Work (November 11, 2025):**
+**Recent Work (November 10, 2025):**
 - ✅ Added deterministic actor scheduler + mailbox queue
   - Runtime now supports queued delivery with `--scheduler=immediate|deterministic`
   - New `Concurrent.step()` / `Concurrent.flush()` builtins let code process one or all pending messages (calls still require `[Concurrent]`)
   - Added `examples/actor_scheduler.lx` and CI coverage via `npm test`
+- ✅ Introduced `async_group` structured tasks inside actor handlers
+  - Extended AST/grammar/typechecker with async scopes and effect enforcement
+  - Interpreter executes async tasks sequentially within the scope (future enhancement: concurrent execution with structured cancellation)
+  - Added `examples/actor_async_group.lx` plus negative coverage in `examples/async_group_type_error.lx`
 
-With the core language, schemas, most LLM tooling, and basic actor syntax complete, the next priorities are:
+With the core language, schemas, most LLM tooling, and basic actor runtime complete, the next priorities are:
 
-1. **Actor Runtime Implementation** (Priority 8, continuing):
-   - ✅ Expand mailbox scheduling (asynchronous queue processing + deterministic test mode via CLI `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
-   - Implement structured async tasks within actors (`async_group`, scoped tasks)
-   - Add richer actor reference typing (`ActorRef<MsgType>`) and lifecycle hooks
-   - Test full actor lifecycle (spawn, send, supervised failure scenarios)
+1. **Actor Runtime Enhancements** (Priority 8, continuing):
+   - ✅ Mailbox scheduling with deterministic test mode (via `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
+   - ⚠️ Add concurrent execution + cancellation semantics for async_group tasks (currently sequential)
+   - ⚠️ Add supervision trees for failure handling (CONCURRENCY.md §7)
+   - ⚠️ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
    
 2. **LLM Tooling Enhancements** (Priority 7 completion):
    - Deterministic execution mode / seedable RNG
@@ -416,7 +420,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 |-------------------------|--------|-------|
 | **§1.1 Regular, low-context syntax** | ✅ Good | Simple keywords, explicit syntax, no clever shortcuts |
 | **§1.2 AST-first design** | ✅ Good | Has AST and JSON input format via `--input=ast` flag |
-| **§1.3 Redundancy allowed** | ✅ Good | Verbose keywords plus named arguments for every call |
+| **§1.3 Redundancy allowed** | ✅ Good | Verbose keywords, explicit types, named arguments supported (`name: value`) |
 | **§2.1 Pure-by-default, explicit effects** | ✅ Good | Effect system implemented and enforced |
 | **§2.2 Strong, local, simple types** | ✅ Good | Full type inference with location-based errors, now with JSON output |
 | **§2.3 Total/defined behavior (no UB)** | ✅ Good | All operations defined or rejected statically |

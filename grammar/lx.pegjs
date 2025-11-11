@@ -307,6 +307,8 @@ Stmt
 	= LetStmt
 	/ ReturnStmt
 	/ MatchStmt
+	/ AsyncGroupStmt
+	/ AsyncStmt
 	/ ExprStmt
 
 LetStmt
@@ -345,6 +347,24 @@ MatchStmt
 				cases,
 			};
 		}
+
+AsyncGroupStmt
+	= "async_group" __ body:Block Terminator* {
+		return {
+			kind: "AsyncGroupStmt",
+			body,
+			loc: location(),
+		};
+	}
+
+AsyncStmt
+	= "async" __ body:Block Terminator* {
+		return {
+			kind: "AsyncStmt",
+			body,
+			loc: location(),
+		};
+	}
 
 MatchExpr
 	= "match" __ scrutinee:Expr __ "{" BlockGap cases:MatchCase* BlockGap "}" {

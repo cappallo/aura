@@ -117,6 +117,8 @@ type InferState = {
   currentFunction: ast.FnDecl;
   expectedReturnType: Type;
   currentFilePath?: string;
+  asyncGroupDepth?: number;
+  insideAsyncTask?: boolean;
 };
 
 function makeError(message: string, loc?: ast.SourceLocation, filePath?: string): TypeCheckError {
@@ -1353,7 +1355,22 @@ function inferStmt(
     }
     case "ReturnStmt": {
       const exprType = inferExpr(stmt.expr, env, state);
-      unify(exprType, expectedReturnType, state, `Return type mismatch in function '${state.currentFunction.name}'`, stmt.loc);
+      if (!state.insideAsyncTask) {
+        unify(
+          exprType,
+          expectedReturnType,
+          state,
+          `Return type mismatch in function '${state.currentFunction.name}'`,
+          stmt.loc,
+        );
+      }
+      if (state.insideAsyncTask) {
+        state.errors.push(makeError(
+          "return is not allowed inside async tasks",
+          stmt.loc,
+          state.currentFilePath,
+        ));
+      }
       return { valueType: exprType, returned: true };
     }
     case "ExprStmt": {
@@ -1363,11 +1380,66 @@ function inferStmt(
     case "MatchStmt": {
       return inferMatchStmt(stmt, env, state, expectedReturnType);
     }
+    case "AsyncGroupStmt":
+      return inferAsyncGroupStmt(stmt, env, state, expectedReturnType);
+    case "AsyncStmt":
+      return inferAsyncStmt(stmt, env, state);
     default: {
       const exhaustive: never = stmt;
       throw new Error(`Unsupported statement kind: ${(exhaustive as ast.Stmt).kind}`);
     }
   }
+}
+
+function inferAsyncGroupStmt(
+  stmt: ast.AsyncGroupStmt,
+  env: TypeEnv,
+  state: InferState,
+  expectedReturnType: Type,
+): StatementResult {
+  const effects = state.currentFunction.effects || [];
+  if (!effects.includes("Concurrent")) {
+    state.errors.push(makeError(
+      `async_group requires [Concurrent] effect in function '${state.currentFunction.name}'`,
+      stmt.loc,
+      state.currentFilePath,
+    ));
+  }
+
+  const previousDepth = state.asyncGroupDepth ?? 0;
+  state.asyncGroupDepth = previousDepth + 1;
+  let returned = false;
+  for (const inner of stmt.body.stmts) {
+    const result = inferStmt(inner, env, state, expectedReturnType);
+    if (result.returned) {
+      returned = true;
+    }
+  }
+  state.asyncGroupDepth = previousDepth;
+  return { valueType: UNIT_TYPE, returned };
+}
+
+function inferAsyncStmt(stmt: ast.AsyncStmt, env: TypeEnv, state: InferState): StatementResult {
+  const depth = state.asyncGroupDepth ?? 0;
+  if (depth === 0) {
+    state.errors.push(makeError(
+      "async statements must be nested inside an async_group block",
+      stmt.loc,
+      state.currentFilePath,
+    ));
+  }
+
+  const previousInside = state.insideAsyncTask ?? false;
+  state.insideAsyncTask = true;
+  const taskEnv = new Map(env);
+  inferBlock(stmt.body, taskEnv, state, {
+    expectedReturnType: UNIT_TYPE,
+    treatAsExpression: false,
+    cloneEnv: false,
+  });
+  state.insideAsyncTask = previousInside;
+
+  return { valueType: UNIT_TYPE, returned: false };
 }
 
 function inferMatchStmt(

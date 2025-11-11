@@ -252,10 +252,34 @@ function formatStatement(stmt: AST.Stmt, indent: number): string {
       return `${prefix}${formatExpr(stmt.expr, 0)}`;
     case "MatchStmt":
       return formatMatchStmt(stmt, indent);
+    case "AsyncGroupStmt":
+      return formatAsyncGroupStmt(stmt, indent);
+    case "AsyncStmt":
+      return formatAsyncStmt(stmt, indent);
     default:
       const _exhaustive: never = stmt;
       throw new Error(`Unknown statement kind: ${(stmt as any).kind}`);
   }
+}
+
+function formatAsyncGroupStmt(stmt: AST.AsyncGroupStmt, indent: number): string {
+  const prefix = INDENT.repeat(indent);
+  const lines: string[] = [`${prefix}async_group {`];
+  if (stmt.body.stmts.length > 0) {
+    lines.push(formatBlock(stmt.body, indent + 1));
+  }
+  lines.push(`${prefix}}`);
+  return lines.join("\n");
+}
+
+function formatAsyncStmt(stmt: AST.AsyncStmt, indent: number): string {
+  const prefix = INDENT.repeat(indent);
+  const lines: string[] = [`${prefix}async {`];
+  if (stmt.body.stmts.length > 0) {
+    lines.push(formatBlock(stmt.body, indent + 1));
+  }
+  lines.push(`${prefix}}`);
+  return lines.join("\n");
 }
 
 function formatMatchStmt(stmt: AST.MatchStmt, indent: number): string {

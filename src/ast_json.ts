@@ -294,6 +294,22 @@ function parseStmt(value: unknown, ctx: ParseContext): ast.Stmt {
           parseMatchCase(matchCase, indexPath(child(ctx, "cases"), index)),
         ),
       };
+    case "AsyncGroupStmt": {
+      const stmt: ast.AsyncGroupStmt = {
+        kind,
+        body: parseBlock(obj.body, child(ctx, "body")),
+      };
+      setIfDefined(stmt, "loc", loc);
+      return stmt;
+    }
+    case "AsyncStmt": {
+      const stmt: ast.AsyncStmt = {
+        kind,
+        body: parseBlock(obj.body, child(ctx, "body")),
+      };
+      setIfDefined(stmt, "loc", loc);
+      return stmt;
+    }
     default:
       throw fail(ctx, `Unknown statement kind '${kind}'`);
   }

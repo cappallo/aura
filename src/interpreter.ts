@@ -524,8 +524,35 @@ function evalStmt(stmt: ast.Stmt, env: Env, runtime: Runtime): EvalResult {
     case "MatchStmt": {
       return evalMatch(stmt, env, runtime);
     }
+    case "AsyncGroupStmt": {
+      return evalAsyncGroupStmt(stmt, env, runtime);
+    }
+    case "AsyncStmt": {
+      throw new RuntimeError("'async' statements must be nested inside an async_group block");
+    }
     default:
       throw new RuntimeError(`Unsupported statement kind: ${(stmt as ast.Stmt).kind}`);
+  }
+}
+
+function evalAsyncGroupStmt(stmt: ast.AsyncGroupStmt, env: Env, runtime: Runtime): EvalResult {
+  for (const inner of stmt.body.stmts) {
+    if (inner.kind === "AsyncStmt") {
+      evalAsyncTask(inner, env, runtime);
+      continue;
+    }
+    const result = evalStmt(inner, env, runtime);
+    if (result.type === "return") {
+      return result;
+    }
+  }
+  return { type: "value", value: { kind: "Unit" } };
+}
+
+function evalAsyncTask(stmt: ast.AsyncStmt, env: Env, runtime: Runtime): void {
+  const result = evalBlock(stmt.body, env, runtime);
+  if (result.type === "return") {
+    throw new RuntimeError("'return' is not allowed inside async tasks");
   }
 }
 

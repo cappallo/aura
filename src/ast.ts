@@ -115,7 +115,7 @@ export type Block = {
   stmts: Stmt[];
 };
 
-export type Stmt = LetStmt | ReturnStmt | ExprStmt | MatchStmt;
+export type Stmt = LetStmt | ReturnStmt | ExprStmt | MatchStmt | AsyncGroupStmt | AsyncStmt;
 
 export type LetStmt = {
   kind: "LetStmt";
@@ -140,6 +140,18 @@ export type MatchStmt = {
   kind: "MatchStmt";
   scrutinee: Expr;
   cases: MatchCase[];
+};
+
+export type AsyncGroupStmt = {
+  kind: "AsyncGroupStmt";
+  body: Block;
+  loc?: SourceLocation;
+};
+
+export type AsyncStmt = {
+  kind: "AsyncStmt";
+  body: Block;
+  loc?: SourceLocation;
 };
 
 export type MatchExpr = {
