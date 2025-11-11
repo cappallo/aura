@@ -532,7 +532,7 @@ function builtinStrConcat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
   const left = expectValue(values, "left", expr.callee);
   const right = expectValue(values, "right", expr.callee);
   if (left.kind !== "String" || right.kind !== "String") {
-    throw new RuntimeError("str.concat expects string arguments");
+    throw new RuntimeError("str.concat expects two string arguments");
   }
   return { kind: "String", value: left.value + right.value };
 }
