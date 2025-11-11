@@ -77,6 +77,74 @@ actor Supervisor() {
   }
 }
 
+actor SupervisorNoHandler() {
+  state {
+    worker: ActorRef
+  }
+
+  on Start() -> [Concurrent] ActorRef {
+    let spawned = Worker.spawn()
+    let worker = spawned
+    return spawned
+  }
+
+  on Send(value: Int) -> [Concurrent] Unit {
+    worker.send(DoWork { value: value })
+  }
+
+  on Crash() -> [Concurrent] Unit {
+    worker.send(DoWork { value: -1 })
+  }
+
+  on CurrentWorker() -> [Concurrent] ActorRef {
+    return worker
+  }
+}
+
+actor RootSupervisor() {
+  state {
+    supervisor: ActorRef
+    last_failure: String
+    last_message: String
+    last_actor: String
+    last_child: ActorRef
+  }
+
+  on Start() -> [Concurrent] ActorRef {
+    let supervisor = SupervisorNoHandler.spawn()
+    let initial_worker = SupervisorNoHandler.Start(supervisor)
+    let last_child = initial_worker
+    let last_failure = ""
+    let last_message = ""
+    let last_actor = ""
+    return supervisor
+  }
+
+  on Send(value: Int) -> [Concurrent] Unit {
+    supervisor.send(Send { value: value })
+  }
+
+  on Crash() -> [Concurrent] Unit {
+    supervisor.send(Crash { })
+  }
+
+  on ChildFailed(child: ActorRef, reason: String, message: String, actor: String) -> [Concurrent] Unit {
+    let last_child = child
+    let last_failure = reason
+    let last_message = message
+    let last_actor = actor
+  }
+
+  on FailureSummary() -> [Concurrent] SupervisorMsg {
+    return ChildFailed {
+      child: last_child
+      reason: last_failure
+      message: last_message
+      actor: last_actor
+    }
+  }
+}
+
 test supervisor_restarts_child {
   let supervisor = Supervisor.spawn()
   Supervisor.Start(supervisor)
@@ -105,6 +173,29 @@ test supervisor_restarts_child {
       test.assert_equal("DoWork", failure_message)
       test.assert_equal("Worker", failure_actor)
       test.assert_equal(false, failed_child == current)
+    }
+    case _ => {
+      assert(false)
+    }
+  }
+}
+
+test failure_propagates_without_intermediate_handler {
+  let root = RootSupervisor.spawn()
+  let supervisor = RootSupervisor.Start(root)
+  let worker = SupervisorNoHandler.CurrentWorker(supervisor)
+
+  RootSupervisor.Crash(root)
+  Concurrent.flush()
+  Concurrent.flush()
+
+  let summary = RootSupervisor.FailureSummary(root)
+  match summary {
+    case ChildFailed { child: failed_child , reason: failure_reason , message: failure_message , actor: failure_actor } => {
+      test.assert_equal(worker, failed_child)
+      test.assert_equal("assertion failed", failure_reason)
+      test.assert_equal("DoWork", failure_message)
+      test.assert_equal("Worker", failure_actor)
     }
     case _ => {
       assert(false)
