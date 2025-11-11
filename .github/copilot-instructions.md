@@ -19,7 +19,15 @@ When implementing features for the Lx programming language:
 3. **Implementation process:**
    - Update AST definitions in `src/ast.ts` if needed
    - Extend grammar in `grammar/lx.pegjs` for new syntax
-   - Update typechecker in `src/typecheck.ts` for new validations
+   - Update typechecker for new validations:
+     - Type definitions: `src/typecheck/types.ts`
+     - Built-in functions: `src/typecheck/builtins.ts`
+     - Checkers (function/contract/property/schema/actor): `src/typecheck/checkers.ts`
+     - Collectors (module info gathering): `src/typecheck/collectors.ts`
+     - Type inference: `src/typecheck/inference.ts`
+     - Type operations: `src/typecheck/type-ops.ts`
+     - Call argument utilities: `src/typecheck/call-utils.ts`
+     - Main exports: `src/typecheck/index.ts` (barrel file)
    - Extend interpreter for runtime behavior:
      - Core evaluation logic: `src/interpreter/evaluation.ts`
      - Runtime setup: `src/interpreter/runtime.ts`
@@ -74,12 +82,27 @@ When implementing features for the Lx programming language:
 
 ## Typechecker Guidelines
 
-- Build context (functions, types, effects) in first pass
-- Check bodies in second pass with full context
-- Return structured errors with `{ message: string }`
+The typechecker is organized into multiple focused modules:
+
+### Module Structure
+- **`src/typecheck/types.ts`** - Core type definitions (`TypeCheckError`, `FnSignature`, `TypecheckContext`, `Type`, `InferState`)
+- **`src/typecheck/builtins.ts`** - Built-in function definitions and type signatures
+- **`src/typecheck/checkers.ts`** - Top-level checkers (`checkFunction`, `checkContract`, `checkProperty`, `checkSchema`, `checkActor`)
+- **`src/typecheck/collectors.ts`** - Module information collectors (`collectModuleFunctions`, `collectModuleTypeInfo`, `collectEffects`)
+- **`src/typecheck/inference.ts`** - Type inference engine (`inferExpr`, `inferBlock`, `typeCheckFunctionBody`)
+- **`src/typecheck/type-ops.ts`** - Type operations (`unify`, `convertTypeExpr`, `resolveVariant`)
+- **`src/typecheck/call-utils.ts`** - Call argument validation utilities
+- **`src/typecheck/index.ts`** - Barrel export for public API (`typecheckModule`, `typecheckModules`)
+
+### Key Conventions
+- Build context (functions, types, effects) in first pass using collectors
+- Check bodies in second pass with full context using checkers
+- Return structured errors with `{ message: string, loc?: SourceLocation, filePath?: string }`
 - Verify effect subsets with `verifyEffectSubset`
 - Check exhaustiveness for match statements
-- Allow built-in functions via `BUILTIN_FUNCTIONS` map
+- Allow built-in functions via `BUILTIN_FUNCTIONS` map in `builtins.ts`
+- Use `InferState` for type inference with unification
+- Pass `TypecheckContext` through all checking functions
 
 ## Interpreter Guidelines
 

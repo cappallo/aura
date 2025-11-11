@@ -210,8 +210,9 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Validate constructor field types
 - [x] Add proper type error messages with locations
 - [x] Test with examples that should fail type checking
+- [x] Refactor typechecker into modular structure (`src/typecheck/`)
 
-**Completed:** Full type inference with Hindley-Milner algorithm is now working, with detailed error messages showing exact source locations!
+**Completed:** Full type inference with Hindley-Milner algorithm is now working, with detailed error messages showing exact source locations! The typechecker has been refactored into multiple focused modules for better maintainability.
 
 ### **Priority 3: Property-Based Tests (§7.4)**
 **Status:** ✅ Complete  
@@ -413,7 +414,13 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ### Adding New Features
 1. Update AST definitions in `src/ast.ts`
 2. Extend grammar in `grammar/lx.pegjs`
-3. Update typechecker in `src/typecheck.ts`
+3. Update typechecker modules in `src/typecheck/`:
+   - Update type definitions in `types.ts` if needed
+   - Add/update checkers in `checkers.ts`
+   - Extend inference in `inference.ts` if needed
+   - Add type operations in `type-ops.ts` if needed
+   - Update builtins in `builtins.ts` if adding built-in functions
+   - Export new APIs from `index.ts` if needed
 4. Extend interpreter:
    - Add evaluation logic in `src/interpreter/evaluation.ts`
    - Update runtime setup in `src/interpreter/runtime.ts` if needed

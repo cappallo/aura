@@ -86,8 +86,16 @@ lx-core/
     ast.ts
     types.ts
     parser.ts
-    typecheck.ts
-    interpreter.ts         # Barrel export
+    typecheck/            # Typechecker modules (refactored)
+      index.ts            # Barrel export
+      types.ts
+      builtins.ts
+      checkers.ts
+      collectors.ts
+      inference.ts
+      type-ops.ts
+      call-utils.ts
+    interpreter.ts        # Barrel export
     interpreter/
       types.ts
       values.ts
@@ -553,7 +561,23 @@ export function parseModuleFromFile(filePath: string): ast.Module {
 For v0.1, keep it almost trivial: just check that functions being called exist and that arity matches. No full HM inference yet.
 
 ```ts
-// src/typecheck.ts
+## 6. Typechecker (src/typecheck/)
+
+The typechecker has been refactored into a modular structure with focused responsibilities:
+
+- **`types.ts`** - Core type definitions and type system primitives
+- **`builtins.ts`** - Built-in function type signatures
+- **`checkers.ts`** - Top-level declaration checkers
+- **`collectors.ts`** - Module information gathering
+- **`inference.ts`** - Hindley-Milner type inference engine
+- **`type-ops.ts`** - Type operations (unification, conversion, resolution)
+- **`call-utils.ts`** - Call argument validation
+- **`index.ts`** - Public API exports
+
+For v0.1, it implements full Hindley-Milner type inference with ADTs, effects, and comprehensive error reporting.
+
+```ts
+// src/typecheck/index.ts (simplified example)
 
 import {
   Module,
