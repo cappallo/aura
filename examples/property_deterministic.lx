@@ -1,0 +1,41 @@
+module examples.property_deterministic
+
+// Demonstrates deterministic property-based testing with seeded RNG
+// Run with: lx test --seed=42 examples/property_deterministic.lx
+// The same seed will always generate the same test values
+
+fn add(a: Int, b: Int) -> Int {
+  return a + b
+}
+
+fn multiply(a: Int, b: Int) -> Int {
+  return a * b
+}
+
+// Property: addition is commutative
+property add_commutative(a: Int, b: Int) {
+  test.assert_equal(add(a, b), add(b, a))
+}
+
+// Property: multiplication distributes over addition
+property distributive(a: Int, b: Int, c: Int) {
+  let left = multiply(a, add(b, c))
+  let right = add(multiply(a, b), multiply(a, c))
+  test.assert_equal(left, right)
+}
+
+// Property: list length is consistent with elements
+property list_length_matches(items: List<Int>) {
+  let len = list.len(items)
+  assert(len >= 0)
+}
+
+// Property with constraint: only test positive numbers
+property positive_multiply(a: Int where a > 0, b: Int where b > 0) {
+  let result = multiply(a, b)
+  assert(result > 0)
+}
+
+test deterministic_properties {
+  test.assert_equal(1, 1)
+}

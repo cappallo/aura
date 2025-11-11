@@ -28,6 +28,7 @@ export type CliContext = {
   format: OutputFormat;
   input: InputFormat;
   scheduler: SchedulerMode;
+  seed?: number;
 };
 
 function main() {
@@ -40,8 +41,11 @@ function main() {
 
   try {
     // Parse global flags
-    const { args, format, input, scheduler } = parseGlobalFlags(rest);
+    const { args, format, input, scheduler, seed } = parseGlobalFlags(rest);
     const ctx: CliContext = { format, input, scheduler };
+    if (seed !== undefined) {
+      ctx.seed = seed;
+    }
 
     switch (command) {
       case "run":
@@ -71,10 +75,12 @@ function parseGlobalFlags(args: string[]): {
   format: OutputFormat;
   input: InputFormat;
   scheduler: SchedulerMode;
+  seed?: number;
 } {
   let format: OutputFormat = "text";
   let input: InputFormat = "source";
   let scheduler: SchedulerMode = "immediate";
+  let seed: number | undefined = undefined;
   const remaining: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -112,12 +118,40 @@ function parseGlobalFlags(args: string[]): {
     } else if (arg.startsWith("--scheduler=")) {
       const value = arg.substring(12);
       scheduler = parseSchedulerMode(value);
+    } else if (arg === "--seed" && i + 1 < args.length) {
+      const value = args[i + 1]!;
+      seed = parseSeed(value);
+      i += 1;
+    } else if (arg.startsWith("--seed=")) {
+      const value = arg.substring(7);
+      seed = parseSeed(value);
     } else {
       remaining.push(arg);
     }
   }
 
-  return { args: remaining, format, input, scheduler };
+  const result: {
+    args: string[];
+    format: OutputFormat;
+    input: InputFormat;
+    scheduler: SchedulerMode;
+    seed?: number;
+  } = { args: remaining, format, input, scheduler };
+  
+  if (seed !== undefined) {
+    result.seed = seed;
+  }
+  
+  return result;
+}
+
+function parseSeed(value: string): number {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) {
+    console.error(`Invalid seed: ${value}. Must be an integer.`);
+    process.exit(1);
+  }
+  return parsed;
 }
 
 function parseInputFormat(value: string): InputFormat {
@@ -183,9 +217,13 @@ function handleRun(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
+  const runtimeOptions: import("./interpreter").RuntimeOptions = { schedulerMode: ctx.scheduler };
+  if (ctx.seed !== undefined) {
+    runtimeOptions.seed = ctx.seed;
+  }
   const runtime = modules && symbolTable 
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
-    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, runtimeOptions)
+    : buildRuntime(module, ctx.format, runtimeOptions);
 
   const [moduleName, functionName] = splitQualifiedName(fnName);
   if (moduleName && moduleName !== module.name.join(".")) {
@@ -230,9 +268,13 @@ function handleTest(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
+  const runtimeOptions: import("./interpreter").RuntimeOptions = { schedulerMode: ctx.scheduler };
+  if (ctx.seed !== undefined) {
+    runtimeOptions.seed = ctx.seed;
+  }
   const runtime = modules && symbolTable 
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
-    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, runtimeOptions)
+    : buildRuntime(module, ctx.format, runtimeOptions);
   const outcomes = runTests(runtime);
 
   let failures = 0;
@@ -357,9 +399,13 @@ function handleExplain(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
+  const runtimeOptions: import("./interpreter").RuntimeOptions = { schedulerMode: ctx.scheduler };
+  if (ctx.seed !== undefined) {
+    runtimeOptions.seed = ctx.seed;
+  }
   const runtime = modules && symbolTable 
-    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, { schedulerMode: ctx.scheduler })
-    : buildRuntime(module, ctx.format, { schedulerMode: ctx.scheduler });
+    ? buildMultiModuleRuntime(modules, symbolTable, ctx.format, runtimeOptions)
+    : buildRuntime(module, ctx.format, runtimeOptions);
 
   // Enable tracing
   runtime.tracing = true;
@@ -611,11 +657,11 @@ function handleFatal(error: unknown) {
 
 function printUsage() {
   console.log("Usage:");
-  console.log("  lx run [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
-  console.log("  lx test [--format=json|text] [--input=source|ast] <file>");
+  console.log("  lx run [--format=json|text] [--input=source|ast] [--seed=N] <file> <module.fnName> [args...]");
+  console.log("  lx test [--format=json|text] [--input=source|ast] [--seed=N] <file>");
   console.log("  lx check [--format=json|text] [--input=source|ast] <file>");
   console.log("  lx format <file.lx>");
-  console.log("  lx explain [--format=json|text] [--input=source|ast] <file> <module.fnName> [args...]");
+  console.log("  lx explain [--format=json|text] [--input=source|ast] [--seed=N] <file> <module.fnName> [args...]");
   console.log("  lx patch-body <file.lx> <module.fnName> <bodySnippet.lx>");
   console.log("");
   console.log("Options:");
@@ -624,6 +670,7 @@ function printUsage() {
   console.log("  --input=source   Treat input file as .lx source (default)");
   console.log("  --input=ast      Treat input file as JSON AST");
   console.log("  --scheduler=immediate|deterministic  Control actor mailbox scheduling (default: immediate)");
+  console.log("  --seed=N         Set random number generator seed for deterministic property tests");
 }
 
 main();

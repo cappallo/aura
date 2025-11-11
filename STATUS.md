@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 10, 2025  
-**Overall Progress:** ~80% (Core language ~85% complete, LLM-first tooling ~80% complete, Concurrency ~75% complete)
+**Last Updated:** November 11, 2025  
+**Overall Progress:** ~82% (Core language ~85% complete, LLM-first tooling ~85% complete, Concurrency ~75% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -39,7 +39,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Field access
 
 ### 4. Interpreter
-- ✅ Expression evaluation (~2524 lines total interpreter)
+- ✅ Expression evaluation (~2557 lines total interpreter)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
@@ -64,7 +64,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ `test` blocks with assertions
 - ✅ Test runner (`lx test`) with success/failure reporting
 - ✅ Property-based tests with generators, constraints, and shrinking
-- ✅ Example tests in 37 example files
+- ✅ Example tests in 36 example files
 
 ### 7. Schemas & I/O
 - ✅ **Schema declarations**: `schema` keyword with field declarations
@@ -152,7 +152,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 37 example files (29 runnable + 8 error test cases) including:
+The implementation successfully runs 36 example files (27 runnable + 9 error test cases) including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -160,6 +160,7 @@ The implementation successfully runs 37 example files (29 runnable + 8 error tes
 - ✅ `result.lx` - Error handling patterns
 - ✅ `property_basics.lx` - Property-based testing with predicates and assertions
 - ✅ `property_shrinking.lx` - Counterexample shrinking for property tests
+- ✅ `property_deterministic.lx` - Deterministic property testing with --seed flag
 - ✅ `schema.lx` - Basic schema declarations
 - ✅ `schema_simple.lx` - Simple schema examples
 - ✅ `schema_versioned.lx` - Schema versioning examples
@@ -361,7 +362,16 @@ Phase 5 (Long-term): Evolution
   - Interpreter now runs async tasks with a cooperative scheduler and structured cancellation
   - Added concurrency examples (`examples/actor_async_group.lx`, `examples/async_group_return.lx`) plus negative coverage in `examples/async_group_type_error.lx`
 
-With the core language, schemas, LLM tooling, and actor runtime (including async_group) mostly complete, the next priorities are:
+**Recent Work (November 11, 2025):**
+- ✅ Implemented deterministic execution mode with seedable RNG
+  - Added SeededRNG class (xorshift32 algorithm) in interpreter
+  - Added optional `seed` field to Runtime and RuntimeOptions
+  - Replaced Math.random() with seeded RNG in property testing
+  - Added `--seed=N` CLI flag for run, test, and explain commands
+  - Created `examples/property_deterministic.lx` demonstrating deterministic property tests
+  - Same seed produces reproducible test results for debugging and replay
+
+With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
   - ✅ Mailbox scheduling with deterministic test mode (via `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
@@ -369,9 +379,9 @@ With the core language, schemas, LLM tooling, and actor runtime (including async
   - ⚠️ Add supervision trees for failure handling (CONCURRENCY.md §7)
   - ⚠️ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
    
-2. **LLM Tooling Enhancements** (Priority 7 completion):
-   - Deterministic execution mode / seedable RNG
-   - Guided refactor operations (SPEC.md §10.1) - Implement programmatic refactoring tools
+2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
+   - ✅ Deterministic execution mode / seedable RNG
+   - ⚠️ Guided refactor operations (SPEC.md §10.1) - Implement programmatic refactoring tools
 
 ---
 
@@ -386,16 +396,18 @@ npm test               # Run all example tests
 
 ### CLI Usage
 ```bash
-lx run [--format=json|text] [--input=source|ast] <file.lx> <module.fn> [args...]      # Execute function
-lx test [--format=json|text] [--input=source|ast] <file.lx>                            # Run tests
-lx check [--format=json|text] [--input=source|ast] <file.lx>                           # Type check only
-lx format <file.lx>                                                                      # Format code (canonical output)
-lx explain [--format=json|text] [--input=source|ast] <file.lx> <module.fn> [args...]  # Execute with trace
-lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                                   # Replace function body
+lx run [--format=json|text] [--input=source|ast] [--seed=N] <file.lx> <module.fn> [args...]      # Execute function
+lx test [--format=json|text] [--input=source|ast] [--seed=N] <file.lx>                            # Run tests
+lx check [--format=json|text] [--input=source|ast] <file.lx>                                      # Type check only
+lx format <file.lx>                                                                                 # Format code (canonical output)
+lx explain [--format=json|text] [--input=source|ast] [--seed=N] <file.lx> <module.fn> [args...]  # Execute with trace
+lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                                              # Replace function body
 
 # --format=json outputs structured JSON for LLM consumption
 # --format=text (default) outputs human-readable text
 # --input=ast treats file as JSON AST instead of source code
+# --seed=N sets RNG seed for deterministic property tests (for reproducibility/debugging)
+# --scheduler=immediate|deterministic controls actor mailbox scheduling
 ```
 
 ### Adding New Features
@@ -411,12 +423,11 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **No deterministic execution mode** - Property tests and randomness not seedable for replay (THOUGHTS.md §5.1)
-2. **No guided refactor operations** - No structured commands for refactoring (SPEC.md §10.1, THOUGHTS.md §6.2)
+1. **No guided refactor operations** - No structured commands for refactoring (SPEC.md §10.1, THOUGHTS.md §6.2)
 
 ### Language Features
-3. **No REPL** - Must write files to test code
-4. **Limited standard library** - Basic operations now available but could be expanded further
+2. **No REPL** - Must write files to test code
+3. **Limited standard library** - Basic operations now available but could be expanded further
 
 ---
 
@@ -436,19 +447,18 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§3.2 Inline tests & properties** | ✅ Good | `test` and `property` blocks implemented |
 | **§4.1 Small, versioned stdlib** | 🟡 Partial | Small stdlib (✅), but no version tracking (❌) |
 | **§4.2 Schema-first external data** | ✅ Good | Schema declarations, codecs, and type generation all implemented (✅) |
-| **§5.1 Deterministic replayable runs** | 🟡 Partial | Structured logging implemented (✅), seedable RNG pending (❌) |
+| **§5.1 Deterministic replayable runs** | ✅ Good | Structured logging (✅) and seedable RNG (✅) both implemented |
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
 | **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs, AST input/output format |
 | **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
 | **§7 Safe concurrency model** | 🟡 Good | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode; supervision trees pending |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, and deterministic testing support. Remaining tooling enhancements needed:
-- Deterministic execution mode / seedable RNG (§5.1)
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, and deterministic testing support. Remaining enhancements needed:
 - Guided refactor operations with structured commands (§6.2/§10.1)
 - Supervision trees for actor failure handling (CONCURRENCY.md §7)
 
-**Impact:** The language core is solid (~85% complete), the LLM developer experience layer is mostly complete (~80% complete), and the concurrency model has reached ~75% completion with structured async tasks. Overall progress is ~80%. Structured error and log output, combined with property-based testing, execution tracing, canonical formatting, patch-based editing, AST input format, schema codecs, and cooperative concurrency primitives, enable the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~85% complete), the LLM developer experience layer is nearly complete (~85% complete), and the concurrency model has reached ~75% completion with structured async tasks. Overall progress is ~82%. Structured error and log output, deterministic property testing with seedable RNG, execution tracing, canonical formatting, patch-based editing, AST input format, schema codecs, and cooperative concurrency primitives enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 

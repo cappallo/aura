@@ -131,10 +131,13 @@ export type Runtime = {
   traces?: import("./structured").StructuredTrace[];
   tracing?: boolean;
   traceDepth?: number;
+  // Deterministic RNG for testing
+  rng: SeededRNG | null;
 };
 
 export type RuntimeOptions = {
   schedulerMode?: SchedulerMode;
+  seed?: number;
 };
 
 type FnContract = {
@@ -168,6 +171,33 @@ type TestOutcome = {
   success: boolean;
   error?: unknown;
 };
+
+/**
+ * Seeded pseudo-random number generator using xorshift32 algorithm.
+ * Provides deterministic random sequences for testing.
+ */
+class SeededRNG {
+  private state: number;
+
+  constructor(seed: number) {
+    // Ensure seed is a non-zero 32-bit integer
+    this.state = seed === 0 ? 1 : seed >>> 0;
+  }
+
+  /**
+   * Generate next random number in [0, 1) range
+   */
+  next(): number {
+    // xorshift32 algorithm
+    let x = this.state;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this.state = x >>> 0; // Keep as unsigned 32-bit int
+    // Convert to [0, 1) range
+    return this.state / 0x100000000;
+  }
+}
 
 const DEFAULT_PROPERTY_RUNS = 50;
 const MAX_SHRINK_ATTEMPTS = 100;
@@ -262,6 +292,7 @@ export function buildRuntime(
     schedulerMode: options?.schedulerMode ?? "immediate",
     pendingActorDeliveries: [],
     isProcessingActorMessages: false,
+    rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
   };
   if (outputFormat !== undefined) {
     runtime.outputFormat = outputFormat;
@@ -368,6 +399,7 @@ export function buildMultiModuleRuntime(
     pendingActorDeliveries: [],
     isProcessingActorMessages: false,
     symbolTable,
+    rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
   };
   if (outputFormat !== undefined) {
     runtime.outputFormat = outputFormat;
@@ -1710,7 +1742,8 @@ type ParameterGenerationResult =
 
 function runProperty(property: ast.PropertyDecl, runtime: Runtime): TestOutcome {
   const iterations = property.iterations ?? DEFAULT_PROPERTY_RUNS;
-  const rng = () => Math.random();
+  // Use seeded RNG if available, otherwise use Math.random()
+  const rng = runtime.rng ? () => runtime.rng!.next() : () => Math.random();
 
   for (let iteration = 0; iteration < iterations; iteration += 1) {
     const env: Env = new Map();

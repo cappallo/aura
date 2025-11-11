@@ -27,6 +27,7 @@ runCommand("node", [cliPath, "test", "examples/contracts.lx"]);
 runCommand("node", [cliPath, "test", "examples/builtins.lx"]);
 runCommand("node", [cliPath, "test", "examples/parallel.lx"]);
 runCommand("node", [cliPath, "test", "examples/property_basics.lx"]);
+runCommand("node", [cliPath, "test", "--seed=42", "examples/property_deterministic.lx"]);
 runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_basic.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_async_group.lx"]);
