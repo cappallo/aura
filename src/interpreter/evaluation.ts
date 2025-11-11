@@ -29,6 +29,10 @@ type AsyncGroupContext = {
   tasks: AsyncTask[];
 };
 
+/**
+ * Parameter names for builtin functions (used for named argument alignment).
+ * Must be kept in sync with builtin implementations.
+ */
 const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.len": ["list"],
   "test.assert_equal": ["expected", "actual"],
@@ -56,6 +60,7 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "Concurrent.step": [],
 };
 
+/** Get parameter names for a builtin function (throws if not found) */
 export function getBuiltinParamNames(name: string): string[] {
   const names = BUILTIN_PARAM_NAMES[name];
   if (!names) {
@@ -64,6 +69,7 @@ export function getBuiltinParamNames(name: string): string[] {
   return names;
 }
 
+/** Evaluate a block of statements, returning last value or early return */
 export function evalBlock(block: ast.Block, env: Env, runtime: Runtime): EvalResult {
   let lastValue: Value = { kind: "Unit" };
   for (const stmt of block.stmts) {
@@ -266,6 +272,11 @@ function tryMatchPattern(pattern: ast.Pattern, value: Value, env: Env): MatchEnv
   }
 }
 
+/**
+ * Evaluate an expression to a runtime value.
+ * Handles literals, variables, operations, function calls, pattern matching, etc.
+ * Throws RuntimeError for evaluation failures.
+ */
 export function evalExpr(expr: ast.Expr, env: Env, runtime: Runtime): Value {
   switch (expr.kind) {
     case "IntLiteral":

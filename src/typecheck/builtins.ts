@@ -1,3 +1,8 @@
+/**
+ * Built-in function type signatures and scalar types.
+ * Builtins are implemented in the interpreter but type-checked here.
+ */
+
 import {
   BOOL_TYPE,
   INT_TYPE,
@@ -13,13 +18,19 @@ import {
   freshTypeVar,
 } from "./types";
 
+/** Metadata for a built-in function's type signature */
 export type BuiltinFunctionInfo = {
+  /** Number of parameters (null for variadic) */
   arity: number | null;
+  /** Parameter names for named argument support */
   paramNames: string[];
+  /** Effects this builtin may perform */
   effects: Set<string>;
+  /** Function to instantiate polymorphic type with fresh type variables */
   instantiateType: (state: InferState) => TypeFunction;
 };
 
+/** Registry of all built-in functions with their type signatures */
 export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
   "list.len": {
     arity: 1,

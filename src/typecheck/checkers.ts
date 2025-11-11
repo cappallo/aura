@@ -17,6 +17,10 @@ import {
 import { inferBlock, inferExpr, typeCheckFunctionBody } from "./inference";
 import { convertTypeExpr, resolveVariant, unify } from "./type-ops";
 
+/**
+ * Verify that all effects declared in a function's signature exist.
+ * Reports errors for unknown effect names.
+ */
 export function verifyDeclaredEffects(
   fn: ast.FnDecl,
   ctx: TypecheckContext,
@@ -33,6 +37,10 @@ export function verifyDeclaredEffects(
   }
 }
 
+/**
+ * Type check a function declaration including effects and body.
+ * Entry point for function checking.
+ */
 export function checkFunction(
   fn: ast.FnDecl,
   ctx: TypecheckContext,
@@ -43,6 +51,10 @@ export function checkFunction(
   typeCheckFunctionBody(fn, ctx, errors, filePath);
 }
 
+/**
+ * Type check a property-based test declaration.
+ * Validates parameter predicates are boolean and checks the test body.
+ */
 export function checkProperty(
   property: ast.PropertyDecl,
   ctx: TypecheckContext,
@@ -102,6 +114,10 @@ export function checkProperty(
   });
 }
 
+/**
+ * Type check a schema declaration for codec generation.
+ * Validates version number and field types.
+ */
 export function checkSchema(
   schema: ast.SchemaDecl,
   ctx: TypecheckContext,
@@ -158,6 +174,10 @@ function syntheticFnForSchemas(): ast.FnDecl {
   };
 }
 
+/**
+ * Type check an actor declaration including constructor params, state fields, and handlers.
+ * Validates all type expressions and handler bodies.
+ */
 export function checkActor(
   actor: ast.ActorDecl,
   ctx: TypecheckContext,

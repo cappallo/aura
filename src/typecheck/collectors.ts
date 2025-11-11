@@ -1,3 +1,8 @@
+/**
+ * Module collector functions for gathering module-level information.
+ * First pass of type checking: index all declarations before checking bodies.
+ */
+
 import * as ast from "../ast";
 import {
   FnSignature,
@@ -9,10 +14,12 @@ import {
   VariantInfo,
 } from "./types";
 
+/** Helper to create ActorRef type expression */
 function actorRefTypeExpr(): ast.TypeExpr {
   return { kind: "TypeName", name: "ActorRef", typeArgs: [] };
 }
 
+/** Helper to clone parameter (avoiding mutation) */
 function cloneParam(param: ast.Param): ast.Param {
   return {
     name: param.name,
@@ -20,6 +27,7 @@ function cloneParam(param: ast.Param): ast.Param {
   };
 }
 
+/** Generate synthetic spawn function declaration for an actor */
 function createActorSpawnDecl(actor: ast.ActorDecl): ast.FnDecl {
   return {
     kind: "FnDecl",
@@ -102,6 +110,11 @@ export function registerActorSignaturesGlobal(
   }
 }
 
+/**
+ * Collect all function signatures from a module.
+ * Includes user-defined functions and synthetic actor functions (spawn and handlers).
+ * Indexes by both qualified and unqualified names.
+ */
 export function collectModuleFunctions(module: ast.Module): Map<string, FnSignature> {
   const map = new Map<string, FnSignature>();
   const modulePrefix = module.name.join(".");
@@ -128,6 +141,10 @@ export function collectModuleFunctions(module: ast.Module): Map<string, FnSignat
   return map;
 }
 
+/**
+ * Collect all declared effects from module declarations.
+ * Includes built-in effects (Concurrent, Log).
+ */
 export function collectEffects(decls: ast.TopLevelDecl[]): Set<string> {
   const effects = new Set<string>(["Concurrent", "Log"]);
   for (const decl of decls) {

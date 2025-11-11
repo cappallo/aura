@@ -16,6 +16,10 @@ import {
 } from "./types";
 import { BUILTIN_SCALAR_TYPES } from "./builtins";
 
+/**
+ * Find type declaration by name, resolving across module boundaries.
+ * Searches local types first, then cross-module via symbol table.
+ */
 export function findTypeDecl(
   name: string,
   ctx: TypecheckContext,
@@ -38,6 +42,9 @@ export function findTypeDecl(
   return undefined;
 }
 
+/**
+ * Resolve record type by name, handling cross-module references.
+ */
 export function resolveRecordType(name: string, state: InferState): RecordTypeInfo | undefined {
   const direct = state.ctx.recordTypes.get(name);
   if (direct) {
@@ -52,6 +59,10 @@ export function resolveRecordType(name: string, state: InferState): RecordTypeIn
   return undefined;
 }
 
+/**
+ * Resolve variant constructor by name, handling cross-module references.
+ * Reports error if multiple variants with the same name exist (ambiguous).
+ */
 export function resolveVariant(name: string, state: InferState): VariantInfo | undefined {
   const direct = state.ctx.variantConstructors.get(name);
   if (direct && direct.length === 1) {
@@ -74,6 +85,11 @@ export function resolveVariant(name: string, state: InferState): VariantInfo | u
   return undefined;
 }
 
+/**
+ * Convert AST type expression to internal type representation.
+ * Handles type parameters from scope, built-in types, type aliases, and user-defined types.
+ * Resolves type constructors and instantiates type parameters.
+ */
 export function convertTypeExpr(
   typeExpr: ast.TypeExpr,
   scope: Map<string, Type>,
@@ -165,6 +181,10 @@ export function convertTypeExpr(
   }
 }
 
+/**
+ * Follow substitution chains to find the concrete type for a type variable.
+ * Path compression optimization: updates substitution map with shortened paths.
+ */
 export function prune(type: Type, state: InferState): Type {
   if (type.kind === "Var") {
     const replacement = state.substitutions.get(type.id);
@@ -177,6 +197,10 @@ export function prune(type: Type, state: InferState): Type {
   return type;
 }
 
+/**
+ * Apply accumulated substitutions throughout a type, recursively.
+ * Returns a type with all type variables replaced by their concrete types.
+ */
 export function applySubstitution(type: Type, state: InferState): Type {
   const pruned = prune(type, state);
   if (pruned.kind === "Constructor") {
@@ -196,6 +220,10 @@ export function applySubstitution(type: Type, state: InferState): Type {
   return pruned;
 }
 
+/**
+ * Check if a type variable occurs within a type (occurs check).
+ * Prevents infinite types like t = List<t>.
+ */
 function occursInType(typeVar: TypeVar, type: Type, state: InferState): boolean {
   const target = prune(type, state);
   if (target.kind === "Var") {
@@ -213,6 +241,11 @@ function occursInType(typeVar: TypeVar, type: Type, state: InferState): boolean 
   return false;
 }
 
+/**
+ * Unify two types using Hindley-Milner algorithm.
+ * Mutates state.substitutions to record type variable bindings.
+ * Reports errors for type mismatches, occurs check violations, and rigid type variable conflicts.
+ */
 export function unify(
   left: Type,
   right: Type,
@@ -274,6 +307,7 @@ export function unify(
   reportUnificationError(a, b, state, context ?? "Type mismatch", loc);
 }
 
+/** Convert type to human-readable string for error messages */
 function typeToString(type: Type): string {
   switch (type.kind) {
     case "Var":
@@ -292,6 +326,7 @@ function typeToString(type: Type): string {
   }
 }
 
+/** Report a unification failure with formatted type strings */
 function reportUnificationError(
   left: Type,
   right: Type,
@@ -304,6 +339,10 @@ function reportUnificationError(
   state.errors.push(makeError(`${context}: ${leftStr} vs ${rightStr}`, loc, state.currentFilePath));
 }
 
+/**
+ * Check that a match expression covers all variants of a sum type.
+ * Reports error if non-exhaustive (missing variants without a wildcard catch-all).
+ */
 export function checkMatchExhaustiveness(
   stmt: ast.MatchStmt,
   ctx: TypecheckContext,

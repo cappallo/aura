@@ -84,8 +84,9 @@ function findProjectRoot(startDir: string): string | null {
 }
 
 /**
- * Load all modules starting from entry file, resolving imports recursively
- * Returns modules in topological order (dependencies before dependents)
+ * Load all modules starting from entry file, resolving imports recursively.
+ * Performs depth-first traversal with cycle detection.
+ * Returns modules in topological order (dependencies before dependents).
  */
 export function loadModules(
   entryFilePath: string,
@@ -95,16 +96,17 @@ export function loadModules(
   const visiting = new Set<string>();
   const order: ResolvedModule[] = [];
   
+  /** Recursive visitor for dependency graph traversal */
   function visit(filePath: string, importedFrom?: string): void {
     const absolutePath = path.resolve(filePath);
     const key = absolutePath;
     
-    // Already processed
+    // Already processed - skip
     if (resolved.has(key)) {
       return;
     }
     
-    // Cycle detection
+    // Cycle detection - fail if we're currently visiting this path
     if (visiting.has(key)) {
       const chain = importedFrom ? ` (imported from ${importedFrom})` : "";
       throw new Error(`Circular dependency detected: ${absolutePath}${chain}`);
@@ -112,11 +114,11 @@ export function loadModules(
     
     visiting.add(key);
     
-    // Parse the module
+    // Parse the module from source file
     const code = fs.readFileSync(absolutePath, "utf8");
     const module = parseModule(code, absolutePath);
     
-    // Recursively visit imports
+    // Recursively visit all imports before this module
     for (const imp of module.imports) {
       try {
         const importPath = resolveModulePath(
@@ -134,7 +136,7 @@ export function loadModules(
     
     visiting.delete(key);
     
-    // Add to resolved set and order
+    // Add to resolved set and topological order
     const resolvedModule: ResolvedModule = {
       moduleName: module.name,
       filePath: absolutePath,
@@ -149,7 +151,9 @@ export function loadModules(
 }
 
 /**
- * Build global symbol table from loaded modules
+ * Build global symbol table from loaded modules.
+ * Maps fully-qualified names to their declarations for cross-module resolution.
+ * Detects and reports duplicate declarations.
  */
 export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
   const types = new Map<string, ast.TypeDecl>();
@@ -229,8 +233,10 @@ export function buildSymbolTable(modules: ResolvedModule[]): SymbolTable {
 }
 
 /**
- * Generate internal types from schema declarations
- * For each schema UserRecord@2, creates a RecordTypeDecl named UserRecord@2
+ * Generate internal type declarations from schema declarations.
+ * For each schema UserRecord@2, creates a corresponding RecordTypeDecl.
+ * Converts optional schema fields to OptionalType annotations.
+ * Skips generation if a manually-defined type with the same name exists.
  */
 export function generateTypesFromSchemas(symbolTable: SymbolTable): void {
   for (const [qualifiedName, schema] of symbolTable.schemas.entries()) {
@@ -265,30 +271,35 @@ export function generateTypesFromSchemas(symbolTable: SymbolTable): void {
 }
 
 /**
- * Resolve a potentially qualified identifier to its full qualified name
- * Takes into account module imports and aliases
+ * Resolve a potentially qualified identifier to its fully-qualified name.
+ * Handles module imports, aliases, and unqualified names in current scope.
+ * 
+ * Resolution order:
+ * 1. If qualified, check for import aliases (e.g., "m.add" where m is alias)
+ * 2. If qualified, check for module component prefix (e.g., "math.add" for "multifile.math")
+ * 3. If unqualified, check current module scope
+ * 4. If unqualified, check all imported modules
+ * 5. Return identifier as-is if not found (caller handles error)
  */
 export function resolveIdentifier(
   identifier: string,
   currentModule: ast.Module,
   symbolTable: SymbolTable
 ): string {
-  // Check if it's already qualified (contains a dot)
+  // Already qualified (contains a dot) - resolve alias or module prefix
   if (identifier.includes(".")) {
-    // Check if first part is an alias
     const parts = identifier.split(".");
     const firstPart = parts[0];
     
-    // Look for import alias
+    // Check for import alias (e.g., "m" in "import math as m")
     for (const imp of currentModule.imports) {
       if (imp.alias === firstPart) {
-        // Replace alias with full module name
         const fullModuleName = imp.moduleName.join(".");
         return `${fullModuleName}.${parts.slice(1).join(".")}`;
       }
       
-      // Check if first part matches the last component of the module name
-      // E.g., "math.add" when we imported "multifile.math"
+      // Check if first part matches last component of imported module name
+      // Allows "math.add" when we imported "multifile.math"
       const lastComponent = imp.moduleName[imp.moduleName.length - 1];
       if (lastComponent === firstPart) {
         const fullModuleName = imp.moduleName.join(".");
@@ -296,16 +307,14 @@ export function resolveIdentifier(
       }
     }
     
-    // Check if it's a direct module reference (no alias)
-    // e.g., "examples.math.add" where we imported "examples.math"
+    // Assume it's already fully qualified (e.g., "examples.math.add")
     return identifier;
   }
   
-  // Unqualified identifier - first try current module
+  // Unqualified identifier - try current module first
   const currentModuleName = currentModule.name.join(".");
   const localName = `${currentModuleName}.${identifier}`;
   
-  // Check if it exists in current module
   if (
     symbolTable.types.has(localName) ||
     symbolTable.functions.has(localName) ||
@@ -314,7 +323,7 @@ export function resolveIdentifier(
     return localName;
   }
   
-  // Check imports for unqualified access
+  // Check all imported modules for unqualified access
   for (const imp of currentModule.imports) {
     const importedModuleName = imp.moduleName.join(".");
     const qualifiedName = `${importedModuleName}.${identifier}`;
@@ -328,6 +337,6 @@ export function resolveIdentifier(
     }
   }
   
-  // Not found - return as-is and let caller handle error
+  // Not found in any scope - return as-is and let caller report error
   return identifier;
 }

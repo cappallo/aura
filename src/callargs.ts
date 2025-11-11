@@ -1,5 +1,11 @@
+/**
+ * Call argument alignment utilities.
+ * Handles mixed positional and named arguments.
+ */
+
 import * as ast from "./ast";
 
+/** Issues that can occur when aligning call arguments to parameters */
 export type CallArgIssue =
   | { kind: "TooManyArguments"; arg: ast.CallArg }
   | { kind: "UnknownParameter"; arg: ast.CallArg; name: string }
@@ -7,11 +13,19 @@ export type CallArgIssue =
   | { kind: "MissingParameter"; name: string }
   | { kind: "PositionalAfterNamed"; arg: ast.CallArg };
 
+/** Result of aligning call arguments to parameter positions */
 export type CallArgAlignment = {
+  /** Arguments in parameter order, null for missing */
   ordered: (ast.CallArg | null)[];
+  /** Detected issues */
   issues: CallArgIssue[];
 };
 
+/**
+ * Align call arguments to parameter positions.
+ * Supports mixed positional and named arguments.
+ * Positional args must come before named args.
+ */
 export function alignCallArguments(expr: ast.CallExpr, paramNames: string[]): CallArgAlignment {
   const ordered: (ast.CallArg | null)[] = paramNames.map(() => null);
   const issues: CallArgIssue[] = [];

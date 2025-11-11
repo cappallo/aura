@@ -1,7 +1,16 @@
+/**
+ * Utilities for type checking function calls.
+ * Handles effect checking and call argument validation.
+ */
+
 import * as ast from "../ast";
 import { alignCallArguments, CallArgIssue } from "../callargs";
 import { makeError, TypeCheckError } from "./types";
 
+/**
+ * Verify that caller has all effects required by callee.
+ * Reports errors for missing effects.
+ */
 export function verifyEffectSubset(
   calleeEffects: Set<string>,
   callerEffects: string[],
@@ -22,6 +31,10 @@ export function verifyEffectSubset(
   }
 }
 
+/**
+ * Report call argument alignment issues as type errors.
+ * Handles too many args, unknown parameters, duplicates, and missing required parameters.
+ */
 export function reportCallArgIssues(
   expr: ast.CallExpr,
   callee: string,

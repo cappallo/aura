@@ -13,6 +13,10 @@ import {
   Env,
 } from "./types";
 
+/**
+ * Build runtime context from a single module.
+ * Indexes all declarations and initializes execution state.
+ */
 export function buildRuntime(
   module: ast.Module,
   outputFormat?: "text" | "json",
@@ -76,6 +80,11 @@ export function buildRuntime(
   return runtime;
 }
 
+/**
+ * Build runtime context from multiple modules.
+ * Indexes declarations from all modules with qualified names.
+ * Primary module is the last in the list (entry point).
+ */
 export function buildMultiModuleRuntime(
   modules: import("../loader").ResolvedModule[],
   symbolTable: import("../loader").SymbolTable,
@@ -176,6 +185,11 @@ export function buildMultiModuleRuntime(
   return runtime;
 }
 
+/**
+ * Call a function by name with positional arguments.
+ * Enforces contracts (requires/ensures), traces execution, and handles actor message delivery.
+ * Throws RuntimeError if function not found or arity mismatch.
+ */
 export function callFunction(runtime: Runtime, name: string, args: Value[]): Value {
   const fn = runtime.functions.get(name);
   if (!fn) {
@@ -224,6 +238,10 @@ export function callFunction(runtime: Runtime, name: string, args: Value[]): Val
   return returnValue;
 }
 
+/**
+ * Run all unit tests and property tests in the runtime.
+ * Returns outcomes with success/failure status and error details.
+ */
 export function runTests(runtime: Runtime): TestOutcome[] {
   const outcomes: TestOutcome[] = [];
 

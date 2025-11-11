@@ -3,6 +3,7 @@ import { Runtime, Value } from "./types";
 
 const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
+/** Construct an Int value (identity if already a Value) */
 export function makeInt(value: number | Value): Value {
   if (typeof value === "number") {
     return { kind: "Int", value };
@@ -10,10 +11,12 @@ export function makeInt(value: number | Value): Value {
   return value;
 }
 
+/** Construct a Bool value */
 export function makeBool(value: boolean): Value {
   return { kind: "Bool", value };
 }
 
+/** Construct a constructor value (record or variant) with named fields */
 export function makeCtor(name: string, entries?: [string, Value][]): Value {
   const fields = new Map<string, Value>();
   if (entries) {
@@ -24,10 +27,12 @@ export function makeCtor(name: string, entries?: [string, Value][]): Value {
   return { kind: "Ctor", name, fields };
 }
 
+/** Construct an ActorRef value */
 export function makeActorRefValue(id: number): Value {
   return { kind: "ActorRef", id };
 }
 
+/** Structural equality comparison for values */
 export function valueEquals(a: Value, b: Value): boolean {
   if (a.kind !== b.kind) {
     return false;
@@ -75,6 +80,7 @@ export function valueEquals(a: Value, b: Value): boolean {
   }
 }
 
+/** Convert value to JSON-serializable representation for display */
 export function prettyValue(value: Value): unknown {
   switch (value.kind) {
     case "Int":
@@ -99,6 +105,7 @@ export function prettyValue(value: Value): unknown {
   }
 }
 
+/** Convert Lx value to JavaScript value (for JSON encoding) */
 export function valueToJsValue(value: Value): unknown {
   switch (value.kind) {
     case "Int":
@@ -121,6 +128,7 @@ export function valueToJsValue(value: Value): unknown {
   }
 }
 
+/** Convert JavaScript value to Lx value (for JSON decoding) */
 export function jsValueToValue(jsValue: unknown): Value {
   if (jsValue === null || jsValue === undefined) {
     return { kind: "Unit" };
@@ -158,6 +166,7 @@ export function jsValueToValue(jsValue: unknown): Value {
   return { kind: "Unit" };
 }
 
+/** Generate default value for a type (used for actor state initialization) */
 export function defaultValueForType(typeExpr: ast.TypeExpr, runtime: Runtime): Value {
   if (typeExpr.kind === "OptionalType") {
     return makeCtor("None");
@@ -276,14 +285,17 @@ export function substituteTypeExpr(
   return typeExpr;
 }
 
+/** Generate random integer in range [-20, 20] for property testing */
 export function randomInt(rng: () => number): number {
   return Math.floor(rng() * 41) - 20;
 }
 
+/** Generate random boolean for property testing */
 export function randomBool(rng: () => number): boolean {
   return rng() < 0.5;
 }
 
+/** Generate random string (0-5 chars) for property testing */
 export function randomString(rng: () => number): string {
   const length = Math.floor(rng() * 6);
   let result = "";

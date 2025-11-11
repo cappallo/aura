@@ -1,3 +1,13 @@
+/**
+ * Type checking module for Lx language.
+ * 
+ * Two-pass checking:
+ * 1. Collect all declarations (functions, types, effects) into context
+ * 2. Check function bodies with full context available
+ * 
+ * Implements Hindley-Milner type inference with effects tracking.
+ */
+
 import * as ast from "../ast";
 import type { ResolvedModule, SymbolTable } from "../loader";
 import {

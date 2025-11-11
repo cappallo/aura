@@ -30,22 +30,36 @@ import {
 } from "./type-ops";
 import { getAlignedArgument, reportCallArgIssues, verifyEffectSubset } from "./call-utils";
 
+/** Result of type checking a block of statements */
 export type BlockResult = {
+  /** Type of the block's final value */
   valueType: Type;
+  /** Whether block contains an early return */
   returned: boolean;
 };
 
+/** Result of type checking a single statement */
 export type StatementResult = {
+  /** Type produced by the statement */
   valueType: Type;
+  /** Whether statement performed an early return */
   returned: boolean;
 };
 
+/** Options controlling block type checking behavior */
 export type BlockOptions = {
+  /** Expected type for return statements in this block */
   expectedReturnType: Type;
+  /** Whether block is used as an expression (last value matters) */
   treatAsExpression: boolean;
+  /** Whether to clone environment before checking (for scoping) */
   cloneEnv?: boolean;
 };
 
+/**
+ * Type check a function body with parameter and return type constraints.
+ * Sets up type parameter scope and environment, then infers block types.
+ */
 export function typeCheckFunctionBody(
   fn: ast.FnDecl,
   ctx: TypecheckContext,
@@ -87,6 +101,11 @@ export function typeCheckFunctionBody(
   });
 }
 
+/**
+ * Instantiate a polymorphic function signature with fresh type variables.
+ * Returns null for builtin functions without AST declarations.
+ * The rigid parameter controls whether type vars can be unified (false for call sites).
+ */
 export function instantiateFunctionSignature(
   signature: FnSignature,
   state: InferState,
@@ -111,6 +130,7 @@ export function instantiateFunctionSignature(
   return { params, returnType };
 }
 
+/** Resolve function signature by name, handling cross-module references */
 function resolveFunctionSignatureForVar(name: string, state: InferState): FnSignature | undefined {
   const ctx = state.ctx;
   const direct = ctx.functions.get(name);
@@ -124,6 +144,7 @@ function resolveFunctionSignatureForVar(name: string, state: InferState): FnSign
   return undefined;
 }
 
+/** Get function type as a first-class value (for treating functions as values) */
 function resolveFunctionValueType(name: string, state: InferState): TypeFunction | null {
   const signature = resolveFunctionSignatureForVar(name, state);
   if (!signature) {
@@ -136,6 +157,11 @@ function resolveFunctionValueType(name: string, state: InferState): TypeFunction
   return makeFunctionType(instantiated.params, instantiated.returnType);
 }
 
+/**
+ * Infer types for a block of statements.
+ * Returns the type of the last statement and whether block contains early return.
+ * Handles let bindings, returns, and expression statements.
+ */
 export function inferBlock(
   block: ast.Block,
   env: TypeEnv,
@@ -355,6 +381,11 @@ function inferMatchExpr(expr: ast.MatchExpr, env: TypeEnv, state: InferState): T
   return accumulatedType ? applySubstitution(accumulatedType, state) : UNIT_TYPE;
 }
 
+/**
+ * Infer the type of an expression using Hindley-Milner algorithm.
+ * Handles literals, variables, operations, function calls, pattern matching, records, etc.
+ * Accumulates errors in state rather than throwing.
+ */
 export function inferExpr(expr: ast.Expr, env: TypeEnv, state: InferState): Type {
   switch (expr.kind) {
     case "IntLiteral":
