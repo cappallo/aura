@@ -2,7 +2,12 @@ module examples.actor_supervision
 
 type WorkerMsg = DoWork { value: Int } | Fail | Get
 
-type SupervisorMsg = ChildFailed { child: ActorRef, reason: String, message: String, actor: String }
+type SupervisorMsg = Start | Send { value: Int } | Crash | ChildFailed {
+  child: ActorRef
+  reason: String
+  message: String
+  actor: String
+} | CurrentWorker | FailureSummary
 
 actor Worker() {
   state {
@@ -31,32 +36,31 @@ actor Supervisor() {
     last_failure: String
     last_message: String
     last_actor: String
+    last_child: ActorRef
   }
 
   on Start() -> [Concurrent] ActorRef {
     let next_worker = Worker.spawn()
-    worker = next_worker
+    let worker = next_worker
+    let last_child = worker
     return next_worker
   }
 
   on Send(value: Int) -> [Concurrent] Unit {
-    worker.send(DoWork { value })
+    worker.send(DoWork { value: value })
   }
 
   on Crash() -> [Concurrent] Unit {
     worker.send(DoWork { value: -1 })
   }
 
-  on ChildFailed(info: SupervisorMsg) -> [Concurrent] Unit {
-    match info {
-      ChildFailed { reason, message, actor } -> {
-        last_failure = reason
-        last_message = message
-        last_actor = actor
-        let restarted = Worker.spawn()
-        worker = restarted
-      }
-    }
+  on ChildFailed(child: ActorRef, reason: String, message: String, actor: String) -> [Concurrent] Unit {
+    let last_child = child
+    let last_failure = reason
+    let last_message = message
+    let last_actor = actor
+    let restarted = Worker.spawn()
+    let worker = restarted
   }
 
   on CurrentWorker() -> [Concurrent] ActorRef {
@@ -65,7 +69,7 @@ actor Supervisor() {
 
   on FailureSummary() -> [Concurrent] SupervisorMsg {
     return ChildFailed {
-      child: worker
+      child: last_child
       reason: last_failure
       message: last_message
       actor: last_actor
@@ -83,6 +87,10 @@ test supervisor_restarts_child {
   Concurrent.flush()
   Concurrent.flush()
 
+  let restarted_worker = Supervisor.CurrentWorker(supervisor)
+  let restarted_total = Worker.Get(restarted_worker)
+  test.assert_equal(0, restarted_total)
+
   Supervisor.Send(supervisor, 5)
   Concurrent.flush()
 
@@ -92,10 +100,14 @@ test supervisor_restarts_child {
 
   let summary = Supervisor.FailureSummary(supervisor)
   match summary {
-    ChildFailed { reason, message, actor } -> {
-      test.assert_equal("assertion failed", reason)
-      test.assert_equal("DoWork", message)
-      test.assert_equal("Worker", actor)
+    case ChildFailed { child: failed_child , reason: failure_reason , message: failure_message , actor: failure_actor } => {
+      test.assert_equal("assertion failed", failure_reason)
+      test.assert_equal("DoWork", failure_message)
+      test.assert_equal("Worker", failure_actor)
+      test.assert_equal(false, failed_child == current)
+    }
+    case _ => {
+      assert(false)
     }
   }
 }

@@ -1,7 +1,7 @@
 import * as ast from "../ast";
 import { RuntimeError } from "./errors";
 import { Runtime, Value, ActorMessage, Env, EvalResult } from "./types";
-import { defaultValueForType, makeActorRefValue, makeCtor } from "./values";
+import { defaultValueForType, makeActorRefValue, makeCtor, valueEquals } from "./values";
 
 /** Function type for evaluating blocks (injected to avoid circular dependency) */
 export type BlockEvaluator = (block: ast.Block, env: Env, runtime: Runtime) => EvalResult;
@@ -153,6 +153,7 @@ export class ActorInstance {
     }
 
     const env = new Map<string, Value>();
+    const originalState = new Map(this.state);
 
     for (const [key, value] of this.initParams.entries()) {
       env.set(key, value);
@@ -172,11 +173,20 @@ export class ActorInstance {
 
       for (const field of this.decl.stateFields) {
         const updatedValue = env.get(field.name);
-        if (updatedValue !== undefined) {
-          this.state.set(field.name, updatedValue);
+        if (updatedValue === undefined) {
+          continue;
         }
+        const currentValue = this.state.get(field.name);
+        const originalValue = originalState.get(field.name);
+        if (
+          originalValue !== undefined &&
+          currentValue !== undefined &&
+          !valueEquals(currentValue, originalValue)
+        ) {
+          continue;
+        }
+        this.state.set(field.name, updatedValue);
       }
-
       return result.value;
     } catch (error) {
       const runtimeError = toRuntimeError(error);

@@ -136,7 +136,7 @@ TypeParams
 		}
 
 SumType
-	= first:Variant rest:(__ "|" __ Variant)+ {
+	= first:Variant rest:(__ "|" __ Variant)* {
 			return [first, ...rest.map((part) => part[3])];
 		}
 
