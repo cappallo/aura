@@ -206,6 +206,15 @@ export function checkActor(
   }
 
   for (const handler of actor.handlers) {
+    // Verify handler has Concurrent effect
+    if (!handler.effects.includes("Concurrent")) {
+      errors.push(makeError(
+        `Actor '${actor.name}' handler 'on ${handler.msgTypeName}' must declare [Concurrent] effect`,
+        undefined,
+        filePath,
+      ));
+    }
+
     try {
       convertTypeExpr(handler.returnType, typeParamScope, state, resolutionModule);
     } catch (err) {
