@@ -522,7 +522,7 @@ function builtinAssert(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   const { values } = bindCallArguments(expr, getBuiltinParamNames("assert"), env, runtime);
   const condition = expectValue(values, "condition", expr.callee);
   if (condition.kind !== "Bool" || !condition.value) {
-    throw new RuntimeError("Assertion failed");
+    throw new RuntimeError("assertion failed");
   }
   return { kind: "Unit" };
 }
