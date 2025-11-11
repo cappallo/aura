@@ -1,26 +1,45 @@
 import * as ast from "./ast";
 import { alignCallArguments, CallArgIssue } from "./callargs";
-import { StructuredLog } from "./structured";
+import {
+  ActorMessage,
+  AsyncGroupContext,
+  AsyncTask,
+  Env,
+  EvalResult,
+  FnContract,
+  PendingActorDelivery,
+  Runtime,
+  RuntimeError,
+  RuntimeOptions,
+  SchedulerMode,
+  SeededRNG,
+  TestOutcome,
+} from "./interpreter/context";
+import { PropertyEvaluationHelpers, defaultValueForType, runProperty } from "./interpreter/properties";
+import {
+  Value,
+  jsValueToValue,
+  makeActorRefValue,
+  makeCtor,
+  prettyValue,
+  valueEquals,
+  valueToJsValue,
+} from "./interpreter/values";
 
-export type SchedulerMode = "immediate" | "deterministic";
+type MatchEnv = Env;
 
-export type Value =
-  | { kind: "Int"; value: number }
-  | { kind: "Bool"; value: boolean }
-  | { kind: "String"; value: string }
-  | { kind: "List"; elements: Value[] }
-  | { kind: "Ctor"; name: string; fields: Map<string, Value> }
-  | { kind: "ActorRef"; id: number }
-  | { kind: "Unit" };
-
-export type ActorMessage = {
-  msgType: string;
-  args: Map<string, Value>;
-};
-
-type PendingActorDelivery = {
-  actorId: number;
-};
+export type { Value } from "./interpreter/values";
+export {
+  prettyValue,
+  valueEquals,
+  makeCtor,
+  makeActorRefValue,
+  valueToJsValue,
+  jsValueToValue,
+} from "./interpreter/values";
+export { RuntimeError, SeededRNG } from "./interpreter/context";
+export type { SchedulerMode, RuntimeOptions, Runtime, TestOutcome, ActorMessage } from "./interpreter/context";
+export { defaultValueForType } from "./interpreter/properties";
 
 export class ActorInstance {
   id: number;
@@ -108,102 +127,6 @@ export class ActorInstance {
     return result.value;
   }
 }
-
-export type Runtime = {
-  module: ast.Module;
-  functions: Map<string, ast.FnDecl>;
-  contracts: Map<string, FnContract>;
-  tests: ast.TestDecl[];
-  properties: ast.PropertyDecl[];
-  typeDecls: Map<string, ast.TypeDecl>;
-  actors: Map<string, ast.ActorDecl>;
-  actorInstances: Map<number, ActorInstance>;
-  nextActorId: number;
-  schedulerMode: SchedulerMode;
-  pendingActorDeliveries: PendingActorDelivery[];
-  isProcessingActorMessages: boolean;
-  // For multi-module support
-  symbolTable?: import("./loader").SymbolTable;
-  // Structured logging support
-  outputFormat?: "text" | "json";
-  logs?: StructuredLog[];
-  // Execution tracing support
-  traces?: import("./structured").StructuredTrace[];
-  tracing?: boolean;
-  traceDepth?: number;
-  // Deterministic RNG for testing
-  rng: SeededRNG | null;
-};
-
-export type RuntimeOptions = {
-  schedulerMode?: SchedulerMode;
-  seed?: number;
-};
-
-type FnContract = {
-  requires: ast.Expr[];
-  ensures: ast.Expr[];
-};
-
-type Env = Map<string, Value>;
-
-type EvalResult =
-  | { type: "value"; value: Value }
-  | { type: "return"; value: Value };
-
-type MatchEnv = Env;
-
-type AsyncTask = {
-  env: Env;
-  stmts: ast.Stmt[];
-  nextIndex: number;
-  completed: boolean;
-  cancelled: boolean;
-};
-
-type AsyncGroupContext = {
-  tasks: AsyncTask[];
-};
-
-type TestOutcome = {
-  kind: "test" | "property";
-  name: string;
-  success: boolean;
-  error?: unknown;
-};
-
-/**
- * Seeded pseudo-random number generator using xorshift32 algorithm.
- * Provides deterministic random sequences for testing.
- */
-class SeededRNG {
-  private state: number;
-
-  constructor(seed: number) {
-    // Ensure seed is a non-zero 32-bit integer
-    this.state = seed === 0 ? 1 : seed >>> 0;
-  }
-
-  /**
-   * Generate next random number in [0, 1) range
-   */
-  next(): number {
-    // xorshift32 algorithm
-    let x = this.state;
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    this.state = x >>> 0; // Keep as unsigned 32-bit int
-    // Convert to [0, 1) range
-    return this.state / 0x100000000;
-  }
-}
-
-const DEFAULT_PROPERTY_RUNS = 50;
-const MAX_SHRINK_ATTEMPTS = 100;
-const MAX_GENERATION_ATTEMPTS = 100;
-const MAX_GENERATION_DEPTH = 4;
-const RANDOM_STRING_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
 const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.len": ["list"],
@@ -512,6 +435,11 @@ function processActorDeliveries(runtime: Runtime, limit?: number): number {
 export function runTests(runtime: Runtime): TestOutcome[] {
   const outcomes: TestOutcome[] = [];
 
+  const propertyHelpers: PropertyEvaluationHelpers = {
+    evalBlock,
+    evalExpr,
+  };
+
   for (const test of runtime.tests) {
     try {
       const env: Env = new Map();
@@ -532,7 +460,7 @@ export function runTests(runtime: Runtime): TestOutcome[] {
   }
 
   for (const property of runtime.properties) {
-    outcomes.push(runProperty(property, runtime));
+    outcomes.push(runProperty(property, runtime, propertyHelpers));
   }
 
   return outcomes;
@@ -1403,66 +1331,6 @@ function builtinConcurrentStep(expr: ast.CallExpr, env: Env, runtime: Runtime): 
   return makeBool(processed > 0);
 }
 
-function valueToJsValue(value: Value): unknown {
-  switch (value.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return value.value;
-    case "Unit":
-      return null;
-    case "List":
-      return value.elements.map(valueToJsValue);
-    case "Ctor": {
-      // For all constructors, use the standard _constructor format
-      const obj: Record<string, unknown> = { _constructor: value.name };
-      for (const [fieldName, fieldValue] of value.fields.entries()) {
-        obj[fieldName] = valueToJsValue(fieldValue);
-      }
-      return obj;
-    }
-  }
-}
-
-function jsValueToValue(jsValue: unknown): Value {
-  if (jsValue === null || jsValue === undefined) {
-    return { kind: "Unit" };
-  }
-  if (typeof jsValue === "number") {
-    return { kind: "Int", value: Math.floor(jsValue) };
-  }
-  if (typeof jsValue === "boolean") {
-    return { kind: "Bool", value: jsValue };
-  }
-  if (typeof jsValue === "string") {
-    return { kind: "String", value: jsValue };
-  }
-  if (Array.isArray(jsValue)) {
-    return { kind: "List", elements: jsValue.map(jsValueToValue) };
-  }
-  if (typeof jsValue === "object") {
-    const obj = jsValue as Record<string, unknown>;
-    const constructor = obj._constructor;
-    if (typeof constructor === "string") {
-      // Convert back to constructor
-      const fields = new Map<string, Value>();
-      for (const [key, val] of Object.entries(obj)) {
-        if (key !== "_constructor") {
-          fields.set(key, jsValueToValue(val));
-        }
-      }
-      return { kind: "Ctor", name: constructor, fields };
-    }
-    // Generic object - convert to record-like constructor
-    const fields = new Map<string, Value>();
-    for (const [key, val] of Object.entries(obj)) {
-      fields.set(key, jsValueToValue(val));
-    }
-    return { kind: "Ctor", name: "Object", fields };
-  }
-  return { kind: "Unit" };
-}
-
 function callUserFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   const actorSendResult = tryCallActorSend(expr, env, runtime);
   if (actorSendResult !== null) {
@@ -1736,646 +1604,6 @@ function executeActorHandler(
   return instance.deliverMessage(handler.msgTypeName, messageArgs);
 }
 
-type ParameterGenerationResult =
-  | { success: true }
-  | { success: false; paramName: string; message: string; cause?: unknown };
-
-function runProperty(property: ast.PropertyDecl, runtime: Runtime): TestOutcome {
-  const iterations = property.iterations ?? DEFAULT_PROPERTY_RUNS;
-  // Use seeded RNG if available, otherwise use Math.random()
-  const rng = runtime.rng ? () => runtime.rng!.next() : () => Math.random();
-
-  for (let iteration = 0; iteration < iterations; iteration += 1) {
-    const env: Env = new Map();
-    const generation = generateParametersForProperty(property, env, runtime, rng);
-    if (!generation.success) {
-      const snapshot = snapshotEnv(env);
-      const parts: string[] = [
-        `Property '${property.name}' could not generate value for parameter '${generation.paramName}': ${generation.message}`,
-      ];
-      if (generation.cause) {
-        const causeMessage = generation.cause instanceof Error ? generation.cause.message : String(generation.cause);
-        parts.push(`Cause: ${causeMessage}`);
-      }
-      if (Object.keys(snapshot).length > 0) {
-        parts.push(`Bound inputs: ${JSON.stringify(snapshot)}`);
-      }
-      return {
-        kind: "property",
-        name: property.name,
-        success: false,
-        error: new RuntimeError(parts.join(" ")),
-      };
-    }
-
-    try {
-      const result = evalBlock(property.body, new Map(env), runtime);
-      if (result.type === "return" && result.value.kind !== "Unit") {
-        // Property failed - try to shrink the counterexample
-        const shrunkEnv = shrinkCounterexample(property, env, runtime);
-        return {
-          kind: "property",
-          name: property.name,
-          success: false,
-          error: propertyFailureError(property.name, iteration, shrunkEnv, "Properties must not return non-unit values"),
-        };
-      }
-    } catch (error) {
-      // Property failed - try to shrink the counterexample
-      const shrunkEnv = shrinkCounterexample(property, env, runtime);
-      return {
-        kind: "property",
-        name: property.name,
-        success: false,
-        error: propertyFailureError(property.name, iteration, shrunkEnv, error),
-      };
-    }
-  }
-
-  return { kind: "property", name: property.name, success: true };
-}
-
-function generateParametersForProperty(
-  property: ast.PropertyDecl,
-  env: Env,
-  runtime: Runtime,
-  rng: () => number,
-): ParameterGenerationResult {
-  for (const param of property.params) {
-    const result = tryGenerateParameter(param, env, runtime, rng);
-    if (!result.success) {
-      return result;
-    }
-  }
-  return { success: true };
-}
-
-function tryGenerateParameter(
-  param: ast.PropertyParam,
-  env: Env,
-  runtime: Runtime,
-  rng: () => number,
-): ParameterGenerationResult {
-  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
-    const candidate = generateValueForTypeExpr(param.type, runtime, 0, rng);
-    env.set(param.name, candidate);
-
-    if (!param.predicate) {
-      return { success: true };
-    }
-
-    let predicateValue: Value;
-    try {
-      predicateValue = evalExpr(param.predicate, env, runtime);
-    } catch (error) {
-      return {
-        success: false,
-        paramName: param.name,
-        message: "error evaluating predicate",
-        cause: error,
-      };
-    }
-
-    if (predicateValue.kind !== "Bool") {
-      return {
-        success: false,
-        paramName: param.name,
-        message: "predicate must evaluate to a boolean value",
-      };
-    }
-
-    if (predicateValue.value) {
-      return { success: true };
-    }
-
-    env.delete(param.name);
-  }
-
-  return {
-    success: false,
-    paramName: param.name,
-    message: `predicate remained unsatisfied after ${MAX_GENERATION_ATTEMPTS} attempts`,
-  };
-}
-
-function propertyFailureError(propertyName: string, iteration: number, env: Env, cause: unknown): RuntimeError {
-  const snapshot = snapshotEnv(env);
-  const serializedInputs = JSON.stringify(snapshot);
-  const causeMessage =
-    cause instanceof RuntimeError || cause instanceof Error ? cause.message : String(cause);
-  return new RuntimeError(
-    `Property '${propertyName}' failed on iteration ${iteration + 1} with input ${serializedInputs}: ${causeMessage}`,
-  );
-}
-
-function snapshotEnv(env: Env): Record<string, unknown> {
-  const obj: Record<string, unknown> = {};
-  for (const [name, value] of env.entries()) {
-    obj[name] = prettyValue(value);
-  }
-  return obj;
-}
-
-function generateValueForTypeExpr(
-  typeExpr: ast.TypeExpr,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  if (depth > MAX_GENERATION_DEPTH) {
-    return defaultValueForType(typeExpr, runtime);
-  }
-
-  if (typeExpr.kind === "OptionalType") {
-    return generateOptionalValue(typeExpr, runtime, depth, rng);
-  }
-
-  if (typeExpr.kind === "TypeName") {
-    return generateFromTypeName(typeExpr, runtime, depth, rng);
-  }
-
-  return { kind: "Unit" };
-}
-
-function generateFromTypeName(
-  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  if (typeExpr.typeArgs.length === 0) {
-    switch (typeExpr.name) {
-      case "Int":
-        return { kind: "Int", value: randomInt(rng) };
-      case "Bool":
-        return { kind: "Bool", value: randomBool(rng) };
-      case "String":
-        return { kind: "String", value: randomString(rng) };
-      case "Unit":
-        return { kind: "Unit" };
-      case "ActorRef":
-        return makeActorRefValue(-1);
-      default:
-        break;
-    }
-  }
-
-  if (typeExpr.name === "List") {
-    const elementType = typeExpr.typeArgs[0] ?? { kind: "TypeName", name: "Int", typeArgs: [] };
-    return generateListValue(elementType, runtime, depth, rng);
-  }
-
-  if (typeExpr.name === "Option" && typeExpr.typeArgs.length === 1) {
-    const inner = typeExpr.typeArgs[0]!;
-    return generateOptionalValue({ kind: "OptionalType", inner }, runtime, depth, rng);
-  }
-
-  const decl = findTypeDecl(runtime, typeExpr.name);
-  if (!decl) {
-    return { kind: "Unit" };
-  }
-
-  switch (decl.kind) {
-    case "AliasTypeDecl": {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const target = substituteTypeExpr(decl.target, substitutions);
-      return generateValueForTypeExpr(target, runtime, depth + 1, rng);
-    }
-    case "RecordTypeDecl":
-      return generateRecordValue(decl, typeExpr, runtime, depth, rng);
-    case "SumTypeDecl":
-      return generateSumValue(decl, typeExpr, runtime, depth, rng);
-    default:
-      return { kind: "Unit" };
-  }
-}
-
-function generateRecordValue(
-  decl: ast.RecordTypeDecl,
-  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-  const fields = new Map<string, Value>();
-  for (const field of decl.fields) {
-    const fieldType = substituteTypeExpr(field.type, substitutions);
-    const value = generateValueForTypeExpr(fieldType, runtime, depth + 1, rng);
-    fields.set(field.name, value);
-  }
-  return { kind: "Ctor", name: decl.name, fields };
-}
-
-function generateSumValue(
-  decl: ast.SumTypeDecl,
-  typeExpr: Extract<ast.TypeExpr, { kind: "TypeName" }>,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  if (decl.variants.length === 0) {
-    return { kind: "Unit" };
-  }
-
-  const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-  let variant: ast.Variant;
-  if (depth >= MAX_GENERATION_DEPTH) {
-    variant = decl.variants.find((candidate) => candidate.fields.length === 0) ?? decl.variants[0]!;
-  } else {
-    const index = Math.floor(rng() * decl.variants.length);
-    variant = decl.variants[index] ?? decl.variants[0]!;
-  }
-
-  const fields = new Map<string, Value>();
-  for (const field of variant.fields) {
-    const fieldType = substituteTypeExpr(field.type, substitutions);
-    const value = generateValueForTypeExpr(fieldType, runtime, depth + 1, rng);
-    fields.set(field.name, value);
-  }
-
-  return { kind: "Ctor", name: variant.name, fields };
-}
-
-function generateListValue(
-  elementType: ast.TypeExpr,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  const maxLength = depth >= MAX_GENERATION_DEPTH ? 0 : 3;
-  const length = maxLength === 0 ? 0 : Math.floor(rng() * (maxLength + 1));
-  const elements: Value[] = [];
-  for (let i = 0; i < length; i += 1) {
-    elements.push(generateValueForTypeExpr(elementType, runtime, depth + 1, rng));
-  }
-  return { kind: "List", elements };
-}
-
-function generateOptionalValue(
-  typeExpr: Extract<ast.TypeExpr, { kind: "OptionalType" }>,
-  runtime: Runtime,
-  depth: number,
-  rng: () => number,
-): Value {
-  if (depth >= MAX_GENERATION_DEPTH || rng() < 0.3) {
-    return makeCtor("None");
-  }
-  const value = generateValueForTypeExpr(typeExpr.inner, runtime, depth + 1, rng);
-  return makeCtor("Some", [["value", value]]);
-}
-
-// Shrinking functions for counterexample minimization
-function shrinkValue(value: Value): Value[] {
-  switch (value.kind) {
-    case "Int":
-      return shrinkInt(value.value);
-    case "String":
-      return shrinkString(value.value);
-    case "List":
-      return shrinkList(value.elements);
-    case "Bool":
-      return value.value ? [{ kind: "Bool", value: false }] : [];
-    case "Ctor":
-      return shrinkCtor(value);
-    case "ActorRef":
-      // Actor references cannot be shrunk
-      return [];
-    case "Unit":
-      return [];
-  }
-}
-
-function shrinkInt(n: number): Value[] {
-  const candidates: Value[] = [];
-  
-  // Try zero if not already zero
-  if (n !== 0) {
-    candidates.push({ kind: "Int", value: 0 });
-  }
-  
-  // Try halving towards zero
-  if (Math.abs(n) > 1) {
-    const half = Math.floor(n / 2);
-    candidates.push({ kind: "Int", value: half });
-  }
-  
-  // Try one less in absolute value
-  if (n > 0) {
-    candidates.push({ kind: "Int", value: n - 1 });
-  } else if (n < 0) {
-    candidates.push({ kind: "Int", value: n + 1 });
-  }
-  
-  return candidates;
-}
-
-function shrinkString(s: string): Value[] {
-  const candidates: Value[] = [];
-  
-  // Try empty string
-  if (s.length > 0) {
-    candidates.push({ kind: "String", value: "" });
-  }
-  
-  // Try removing first character
-  if (s.length > 1) {
-    candidates.push({ kind: "String", value: s.slice(1) });
-  }
-  
-  // Try removing last character
-  if (s.length > 1) {
-    candidates.push({ kind: "String", value: s.slice(0, -1) });
-  }
-  
-  // Try halving the string
-  if (s.length > 2) {
-    const mid = Math.floor(s.length / 2);
-    candidates.push({ kind: "String", value: s.slice(0, mid) });
-  }
-  
-  return candidates;
-}
-
-function shrinkList(elements: Value[]): Value[] {
-  const candidates: Value[] = [];
-  
-  // Try empty list
-  if (elements.length > 0) {
-    candidates.push({ kind: "List", elements: [] });
-  }
-  
-  // Try removing first element
-  if (elements.length > 1) {
-    candidates.push({ kind: "List", elements: elements.slice(1) });
-  }
-  
-  // Try removing last element
-  if (elements.length > 1) {
-    candidates.push({ kind: "List", elements: elements.slice(0, -1) });
-  }
-  
-  // Try halving the list
-  if (elements.length > 2) {
-    const mid = Math.floor(elements.length / 2);
-    candidates.push({ kind: "List", elements: elements.slice(0, mid) });
-  }
-  
-  // Try shrinking individual elements (one at a time)
-  for (let i = 0; i < elements.length && candidates.length < 10; i += 1) {
-    const shrunk = shrinkValue(elements[i]!);
-    for (const smaller of shrunk) {
-      const newElements = [...elements];
-      newElements[i] = smaller;
-      candidates.push({ kind: "List", elements: newElements });
-    }
-  }
-  
-  return candidates;
-}
-
-function shrinkCtor(value: Value & { kind: "Ctor" }): Value[] {
-  const candidates: Value[] = [];
-  
-  // For Option types, try None if it's Some
-  if (value.name === "Some") {
-    candidates.push(makeCtor("None"));
-    // Also try shrinking the wrapped value
-    const wrappedValue = value.fields.get("value");
-    if (wrappedValue) {
-      const shrunk = shrinkValue(wrappedValue);
-      for (const smaller of shrunk) {
-        candidates.push(makeCtor("Some", [["value", smaller]]));
-      }
-    }
-  }
-  
-  // For other constructors, try shrinking field values
-  const fieldEntries = Array.from(value.fields.entries());
-  for (let i = 0; i < fieldEntries.length && candidates.length < 10; i += 1) {
-    const [fieldName, fieldValue] = fieldEntries[i]!;
-    const shrunk = shrinkValue(fieldValue);
-    for (const smaller of shrunk) {
-      const newFields = new Map(value.fields);
-      newFields.set(fieldName, smaller);
-      candidates.push({ kind: "Ctor", name: value.name, fields: newFields });
-    }
-  }
-  
-  return candidates;
-}
-
-function shrinkCounterexample(
-  property: ast.PropertyDecl,
-  failingEnv: Env,
-  runtime: Runtime,
-): Env {
-  let currentEnv = new Map(failingEnv);
-  let improved = true;
-  let attempts = 0;
-  
-  while (improved && attempts < MAX_SHRINK_ATTEMPTS) {
-    improved = false;
-    attempts += 1;
-    
-    // Try shrinking each parameter
-    for (const param of property.params) {
-      const currentValue = currentEnv.get(param.name);
-      if (!currentValue) continue;
-      
-      const candidates = shrinkValue(currentValue);
-      
-      for (const candidate of candidates) {
-        const testEnv = new Map(currentEnv);
-        testEnv.set(param.name, candidate);
-        
-        // Check if the candidate satisfies the predicate (if any)
-        if (param.predicate) {
-          try {
-            const predicateValue = evalExpr(param.predicate, testEnv, runtime);
-            if (predicateValue.kind !== "Bool" || !predicateValue.value) {
-              continue; // Skip candidates that don't satisfy the predicate
-            }
-          } catch {
-            continue; // Skip candidates that cause predicate errors
-          }
-        }
-        
-        // Check if the property still fails with this smaller value
-        try {
-          const result = evalBlock(property.body, new Map(testEnv), runtime);
-          // If it doesn't throw and doesn't return non-unit, it passed - not a valid shrink
-          if (result.type === "return" && result.value.kind !== "Unit") {
-            // This is a failure case - use this shrunk value
-            currentEnv = testEnv;
-            improved = true;
-            break;
-          }
-        } catch {
-          // Still fails - this is a valid shrink
-          currentEnv = testEnv;
-          improved = true;
-          break;
-        }
-      }
-      
-      if (improved) break; // Start over with the new smaller value
-    }
-  }
-  
-  return currentEnv;
-}
-
-function findTypeDecl(runtime: Runtime, name: string): ast.TypeDecl | undefined {
-  if (runtime.typeDecls.has(name)) {
-    return runtime.typeDecls.get(name);
-  }
-  if (runtime.symbolTable) {
-    const { resolveIdentifier } = require("./loader");
-    const qualified = resolveIdentifier(name, runtime.module, runtime.symbolTable);
-    return runtime.typeDecls.get(qualified);
-  }
-  return undefined;
-}
-
-function buildTypeArgMap(params: string[], args: ast.TypeExpr[]): Map<string, ast.TypeExpr> {
-  const map = new Map<string, ast.TypeExpr>();
-  for (let i = 0; i < params.length; i += 1) {
-    const paramName = params[i]!;
-    const arg = args[i] ?? { kind: "TypeName", name: "Int", typeArgs: [] };
-    map.set(paramName, arg);
-  }
-  return map;
-}
-
-function substituteTypeExpr(
-  typeExpr: ast.TypeExpr,
-  substitutions: Map<string, ast.TypeExpr>,
-  depth = 0,
-): ast.TypeExpr {
-  if (depth > 10) {
-    return typeExpr;
-  }
-
-  if (typeExpr.kind === "TypeName") {
-    if (typeExpr.typeArgs.length > 0) {
-      return {
-        kind: "TypeName",
-        name: typeExpr.name,
-        typeArgs: typeExpr.typeArgs.map((arg) => substituteTypeExpr(arg, substitutions, depth + 1)),
-      };
-    }
-    const replacement = substitutions.get(typeExpr.name);
-    if (replacement) {
-      return substituteTypeExpr(replacement, substitutions, depth + 1);
-    }
-    return typeExpr;
-  }
-
-  if (typeExpr.kind === "OptionalType") {
-    return {
-      kind: "OptionalType",
-      inner: substituteTypeExpr(typeExpr.inner, substitutions, depth + 1),
-    };
-  }
-
-  return typeExpr;
-}
-
-function defaultValueForType(typeExpr: ast.TypeExpr, runtime: Runtime): Value {
-  if (typeExpr.kind === "OptionalType") {
-    return makeCtor("None");
-  }
-
-  if (typeExpr.kind === "TypeName") {
-    switch (typeExpr.name) {
-      case "Int":
-        return { kind: "Int", value: 0 };
-      case "Bool":
-        return { kind: "Bool", value: false };
-      case "String":
-        return { kind: "String", value: "" };
-      case "Unit":
-        return { kind: "Unit" };
-      case "ActorRef":
-        return makeActorRefValue(-1);
-      case "List":
-        return { kind: "List", elements: [] };
-      default:
-        break;
-    }
-
-    const decl = findTypeDecl(runtime, typeExpr.name);
-    if (!decl) {
-      return { kind: "Unit" };
-    }
-
-    if (decl.kind === "AliasTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const target = substituteTypeExpr(decl.target, substitutions);
-      return defaultValueForType(target, runtime);
-    }
-
-    if (decl.kind === "RecordTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const fields = new Map<string, Value>();
-      for (const field of decl.fields) {
-        const fieldType = substituteTypeExpr(field.type, substitutions);
-        fields.set(field.name, defaultValueForType(fieldType, runtime));
-      }
-      return { kind: "Ctor", name: decl.name, fields };
-    }
-
-    if (decl.kind === "SumTypeDecl") {
-      const substitutions = buildTypeArgMap(decl.typeParams, typeExpr.typeArgs);
-      const variant = decl.variants.find((candidate) => candidate.fields.length === 0) ?? decl.variants[0];
-      if (!variant) {
-        return { kind: "Unit" };
-      }
-      const fields = new Map<string, Value>();
-      for (const field of variant.fields) {
-        const fieldType = substituteTypeExpr(field.type, substitutions);
-        fields.set(field.name, defaultValueForType(fieldType, runtime));
-      }
-      return { kind: "Ctor", name: variant.name, fields };
-    }
-  }
-
-  return { kind: "Unit" };
-}
-
-function randomInt(rng: () => number): number {
-  return Math.floor(rng() * 41) - 20;
-}
-
-function randomBool(rng: () => number): boolean {
-  return rng() < 0.5;
-}
-
-function randomString(rng: () => number): string {
-  const length = Math.floor(rng() * 6);
-  let result = "";
-  for (let i = 0; i < length; i += 1) {
-    const index = Math.floor(rng() * RANDOM_STRING_CHARS.length);
-    result += RANDOM_STRING_CHARS[index] ?? "a";
-  }
-  return result;
-}
-
-function makeActorRefValue(id: number): Value {
-  return { kind: "ActorRef", id };
-}
-
-function makeCtor(name: string, entries?: [string, Value][]): Value {
-  const fields = new Map<string, Value>();
-  if (entries) {
-    for (const [fieldName, fieldValue] of entries) {
-      fields.set(fieldName, fieldValue);
-    }
-  }
-  return { kind: "Ctor", name, fields };
-}
-
 function evalRecord(expr: ast.RecordExpr, env: Env, runtime: Runtime): Value {
   const fields = new Map<string, Value>();
   for (const field of expr.fields) {
@@ -2454,77 +1682,6 @@ function enforceContractClauses(
   }
 }
 
-function valueEquals(a: Value, b: Value): boolean {
-  if (a.kind !== b.kind) {
-    return false;
-  }
-  switch (a.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return a.value === (b as typeof a).value;
-    case "Unit":
-      return true;
-    case "List": {
-      const bb = b as typeof a;
-      if (a.elements.length !== bb.elements.length) {
-        return false;
-      }
-      for (let i = 0; i < a.elements.length; i += 1) {
-        const left = a.elements[i];
-        const right = bb.elements[i];
-        if (left === undefined || right === undefined || !valueEquals(left, right)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case "Ctor": {
-      const bb = b as typeof a;
-      if (a.name !== bb.name || a.fields.size !== bb.fields.size) {
-        return false;
-      }
-      for (const [key, val] of a.fields.entries()) {
-        const other = bb.fields.get(key);
-        if (!other || !valueEquals(val, other)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case "ActorRef": {
-      const bb = b as typeof a;
-      return a.id === bb.id;
-    }
-    default:
-      return false;
-  }
-}
-
-export function prettyValue(value: Value): unknown {
-  switch (value.kind) {
-    case "Int":
-    case "Bool":
-    case "String":
-      return value.value;
-    case "Unit":
-      return null;
-    case "List":
-      return value.elements.map((element) => prettyValue(element));
-    case "Ctor": {
-      const obj: Record<string, unknown> = {};
-      for (const [key, fieldValue] of value.fields.entries()) {
-        obj[key] = prettyValue(fieldValue);
-      }
-      return { [value.name]: obj };
-    }
-    case "ActorRef":
-      return { ActorRef: value.id };
-    default:
-      return null;
-  }
-}
-
 function addTrace(
   runtime: Runtime,
   stepType: "call" | "return" | "let" | "expr" | "match",
@@ -2535,10 +1692,10 @@ function addTrace(
   if (!runtime.tracing || !runtime.traces) {
     return;
   }
-  
+
   const depth = runtime.traceDepth ?? 0;
   const { sourceLocationToErrorLocation } = require("./structured");
-  
+
   runtime.traces.push({
     kind: "trace",
     stepType,
@@ -2547,11 +1704,4 @@ function addTrace(
     location: location ? sourceLocationToErrorLocation(location) : undefined,
     depth,
   });
-}
-
-export class RuntimeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RuntimeError";
-  }
 }
