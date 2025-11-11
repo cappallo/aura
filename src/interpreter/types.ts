@@ -20,6 +20,14 @@ export type ActorMessage = {
   args: Map<string, Value>;
 };
 
+/** Supervision metadata for an actor instance */
+export type ActorSupervisionNode = {
+  /** Parent actor ID if supervised (null when rooted at system) */
+  parentId: number | null;
+  /** Child actor IDs supervised by this actor */
+  children: Set<number>;
+};
+
 /** Configuration options for runtime execution */
 export type RuntimeOptions = {
   /** How actor messages are scheduled */
@@ -54,12 +62,16 @@ export type Runtime = {
   actorInstances: Map<number, import("./actors").ActorInstance>;
   /** Counter for generating unique actor IDs */
   nextActorId: number;
+  /** Supervision tree structure for all actors */
+  actorSupervision: Map<number, ActorSupervisionNode>;
   /** Message delivery scheduling mode */
   schedulerMode: SchedulerMode;
   /** Queue of pending actor message deliveries */
   pendingActorDeliveries: { actorId: number }[];
   /** Flag to prevent re-entrant message processing */
   isProcessingActorMessages: boolean;
+  /** Stack of currently executing actor IDs (for supervision context) */
+  currentActorStack: number[];
   /** Symbol table for multi-module execution */
   symbolTable?: import("../loader").SymbolTable;
   /** Output format for structured logging */

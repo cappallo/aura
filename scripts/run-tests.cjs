@@ -32,6 +32,7 @@ runCommand("node", [cliPath, "test", "examples/comments.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_basic.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_async_group.lx"]);
 runCommand("node", [cliPath, "test", "--scheduler=deterministic", "examples/actor_scheduler.lx"]);
+runCommand("node", [cliPath, "test", "examples/actor_supervision.lx"]);
 runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
 runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
 
@@ -75,4 +76,10 @@ runExpectFailure(
   "Expected type checker failure when parallel primitives receive effectful functions",
   "node",
   [cliPath, "check", "examples/parallel_type_error.lx"],
+);
+
+runExpectFailure(
+  "Expected runtime failure when an actor crashes without supervision",
+  "node",
+  [cliPath, "test", "examples/actor_supervision_error.lx"],
 );

@@ -104,6 +104,12 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
     effects: new Set(["Concurrent"]),
     instantiateType: () => makeFunctionType([], BOOL_TYPE),
   },
+  "Concurrent.stop": {
+    arity: 1,
+    paramNames: ["actor"],
+    effects: new Set(["Concurrent"]),
+    instantiateType: () => makeFunctionType([ACTOR_REF_TYPE], BOOL_TYPE),
+  },
   "str.len": {
     arity: 1,
     paramNames: ["text"],

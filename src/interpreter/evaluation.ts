@@ -1,7 +1,13 @@
 import * as ast from "../ast";
 import { alignCallArguments, CallArgIssue } from "../callargs";
 import { RuntimeError } from "./errors";
-import { ActorInstance, processActorDeliveries } from "./actors";
+import {
+  ActorInstance,
+  prepareActorHandlerArgs,
+  processActorDeliveries,
+  registerActorSupervision,
+  stopActor,
+} from "./actors";
 import { Runtime, Value, Env, EvalResult } from "./types";
 import {
   jsValueToValue,
@@ -58,6 +64,7 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "json.decode": ["text"],
   "Concurrent.flush": [],
   "Concurrent.step": [],
+  "Concurrent.stop": ["actor"],
 };
 
 /** Get parameter names for a builtin function (throws if not found) */
@@ -420,6 +427,8 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinConcurrentFlush(expr, env, runtime);
     case "Concurrent.step":
       return builtinConcurrentStep(expr, env, runtime);
+    case "Concurrent.stop":
+      return builtinConcurrentStop(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -905,6 +914,16 @@ function builtinConcurrentStep(expr: ast.CallExpr, env: Env, runtime: Runtime): 
   return makeBool(processed > 0);
 }
 
+function builtinConcurrentStop(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("Concurrent.stop"), env, runtime);
+  const actorValue = expectValue(values, "actor", expr.callee);
+  if (actorValue.kind !== "ActorRef") {
+    throw new RuntimeError("Concurrent.stop expects an ActorRef argument");
+  }
+  const stopped = stopActor(runtime, actorValue.id);
+  return makeBool(stopped);
+}
+
 function resolveFunctionReference(name: string, runtime: Runtime, context: string): ast.FnDecl {
   let resolvedName = name;
   if (runtime.symbolTable) {
@@ -1000,7 +1019,7 @@ function tryCallActorSend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value
     throw new RuntimeError(`Actor '${instance.decl.name}' has no handler for message '${messageValue.name}'`);
   }
 
-  const args = buildActorMessageArgs(handler, messageValue);
+  const args = prepareActorHandlerArgs(handler, messageValue);
   instance.send(handler.msgTypeName, args);
   return { kind: "Unit" };
 }
@@ -1014,44 +1033,6 @@ function resolveActorSendTarget(callee: string): string | null {
     return null;
   }
   return prefix;
-}
-
-function buildActorMessageArgs(handler: ast.ActorHandler, message: Value): Map<string, Value> {
-  if (message.kind !== "Ctor") {
-    throw new RuntimeError("Actor messages must be constructor values");
-  }
-  const args = new Map<string, Value>();
-  if (handler.msgParams.length === 0) {
-    return args;
-  }
-
-  if (shouldBindWholeMessage(handler)) {
-    const param = handler.msgParams[0]!;
-    args.set(param.name, message);
-    return args;
-  }
-
-  for (const param of handler.msgParams) {
-    const fieldValue = message.fields.get(param.name);
-    if (fieldValue === undefined) {
-      throw new RuntimeError(
-        `Message '${message.name}' is missing field '${param.name}' required by handler 'on ${handler.msgTypeName}'`,
-      );
-    }
-    args.set(param.name, fieldValue);
-  }
-  return args;
-}
-
-function shouldBindWholeMessage(handler: ast.ActorHandler): boolean {
-  if (handler.msgParams.length !== 1) {
-    return false;
-  }
-  const param = handler.msgParams[0]!;
-  if (param.type.kind !== "TypeName") {
-    return false;
-  }
-  return param.type.name === handler.msgTypeName && param.type.typeArgs.length === 0;
 }
 
 function tryCallActorFunction(expr: ast.CallExpr, env: Env, runtime: Runtime): Value | null {
@@ -1143,8 +1124,12 @@ function executeActorSpawn(
 
   const id = runtime.nextActorId;
   runtime.nextActorId += 1;
-  const instance = new ActorInstance(id, actorDecl, values, runtime, evalBlock);
+  const supervisorId = runtime.currentActorStack.length > 0
+    ? runtime.currentActorStack[runtime.currentActorStack.length - 1]!
+    : null;
+  const instance = new ActorInstance(id, actorDecl, values, runtime, evalBlock, supervisorId);
   runtime.actorInstances.set(id, instance);
+  registerActorSupervision(runtime, id, supervisorId);
   return makeActorRefValue(id);
 }
 

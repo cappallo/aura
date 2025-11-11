@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 11, 2025  
-**Overall Progress:** ~82% (Core language ~85% complete, LLM-first tooling ~85% complete, Concurrency ~75% complete)
+**Overall Progress:** ~84% (Core language ~86% complete, LLM-first tooling ~86% complete, Concurrency ~80% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
 
@@ -100,7 +100,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ### 1. Actors & Concurrency (§6 of SPEC, CONCURRENCY.md)
 **Note:** See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design specification.
-**Status:** Core features complete; supervision trees pending
+**Status:** Core features complete; supervision trees implemented
 - ✅ `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
 - ✅ Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported, validated in typechecker**
 - ✅ Actor references and `.send()` syntax (SPEC.md §6.2) - **`counter.send(MessageCtor { ... })` supported with ActorRef runtime + typechecking**
@@ -110,7 +110,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Message handler syntax (`on MessageType(msg) -> ...`) (SPEC.md §6.1) - **Parsing and typechecking implemented**
 - ✅ Structured async tasks within actors (`async_group`, scoped tasks) — cooperative scheduler with cancellation semantics implemented (CONCURRENCY.md §4)
 - 🟡 Data-parallel primitives (`parallel_map`, `parallel_fold`, `parallel_for_each`) (CONCURRENCY.md §5) - **Builtins + purity checks implemented; real parallel execution pending**
-- ❌ Supervision trees and failure handling (CONCURRENCY.md §7)
+- ✅ Supervision trees and failure handling (CONCURRENCY.md §7) - **Child failures propagate via `ChildFailed` notifications with automatic restart hooks**
 - ✅ Deterministic scheduling mode for testing (CONCURRENCY.md §8) - **`--scheduler=immediate|deterministic` flag + `Concurrent.step/flush` builtins**
 - ✅ `Concurrent` effect for actor/task operations (CONCURRENCY.md §6) - **Built-in effect added**
 
@@ -140,7 +140,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §3.4 | Functions & effects | ✅ Complete |
 | §4 | Type system | ✅ Complete |
 | §5 | Effect system | 🟡 Declarations + checking complete; effect polymorphism not implemented |
-| §6 + CONCURRENCY.md | Actors & Concurrency | 🟡 Core features complete (syntax, typechecking, mailbox, scheduling, async_group); supervision trees pending |
+| §6 + CONCURRENCY.md | Actors & Concurrency | � Core features complete (syntax, typechecking, mailbox, scheduling, async_group, supervision trees) |
 | §7.1-7.2 | Contracts | 🟡 Runtime enforcement complete; static SMT verification not implemented |
 | §7.3 | Tests | ✅ Complete |
 | §7.4 | Properties | ✅ Complete |
@@ -321,7 +321,7 @@ Phase 4 (Mid-term): Concurrency & Tools
 │  ├─ Actor spawning and message sending → ✅ Complete (`.send` + mailbox queuing)
 │  ├─ Deterministic scheduling for tests → ✅ Complete (`--scheduler` flag + `Concurrent.step/flush`)
 │  ├─ Structured async tasks within actors → ✅ Cooperative scheduler with cancellation
-│  └─ Supervision trees → ❌ Not started
+│  └─ Supervision trees → ✅ Completed (failure propagation + `ChildFailed` notifications)
 ├─ Data-parallel primitives (parallel_map, parallel_fold, parallel_for_each) → 🟡 Builtins/purity checks done; parallel scheduler TBD
 ├─ Refactor operations (SPEC.md §10.1) → ❌ Not started
 └─ Effect polymorphism (SPEC.md §5.3) → ❌ Not started
@@ -364,6 +364,10 @@ Phase 5 (Long-term): Evolution
   - Added concurrency examples (`examples/actor_async_group.lx`, `examples/async_group_return.lx`) plus negative coverage in `examples/async_group_type_error.lx`
 
 **Recent Work (November 11, 2025):**
+- ✅ Added actor supervision trees with failure propagation
+  - Runtime tracks supervision hierarchies and tears down child trees on failure
+  - Supervisors receive `ChildFailed` notifications and can restart dependents (`examples/actor_supervision.lx`)
+  - Added `Concurrent.stop` builtin plus negative coverage in `examples/actor_supervision_error.lx`
 - ✅ Implemented deterministic execution mode with seedable RNG
   - Added SeededRNG class (xorshift32 algorithm) in interpreter
   - Added optional `seed` field to Runtime and RuntimeOptions
@@ -377,7 +381,7 @@ With the core language, schemas, LLM tooling (including deterministic execution)
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
   - ✅ Mailbox scheduling with deterministic test mode (via `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
   - ✅ Add cooperative execution + cancellation semantics for async_group tasks
-  - ⚠️ Add supervision trees for failure handling (CONCURRENCY.md §7)
+  - ✅ Supervision trees for failure handling (CONCURRENCY.md §7) with `ChildFailed` notifications and recursive teardown
   - ⚠️ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
@@ -462,7 +466,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
 | **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs, AST input/output format |
 | **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
-| **§7 Safe concurrency model** | 🟡 Good | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode; supervision trees pending |
+| **§7 Safe concurrency model** | � Strong | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode, supervision trees |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
 **Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, and deterministic testing support. Remaining enhancements needed:

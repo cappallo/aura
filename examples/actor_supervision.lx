@@ -1,0 +1,101 @@
+module examples.actor_supervision
+
+type WorkerMsg = DoWork { value: Int } | Fail | Get
+
+type SupervisorMsg = ChildFailed { child: ActorRef, reason: String, message: String, actor: String }
+
+actor Worker() {
+  state {
+    total: Int
+  }
+
+  on DoWork(value: Int) -> [Concurrent] Unit {
+    if value < 0 {
+      assert(false)
+    }
+    let total = total + value
+  }
+
+  on Fail() -> [Concurrent] Unit {
+    assert(false)
+  }
+
+  on Get() -> [Concurrent] Int {
+    return total
+  }
+}
+
+actor Supervisor() {
+  state {
+    worker: ActorRef
+    last_failure: String
+    last_message: String
+    last_actor: String
+  }
+
+  on Start() -> [Concurrent] ActorRef {
+    let next_worker = Worker.spawn()
+    worker = next_worker
+    return next_worker
+  }
+
+  on Send(value: Int) -> [Concurrent] Unit {
+    worker.send(DoWork { value })
+  }
+
+  on Crash() -> [Concurrent] Unit {
+    worker.send(DoWork { value: -1 })
+  }
+
+  on ChildFailed(info: SupervisorMsg) -> [Concurrent] Unit {
+    match info {
+      ChildFailed { reason, message, actor } -> {
+        last_failure = reason
+        last_message = message
+        last_actor = actor
+        let restarted = Worker.spawn()
+        worker = restarted
+      }
+    }
+  }
+
+  on CurrentWorker() -> [Concurrent] ActorRef {
+    return worker
+  }
+
+  on FailureSummary() -> [Concurrent] SupervisorMsg {
+    return ChildFailed {
+      child: worker
+      reason: last_failure
+      message: last_message
+      actor: last_actor
+    }
+  }
+}
+
+test supervisor_restarts_child {
+  let supervisor = Supervisor.spawn()
+  Supervisor.Start(supervisor)
+  Supervisor.Send(supervisor, 3)
+  Concurrent.flush()
+
+  Supervisor.Crash(supervisor)
+  Concurrent.flush()
+  Concurrent.flush()
+
+  Supervisor.Send(supervisor, 5)
+  Concurrent.flush()
+
+  let current = Supervisor.CurrentWorker(supervisor)
+  let total = Worker.Get(current)
+  test.assert_equal(5, total)
+
+  let summary = Supervisor.FailureSummary(supervisor)
+  match summary {
+    ChildFailed { reason, message, actor } -> {
+      test.assert_equal("assertion failed", reason)
+      test.assert_equal("DoWork", message)
+      test.assert_equal("Worker", actor)
+    }
+  }
+}

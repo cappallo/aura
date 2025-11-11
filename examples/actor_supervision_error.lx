@@ -1,0 +1,15 @@
+module examples.actor_supervision_error
+
+type WorkerMsg = Crash
+
+actor Worker() {
+  on Crash() -> [Concurrent] Unit {
+    assert(false)
+  }
+}
+
+test unhandled_child_failure {
+  let worker = Worker.spawn()
+  worker.send(Crash { })
+  Concurrent.flush()
+}

@@ -66,9 +66,11 @@ export function buildRuntime(
     actors,
     actorInstances: new Map(),
     nextActorId: 1,
+     actorSupervision: new Map(),
     schedulerMode: options?.schedulerMode ?? "immediate",
     pendingActorDeliveries: [],
     isProcessingActorMessages: false,
+    currentActorStack: [],
     rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
   };
   if (outputFormat !== undefined) {
@@ -170,9 +172,11 @@ export function buildMultiModuleRuntime(
     actors,
     actorInstances: new Map(),
     nextActorId: 1,
+    actorSupervision: new Map(),
     schedulerMode: options?.schedulerMode ?? "immediate",
     pendingActorDeliveries: [],
     isProcessingActorMessages: false,
+    currentActorStack: [],
     symbolTable,
     rng: options?.seed !== undefined ? new SeededRNG(options.seed) : null,
   };
