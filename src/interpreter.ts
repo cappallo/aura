@@ -150,6 +150,18 @@ type EvalResult =
 
 type MatchEnv = Env;
 
+type AsyncTask = {
+  env: Env;
+  stmts: ast.Stmt[];
+  nextIndex: number;
+  completed: boolean;
+  cancelled: boolean;
+};
+
+type AsyncGroupContext = {
+  tasks: AsyncTask[];
+};
+
 type TestOutcome = {
   kind: "test" | "property";
   name: string;
@@ -536,23 +548,103 @@ function evalStmt(stmt: ast.Stmt, env: Env, runtime: Runtime): EvalResult {
 }
 
 function evalAsyncGroupStmt(stmt: ast.AsyncGroupStmt, env: Env, runtime: Runtime): EvalResult {
+  const context: AsyncGroupContext = { tasks: [] };
+
   for (const inner of stmt.body.stmts) {
     if (inner.kind === "AsyncStmt") {
-      evalAsyncTask(inner, env, runtime);
+      scheduleAsyncTask(context, inner, env);
       continue;
     }
+
+    if (inner.kind === "ReturnStmt") {
+      runAsyncGroupTasks(context, runtime);
+      const value = evalExpr(inner.expr, env, runtime);
+      return { type: "return", value };
+    }
+
     const result = evalStmt(inner, env, runtime);
     if (result.type === "return") {
+      runAsyncGroupTasks(context, runtime);
       return result;
     }
   }
+
+  runAsyncGroupTasks(context, runtime);
   return { type: "value", value: { kind: "Unit" } };
 }
 
-function evalAsyncTask(stmt: ast.AsyncStmt, env: Env, runtime: Runtime): void {
-  const result = evalBlock(stmt.body, env, runtime);
+function scheduleAsyncTask(context: AsyncGroupContext, stmt: ast.AsyncStmt, env: Env): void {
+  const task: AsyncTask = {
+    env,
+    stmts: stmt.body.stmts,
+    nextIndex: 0,
+    completed: stmt.body.stmts.length === 0,
+    cancelled: false,
+  };
+  context.tasks.push(task);
+}
+
+function runAsyncGroupTasks(context: AsyncGroupContext, runtime: Runtime): void {
+  let remaining = context.tasks.filter((task) => !task.completed).length;
+  if (remaining === 0) {
+    return;
+  }
+
+  let index = 0;
+  while (remaining > 0) {
+    const task = context.tasks[index % context.tasks.length]!;
+    index += 1;
+    if (task.completed) {
+      continue;
+    }
+
+    try {
+      executeAsyncTaskStep(task, runtime);
+    } catch (error) {
+      cancelPendingAsyncTasks(context, task);
+      throw error;
+    }
+
+    if (task.completed) {
+      remaining -= 1;
+    }
+  }
+}
+
+function executeAsyncTaskStep(task: AsyncTask, runtime: Runtime): void {
+  if (task.completed) {
+    return;
+  }
+
+  if (task.nextIndex >= task.stmts.length) {
+    task.completed = true;
+    return;
+  }
+
+  const stmt = task.stmts[task.nextIndex]!;
+  if (stmt.kind === "AsyncStmt") {
+    throw new RuntimeError("'async' statements must be nested inside an async_group block");
+  }
+
+  const result = evalStmt(stmt, task.env, runtime);
+  task.nextIndex += 1;
+
   if (result.type === "return") {
     throw new RuntimeError("'return' is not allowed inside async tasks");
+  }
+
+  if (task.nextIndex >= task.stmts.length) {
+    task.completed = true;
+  }
+}
+
+function cancelPendingAsyncTasks(context: AsyncGroupContext, failedTask: AsyncTask): void {
+  for (const task of context.tasks) {
+    if (task === failedTask) {
+      continue;
+    }
+    task.cancelled = true;
+    task.completed = true;
   }
 }
 

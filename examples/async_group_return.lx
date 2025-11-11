@@ -1,0 +1,20 @@
+module examples.async_group_return
+
+fn aggregate_with_return() -> [Concurrent] Int {
+  let counter = 0
+  async_group {
+    async {
+      let counter = counter + 1
+      let counter = counter + 1
+    }
+    async {
+      let counter = counter + 2
+    }
+    return counter
+  }
+}
+
+test async_group_return_runs_tasks {
+  let result = aggregate_with_return()
+  test.assert_equal(4, result)
+}
