@@ -1,0 +1,156 @@
+module examples.queens
+
+type SearchResult {
+  count: Int
+  text: String
+}
+
+fn solve_eight_queens() -> SearchResult {
+  search_queens(8, 0, [])
+}
+
+fn search_queens(size: Int, row: Int, positions: List<Int>) -> SearchResult {
+  if row == size {
+    return SearchResult { count: 1, text: render_board(positions) }
+  } else {
+    return explore_columns(size, row, 0, positions)
+  }
+}
+
+fn explore_columns(size: Int, row: Int, column: Int, positions: List<Int>) -> SearchResult {
+  if column >= size {
+    return SearchResult { count: 0, text: "" }
+  } else {
+    let current = if is_safe(positions, row, column) {
+      let next_positions = append_position(positions, column)
+      search_queens(size, row + 1, next_positions)
+    } else {
+      SearchResult { count: 0, text: "" }
+    }
+    let rest = explore_columns(size, row, column + 1, positions)
+    return combine_results(current, rest)
+  }
+}
+
+fn combine_results(left: SearchResult, right: SearchResult) -> SearchResult {
+  let combined_count = left.count + right.count
+  let combined_text = str.concat(left.text, right.text)
+  SearchResult { count: combined_count, text: combined_text }
+}
+
+fn is_safe(positions: List<Int>, row: Int, column: Int) -> Bool {
+  return check_conflicts(positions, row, column, 0)
+}
+
+fn check_conflicts(positions: List<Int>, row: Int, column: Int, index: Int) -> Bool {
+  if index >= row {
+    return true
+  } else {
+    let placed_column = positions[index]
+    if placed_column == column {
+      return false
+    } else {
+      let row_diff = row - index
+      let col_diff_raw = column - placed_column
+      let col_diff = abs_value(col_diff_raw)
+      if col_diff == row_diff {
+        return false
+      } else {
+        return check_conflicts(positions, row, column, index + 1)
+      }
+    }
+  }
+}
+
+fn abs_value(value: Int) -> Int {
+  if value < 0 {
+    return -value
+  } else {
+    return value
+  }
+}
+
+fn append_position(positions: List<Int>, value: Int) -> List<Int> {
+  let length = list.len(positions)
+  if length == 0 {
+    return [value]
+  } else {
+    if length == 1 {
+      return [positions[0], value]
+    } else {
+      if length == 2 {
+        return [positions[0], positions[1], value]
+      } else {
+        if length == 3 {
+          return [positions[0], positions[1], positions[2], value]
+        } else {
+          if length == 4 {
+            return [positions[0], positions[1], positions[2], positions[3], value]
+          } else {
+            if length == 5 {
+              return [positions[0], positions[1], positions[2], positions[3], positions[4], value]
+            } else {
+              if length == 6 {
+                return [positions[0], positions[1], positions[2], positions[3], positions[4], positions[5], value]
+              } else {
+                if length == 7 {
+                  return [positions[0], positions[1], positions[2], positions[3], positions[4], positions[5], positions[6], value]
+                } else {
+                  return positions
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn render_board(positions: List<Int>) -> String {
+  let size = list.len(positions)
+  let rows = render_rows(positions, 0, size)
+  return str.concat(rows, "\n")
+}
+
+fn render_rows(positions: List<Int>, row: Int, size: Int) -> String {
+  if row >= size {
+    return ""
+  } else {
+    let row_text = render_row(positions, row, 0, size)
+    let with_newline = str.concat(row_text, "\n")
+    let rest = render_rows(positions, row + 1, size)
+    return str.concat(with_newline, rest)
+  }
+}
+
+fn render_row(positions: List<Int>, row: Int, column: Int, size: Int) -> String {
+  if column >= size {
+    return ""
+  } else {
+    let queen_column = positions[row]
+    let cell = if column == queen_column {
+      "Q"
+    } else {
+      "."
+    }
+    let tail = render_row(positions, row, column + 1, size)
+    return str.concat(cell, tail)
+  }
+}
+
+fn print_solutions() -> String {
+  let result = solve_eight_queens()
+  return result.text
+}
+
+test eight_queens_count {
+  let result = solve_eight_queens()
+  test.assert_equal(result.count, 92)
+}
+
+test eight_queens_first_board {
+  let result = solve_eight_queens()
+  test.assert_equal(str.slice(result.text, 0, 8), "Q.......")
+  test.assert_equal(str.slice(result.text, 9, 17), "....Q...")
+}
