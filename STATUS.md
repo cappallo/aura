@@ -43,7 +43,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
-  - List: `list.len`, `list.map`, `list.filter`, `list.fold`
+  - List: `list.len`, `list.append`, `list.concat`, `list.map`, `list.filter`, `list.fold`
   - Data-parallel: `parallel_map`, `parallel_fold`, `parallel_for_each` (purity-checked; sequential runtime today)
   - String: `str.concat`, `str.len`, `str.slice`, `str.at`
   - Math: `math.abs`, `math.min`, `math.max`
@@ -171,6 +171,8 @@ The implementation successfully runs 36 example files (27 runnable + 9 error tes
 - ✅ `error_example.lx` - Structured error output demonstration
 - ✅ `hole_example.lx` - Shows hole expressions caught by the typechecker
 - ✅ `list_concat.lx` - List concatenation examples
+- ✅ `list_operations.lx` - List append and concat builtin operations
+- ✅ `queens.lx` - N-queens solver demonstrating backtracking search with list operations
 - ✅ `actor_basic.lx` - Basic actor declarations with state and message handlers
 - ✅ `actor_scheduler.lx` - Deterministic actor scheduling with `Concurrent.step/flush`
 - ✅ `actor_async_group.lx` - Structured async tasks inside actors with cooperative scheduling

@@ -56,4 +56,17 @@ test builtin_tests {
   test.assert_equal(empty_sum, 0);
   test.assert_equal(add(acc = 2, x = 3), 5);
   test.assert_equal(add(1, x = 4), 5);
+  
+  let appended = list.append([1, 2, 3], 4);
+  test.assert_equal(list.len(appended), 4);
+  test.assert_equal(appended, [1, 2, 3, 4]);
+  let named_append = list.append(item = 5, list = [1, 2]);
+  test.assert_equal(named_append, [1, 2, 5]);
+  
+  let concatenated = list.concat([1, 2], [3, 4]);
+  test.assert_equal(list.len(concatenated), 4);
+  test.assert_equal(concatenated, [1, 2, 3, 4]);
+  let named_concat = list.concat(right = [5, 6], left = [3, 4]);
+  test.assert_equal(named_concat, [3, 4, 5, 6]);
 }
+
