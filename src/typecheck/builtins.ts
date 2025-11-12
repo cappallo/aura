@@ -41,6 +41,24 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([makeListType(element)], INT_TYPE);
     },
   },
+  "list.append": {
+    arity: 2,
+    paramNames: ["list", "item"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element), element], makeListType(element));
+    },
+  },
+  "list.concat": {
+    arity: 2,
+    paramNames: ["left", "right"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element), makeListType(element)], makeListType(element));
+    },
+  },
   "test.assert_equal": {
     arity: 2,
     paramNames: ["expected", "actual"],

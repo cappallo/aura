@@ -1,0 +1,42 @@
+module examples.list_operations
+
+fn test_append() -> List<Int> {
+  let list = [1, 2, 3]
+  return list.append(list, 4)
+}
+
+fn test_concat() -> List<Int> {
+  let left = [1, 2, 3]
+  let right = [4, 5, 6]
+  return list.concat(left, right)
+}
+
+test append_works {
+  let result = test_append()
+  test.assert_equal(list.len(result), 4)
+  test.assert_equal(result[0], 1)
+  test.assert_equal(result[3], 4)
+}
+
+test concat_works {
+  let result = test_concat()
+  test.assert_equal(list.len(result), 6)
+  test.assert_equal(result[0], 1)
+  test.assert_equal(result[5], 6)
+}
+
+test append_empty {
+  let empty = []
+  let result = list.append(empty, 42)
+  test.assert_equal(list.len(result), 1)
+  test.assert_equal(result[0], 42)
+}
+
+test concat_empty {
+  let list1 = [1, 2]
+  let empty = []
+  let result1 = list.concat(list1, empty)
+  let result2 = list.concat(empty, list1)
+  test.assert_equal(list.len(result1), 2)
+  test.assert_equal(list.len(result2), 2)
+}

@@ -41,6 +41,8 @@ type AsyncGroupContext = {
  */
 const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.len": ["list"],
+  "list.append": ["list", "item"],
+  "list.concat": ["left", "right"],
   "test.assert_equal": ["expected", "actual"],
   assert: ["condition"],
   "str.concat": ["left", "right"],
@@ -385,6 +387,10 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   switch (expr.callee) {
     case "list.len":
       return builtinLength(expr, env, runtime);
+    case "list.append":
+      return builtinListAppend(expr, env, runtime);
+    case "list.concat":
+      return builtinListConcat(expr, env, runtime);
     case "test.assert_equal":
       return builtinAssertEqual(expr, env, runtime);
     case "assert":
@@ -524,6 +530,29 @@ function builtinLength(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
     throw new RuntimeError("list.len expects a list argument");
   }
   return { kind: "Int", value: list.elements.length };
+}
+
+function builtinListAppend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.append"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  const item = expectValue(values, "item", expr.callee);
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.append expects a list as first argument");
+  }
+  return { kind: "List", elements: [...list.elements, item] };
+}
+
+function builtinListConcat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.concat"), env, runtime);
+  const left = expectValue(values, "left", expr.callee);
+  const right = expectValue(values, "right", expr.callee);
+  if (left.kind !== "List") {
+    throw new RuntimeError("list.concat expects a list as first argument");
+  }
+  if (right.kind !== "List") {
+    throw new RuntimeError("list.concat expects a list as second argument");
+  }
+  return { kind: "List", elements: [...left.elements, ...right.elements] };
 }
 
 function builtinAssertEqual(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
