@@ -9,8 +9,35 @@ fn solve_queens(n: Int) -> SearchResult {
   search_queens(n, 0, [])
 }
 
+fn count_solutions_only(n: Int) -> Int {
+  count_solutions(n, 0, [])
+}
+
 fn solve_eight_queens() -> SearchResult {
   solve_queens(8)
+}
+
+fn count_solutions(size: Int, row: Int, positions: List<Int>) -> Int {
+  if row == size {
+    return 1
+  } else {
+    return count_columns(size, row, 0, positions)
+  }
+}
+
+fn count_columns(size: Int, row: Int, column: Int, positions: List<Int>) -> Int {
+  if column >= size {
+    return 0
+  } else {
+    let current = if is_safe(positions, row, column) {
+      let next_positions = append_position(positions, column)
+      count_solutions(size, row + 1, next_positions)
+    } else {
+      0
+    }
+    let rest = count_columns(size, row, column + 1, positions)
+    return current + rest
+  }
 }
 
 fn search_queens(size: Int, row: Int, positions: List<Int>) -> SearchResult {
@@ -179,7 +206,7 @@ fn render_row(positions: List<Int>, row: Int, column: Int, size: Int) -> String 
 }
 
 fn print_solutions(n: Int) -> String {
-  let result = solve_queens(n)
+  let result = search_queens(n, 0, [])
   return result.text
 }
 
