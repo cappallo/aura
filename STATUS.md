@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 11, 2025  
+**Last Updated:** November 12, 2025
 **Overall Progress:** ~84% (Core language ~86% complete, LLM-first tooling ~86% complete, Concurrency ~80% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -152,12 +152,13 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 36 example files (27 runnable + 9 error test cases) including:
+The implementation successfully runs 37 example files (28 runnable + 9 error test cases) including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
 - ✅ `median.lx` - Pure functions with tests
 - ✅ `result.lx` - Error handling patterns
+- ✅ `actor_supervision.lx` - Supervision restarts and multi-level failure propagation
 - ✅ `property_basics.lx` - Property-based testing with predicates and assertions
 - ✅ `property_shrinking.lx` - Counterexample shrinking for property tests
 - ✅ `property_deterministic.lx` - Deterministic property testing with --seed flag
@@ -377,6 +378,11 @@ Phase 5 (Long-term): Evolution
   - Added `--seed=N` CLI flag for run, test, and explain commands
   - Created `examples/property_deterministic.lx` demonstrating deterministic property tests
   - Same seed produces reproducible test results for debugging and replay
+
+**Recent Work (November 12, 2025):**
+- ✅ Hardened actor supervision runtime with multi-level failure coverage
+  - Added `RootSupervisor` / `SupervisorNoHandler` actors in `examples/actor_supervision.lx`
+  - New regression test `failure_propagates_without_intermediate_handler` proves `ChildFailed` notifications bubble past supervisors that lack handlers
 
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
