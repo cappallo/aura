@@ -312,10 +312,11 @@ Stmt
 	/ ExprStmt
 
 LetStmt
-	= "let" __ name:Ident __ "=" __ expr:Expr Terminator+ {
+	= "let" __ name:Ident typeAnn:(_ ":" _ type:TypeExpr { return type; })? __ "=" __ expr:Expr Terminator+ {
 			return {
 				kind: "LetStmt",
 				name,
+				typeAnnotation: typeAnn || undefined,
 				expr,
 				loc: location(),
 			};

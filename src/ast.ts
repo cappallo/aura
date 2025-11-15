@@ -146,6 +146,8 @@ export type Stmt = LetStmt | ReturnStmt | ExprStmt | MatchStmt | AsyncGroupStmt 
 export type LetStmt = {
   kind: "LetStmt";
   name: string;
+  /** Optional explicit type annotation for the binding */
+  typeAnnotation?: TypeExpr;
   expr: Expr;
   loc?: SourceLocation;
 };

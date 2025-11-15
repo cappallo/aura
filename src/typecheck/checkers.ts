@@ -61,6 +61,7 @@ export function checkProperty(
   errors: TypeCheckError[],
   filePath?: string,
 ): void {
+  const typeParamScope = new Map<string, Type>();
   const syntheticFn: ast.FnDecl = {
     kind: "FnDecl",
     name: `__property_${property.name}`,
@@ -78,6 +79,7 @@ export function checkProperty(
     ctx,
     currentFunction: syntheticFn,
     expectedReturnType: UNIT_TYPE,
+    typeParamScope,
   };
 
   if (filePath !== undefined) {
@@ -85,7 +87,6 @@ export function checkProperty(
   }
 
   const env: TypeEnv = new Map();
-  const typeParamScope = new Map<string, Type>();
   const resolutionModule = ctx.currentModule;
 
   for (const param of syntheticFn.params) {
@@ -124,6 +125,7 @@ export function checkSchema(
   errors: TypeCheckError[],
   filePath?: string,
 ): void {
+  const typeParamScope = new Map<string, Type>();
   if (schema.version <= 0) {
     errors.push(makeError(
       `Schema '${schema.name}' version must be positive, got ${schema.version}`,
@@ -140,13 +142,13 @@ export function checkSchema(
     ctx,
     currentFunction: placeholderFn,
     expectedReturnType: UNIT_TYPE,
+    typeParamScope,
   };
 
   if (filePath !== undefined) {
     state.currentFilePath = filePath;
   }
 
-  const typeParamScope = new Map<string, Type>();
   const resolutionModule = ctx.currentModule;
 
   for (const field of schema.fields) {
@@ -184,6 +186,7 @@ export function checkActor(
   errors: TypeCheckError[],
   filePath?: string,
 ): void {
+  const typeParamScope = new Map<string, Type>();
   const placeholderFn = syntheticFnForSchemas();
   const state: InferState = {
     nextTypeVarId: 0,
@@ -192,13 +195,13 @@ export function checkActor(
     ctx,
     currentFunction: placeholderFn,
     expectedReturnType: UNIT_TYPE,
+    typeParamScope,
   };
 
   if (filePath !== undefined) {
     state.currentFilePath = filePath;
   }
 
-  const typeParamScope = new Map<string, Type>();
   const resolutionModule = ctx.currentModule;
 
   for (const param of actor.params) {

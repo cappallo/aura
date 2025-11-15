@@ -66,6 +66,7 @@ export function typeCheckFunctionBody(
   errors: TypeCheckError[],
   filePath?: string,
 ): void {
+  const typeParamScope = new Map<string, Type>();
   const state: InferState = {
     nextTypeVarId: 0,
     substitutions: new Map(),
@@ -73,12 +74,12 @@ export function typeCheckFunctionBody(
     ctx,
     currentFunction: fn,
     expectedReturnType: UNIT_TYPE,
+    typeParamScope,
   };
   if (filePath !== undefined) {
     state.currentFilePath = filePath;
   }
 
-  const typeParamScope = new Map<string, Type>();
   for (const paramName of fn.typeParams) {
     typeParamScope.set(paramName, freshTypeVar(paramName, true, state));
   }
@@ -199,7 +200,24 @@ function inferStmt(
   switch (stmt.kind) {
     case "LetStmt": {
       const exprType = inferExpr(stmt.expr, env, state);
-      env.set(stmt.name, exprType);
+      if (stmt.typeAnnotation) {
+        const declaredType = convertTypeExpr(
+          stmt.typeAnnotation,
+          state.typeParamScope,
+          state,
+          state.ctx.currentModule,
+        );
+        unify(
+          exprType,
+          declaredType,
+          state,
+          `Type of '${stmt.name}' does not match declared annotation`,
+          stmt.loc,
+        );
+        env.set(stmt.name, declaredType);
+      } else {
+        env.set(stmt.name, exprType);
+      }
       return { valueType: UNIT_TYPE, returned: false };
     }
     case "ReturnStmt": {
@@ -655,8 +673,8 @@ function inferRecordExpr(expr: ast.RecordExpr, env: TypeEnv, state: InferState):
       }
       const actualType = inferExpr(fieldExpr.expr, env, state);
       unify(
-        actualType,
         expectedType,
+        actualType,
         state,
         `Field '${fieldExpr.name}' on constructor '${expr.typeName}' has incompatible type`,
       );
@@ -705,8 +723,8 @@ function inferRecordExpr(expr: ast.RecordExpr, env: TypeEnv, state: InferState):
     }
     const actualType = inferExpr(fieldExpr.expr, env, state);
     unify(
-      actualType,
       expectedType,
+      actualType,
       state,
       `Field '${fieldExpr.name}' on record '${expr.typeName}' has incompatible type`,
     );

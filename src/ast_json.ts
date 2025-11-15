@@ -267,6 +267,9 @@ function parseStmt(value: unknown, ctx: ParseContext): ast.Stmt {
         name: expectString(obj.name, child(ctx, "name")),
         expr: parseExpr(obj.expr, child(ctx, "expr")),
       };
+      if (obj.typeAnnotation !== undefined) {
+        stmt.typeAnnotation = parseTypeExpr(obj.typeAnnotation, child(ctx, "typeAnnotation"));
+      }
       setIfDefined(stmt, "loc", loc);
       return stmt;
     }

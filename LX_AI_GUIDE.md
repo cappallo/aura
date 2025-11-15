@@ -125,7 +125,7 @@ let x: Int = 0
 x = x + 1  // Reassignment
 ```
 
-> **Current limitation:** `let` bindings presently support only `let name = expr` form; inline type annotations like `let value: Int = ...` are rejected by the parser. Prefer annotating function signatures and types instead.
+Inline annotations are supported: `let total: Int = ...`. The checker enforces that annotated bindings have expressions of the declared type.
 
 > **Parser diagnostics:** When the PEG parser cannot build an AST—for example, if you use the unsupported `let value: Int = ...` syntax or the planned `for`/`while` loops—it falls back to raw messages such as `Expected "/*" ... but ":" found`. The richer Lx tracebacks only run after parsing succeeds, so treat these errors as a hint that the syntax doesn’t exist yet.
 

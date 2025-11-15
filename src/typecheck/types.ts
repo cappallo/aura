@@ -156,6 +156,8 @@ export type InferState = {
   currentFunction: ast.FnDecl;
   /** Expected return type for current function */
   expectedReturnType: Type;
+  /** In-scope type parameters (e.g., from enclosing function generics) */
+  typeParamScope: Map<string, Type>;
   /** File path being checked (for error reporting) */
   currentFilePath?: string;
   /** Nesting depth of async_group blocks */

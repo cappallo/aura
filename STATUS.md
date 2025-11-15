@@ -485,3 +485,4 @@ This section tracks how well the implementation follows the LLM-first design phi
 - **ROADMAP.md** - Initial implementation plan
 - **THOUGHTS.md** - Design philosophy and LLM-first principles
 - **README.md** - Getting started guide
+- **LX_AI_GUIDE.md** - Lx programming language guide for AI agents

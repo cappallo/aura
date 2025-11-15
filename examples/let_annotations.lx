@@ -1,0 +1,45 @@
+module examples.let_annotations
+
+type Pair<T> {
+  first: T
+  second: T
+}
+
+type MaybeInt = Present { value: Int } | Absent
+
+fn triple(value: Int) -> Int {
+  let doubled: Int = value + value
+  let tripled: Int = doubled + value
+  return tripled
+}
+
+fn swap_pair<T>(pair: Pair<T>) -> Pair<T> {
+  let left: T = pair.first
+  let right: T = pair.second
+  let swapped: Pair<T> = Pair { first: right, second: left }
+  return swapped
+}
+
+fn wrap(value: Int) -> MaybeInt {
+  let payload: MaybeInt = Present { value: value }
+  return payload
+}
+
+test annotated_bindings {
+  test.assert_equal(triple(5), 15)
+
+  let pair: Pair<String> = Pair { first: "a", second: "b" }
+  let swapped: Pair<String> = swap_pair(pair)
+  test.assert_equal(swapped.first, "b")
+  test.assert_equal(swapped.second, "a")
+
+  let maybe: MaybeInt = wrap(7)
+  match maybe {
+    case Present { value } => {
+      test.assert_equal(value, 7)
+    }
+    case Absent => {
+      test.assert_equal(true, false)
+    }
+  }
+}

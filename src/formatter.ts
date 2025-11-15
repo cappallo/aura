@@ -245,7 +245,9 @@ function formatStatement(stmt: AST.Stmt, indent: number): string {
   
   switch (stmt.kind) {
     case "LetStmt":
-      return `${prefix}let ${stmt.name} = ${formatExpr(stmt.expr, 0)}`;
+      return `${prefix}let ${stmt.name}${
+        stmt.typeAnnotation ? `: ${formatTypeExpr(stmt.typeAnnotation)}` : ""
+      } = ${formatExpr(stmt.expr, 0)}`;
     case "ReturnStmt":
       return `${prefix}return ${formatExpr(stmt.expr, 0)}`;
     case "ExprStmt":
