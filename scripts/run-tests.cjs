@@ -91,6 +91,12 @@ runExpectFailure(
 );
 
 runExpectFailure(
+  "Expected doc spec validation failure for mismatched parameter names",
+  "node",
+  [cliPath, "check", "examples/docspec_error.lx"],
+);
+
+runExpectFailure(
   "Expected runtime failure when an actor crashes without supervision",
   "node",
   [cliPath, "test", "examples/actor_supervision_error.lx"],

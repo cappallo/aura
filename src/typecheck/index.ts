@@ -34,6 +34,7 @@ import {
   TypecheckContext,
   VariantInfo,
 } from "./types";
+import { parseDocSpec, validateDocSpec } from "../docspec";
 
 export * from "./types";
 export * from "./builtins";
@@ -85,6 +86,8 @@ export function typecheckModule(module: ast.Module): TypeCheckError[] {
       checkActor(decl, ctx, errors);
     }
   }
+
+  validateDocComments(module, errors);
 
   return errors;
 }
@@ -400,7 +403,52 @@ export function typecheckModules(
         checkActor(decl, ctx, errors, filePath);
       }
     }
+
+    validateDocComments(module, errors, filePath);
   }
 
   return errors;
+}
+
+function validateDocComments(module: ast.Module, errors: TypeCheckError[], filePath?: string): void {
+  const modulePrefix = module.name.join(".");
+  for (const decl of module.decls) {
+    const docComment = decl.docComment;
+    if (!docComment) {
+      continue;
+    }
+    const normalized = docComment.replace(/\r\n/g, "\n").trim();
+    if (!normalized.toLowerCase().startsWith("spec:")) {
+      continue;
+    }
+    const spec = parseDocSpec(normalized);
+    if (!spec) {
+      const error: TypeCheckError = {
+        message: `Invalid doc spec comment on ${formatDeclName(modulePrefix, decl)}`,
+      };
+      if (filePath) {
+        error.filePath = filePath;
+      }
+      errors.push(error);
+      continue;
+    }
+    const validationErrors = validateDocSpec(spec, decl as { kind: string; name: string; params?: Array<{ name: string }>; fields?: Array<{ name: string }> });
+    for (const validationError of validationErrors) {
+      const error: TypeCheckError = {
+        message: `Doc spec error for ${formatDeclName(modulePrefix, decl)}: ${validationError}`,
+      };
+      if (filePath) {
+        error.filePath = filePath;
+      }
+      errors.push(error);
+    }
+  }
+}
+
+function formatDeclName(modulePrefix: string, decl: ast.TopLevelDecl): string {
+  const name = (decl as { name?: string }).name;
+  if (!name) {
+    return modulePrefix || "<module>";
+  }
+  return modulePrefix ? `${modulePrefix}.${name}` : name;
 }

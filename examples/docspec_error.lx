@@ -1,0 +1,14 @@
+module examples.docspec_error
+
+/// spec:
+///   description: "Adds one to the provided value."
+///   inputs:
+///     - missing_param: "This name does not match the function parameter."
+fn add_one(value: Int) -> Int {
+  return value + 1;
+}
+
+test doc_spec_failure {
+  let sample = add_one(5);
+  test.assert_equal(sample, 6);
+}
