@@ -127,6 +127,8 @@ x = x + 1  // Reassignment
 
 > **Current limitation:** `let` bindings presently support only `let name = expr` form; inline type annotations like `let value: Int = ...` are rejected by the parser. Prefer annotating function signatures and types instead.
 
+> **Parser diagnostics:** When the PEG parser cannot build an AST—for example, if you use the unsupported `let value: Int = ...` syntax or the planned `for`/`while` loops—it falls back to raw messages such as `Expected "/*" ... but ":" found`. The richer Lx tracebacks only run after parsing succeeds, so treat these errors as a hint that the syntax doesn’t exist yet.
+
 ### Control Flow
 
 **If-else (must be exhaustive):**
@@ -256,6 +258,15 @@ property test_addition_commutative {
   }
 }
 ```
+
+**Running the CLI:** There is a convenience script 'lx' that you can use:
+
+```bash
+lx run examples.demo.lx examples.demo.main
+lx test examples.demo.lx
+```
+
+The wrapper forwards all arguments to `node dist/cli.js`, giving you a concise entry point for every command.
 
 ---
 
