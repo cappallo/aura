@@ -39,8 +39,8 @@ export * from "./types";
 export * from "./builtins";
 
 export function typecheckModule(module: ast.Module): TypeCheckError[] {
-  const functions = collectModuleFunctions(module);
   const typeInfo = collectModuleTypeInfo(module);
+  const functions = collectModuleFunctions(module, typeInfo.variantConstructors);
 
   const ctx: TypecheckContext = {
     functions,
@@ -107,37 +107,6 @@ export function typecheckModules(
   for (const resolvedModule of modules) {
     const module = resolvedModule.ast;
     const modulePrefix = module.name.join(".");
-
-    for (const decl of module.decls) {
-      switch (decl.kind) {
-        case "FnDecl": {
-          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
-          const signature: FnSignature = {
-            name: qualifiedName,
-            paramCount: decl.params.length,
-            paramNames: decl.params.map((param) => param.name),
-            effects: new Set(decl.effects),
-            decl,
-            module,
-          };
-          globalFunctions.set(qualifiedName, signature);
-          break;
-        }
-        case "EffectDecl": {
-          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
-          globalEffects.add(qualifiedName);
-          globalEffects.add(decl.name);
-          break;
-        }
-        case "ActorDecl": {
-          registerActorSignaturesGlobal(globalFunctions, decl, module, modulePrefix);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-
     const typeInfo = collectModuleTypeInfo(module);
     moduleTypeCache.set(module, typeInfo);
 
@@ -176,6 +145,42 @@ export function typecheckModules(
         continue;
       }
       globalSchemas.set(key, schemaInfo);
+    }
+
+    for (const decl of module.decls) {
+      switch (decl.kind) {
+        case "FnDecl": {
+          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
+          const signature: FnSignature = {
+            name: qualifiedName,
+            paramCount: decl.params.length,
+            paramNames: decl.params.map((param) => param.name),
+            effects: new Set(decl.effects),
+            decl,
+            module,
+          };
+          globalFunctions.set(qualifiedName, signature);
+          break;
+        }
+        case "EffectDecl": {
+          const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
+          globalEffects.add(qualifiedName);
+          globalEffects.add(decl.name);
+          break;
+        }
+        case "ActorDecl": {
+          registerActorSignaturesGlobal(
+            globalFunctions,
+            decl,
+            module,
+            modulePrefix,
+            typeInfo.variantConstructors,
+          );
+          break;
+        }
+        default:
+          break;
+      }
     }
   }
 

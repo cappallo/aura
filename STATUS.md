@@ -378,13 +378,20 @@ Phase 5 (Long-term): Evolution
   - Created `examples/property_deterministic.lx` demonstrating deterministic property tests
   - Same seed produces reproducible test results for debugging and replay
 
+**Recent Work (November 12, 2025):**
+- ✅ Added message-typed actor references
+  - `ActorRef` is now a generic type (`ActorRef<MsgType>`) enforced throughout type inference
+  - Actor spawn helpers and handler shims carry the concrete message type so `.send` calls are type-checked
+  - Builtins like `Concurrent.stop` accept any `ActorRef<Msg>` via polymorphic signatures
+  - Updated `examples/actor_supervision.lx` to showcase typed actor references in state and message payloads
+
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
   - ✅ Mailbox scheduling with deterministic test mode (via `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
   - ✅ Add cooperative execution + cancellation semantics for async_group tasks
   - ✅ Supervision trees for failure handling (CONCURRENCY.md §7) with `ChildFailed` notifications and recursive teardown
-  - ⚠️ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
+  - ✅ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
    - ✅ Deterministic execution mode / seedable RNG

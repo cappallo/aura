@@ -3,7 +3,7 @@ module examples.actor_supervision
 type WorkerMsg = DoWork { value: Int } | Fail | Get
 
 type SupervisorMsg = Start | Send { value: Int } | Crash | ChildFailed {
-  child: ActorRef
+  child: ActorRef<WorkerMsg>
   reason: String
   message: String
   actor: String
@@ -32,14 +32,14 @@ actor Worker() {
 
 actor Supervisor() {
   state {
-    worker: ActorRef
+    worker: ActorRef<WorkerMsg>
     last_failure: String
     last_message: String
     last_actor: String
-    last_child: ActorRef
+    last_child: ActorRef<WorkerMsg>
   }
 
-  on Start() -> [Concurrent] ActorRef {
+  on Start() -> [Concurrent] ActorRef<WorkerMsg> {
     let next_worker = Worker.spawn()
     let worker = next_worker
     let last_child = worker
@@ -54,7 +54,7 @@ actor Supervisor() {
     worker.send(DoWork { value: -1 })
   }
 
-  on ChildFailed(child: ActorRef, reason: String, message: String, actor: String) -> [Concurrent] Unit {
+  on ChildFailed(child: ActorRef<WorkerMsg>, reason: String, message: String, actor: String) -> [Concurrent] Unit {
     let last_child = child
     let last_failure = reason
     let last_message = message
@@ -63,7 +63,7 @@ actor Supervisor() {
     let worker = restarted
   }
 
-  on CurrentWorker() -> [Concurrent] ActorRef {
+  on CurrentWorker() -> [Concurrent] ActorRef<WorkerMsg> {
     return worker
   }
 

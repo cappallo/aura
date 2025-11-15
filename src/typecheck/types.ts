@@ -184,7 +184,6 @@ export const INT_TYPE: TypeConstructor = { kind: "Constructor", name: "Int", arg
 export const BOOL_TYPE: TypeConstructor = { kind: "Constructor", name: "Bool", args: [] };
 export const STRING_TYPE: TypeConstructor = { kind: "Constructor", name: "String", args: [] };
 export const UNIT_TYPE: TypeConstructor = { kind: "Constructor", name: "Unit", args: [] };
-export const ACTOR_REF_TYPE: TypeConstructor = { kind: "Constructor", name: "ActorRef", args: [] };
 
 /** Construct a function type from parameter types and return type */
 export function makeFunctionType(params: Type[], returnType: Type): TypeFunction {
@@ -199,6 +198,11 @@ export function makeListType(element: Type): TypeConstructor {
 /** Construct an Option<T> type */
 export function makeOptionType(inner: Type): TypeConstructor {
   return { kind: "Constructor", name: "Option", args: [inner] };
+}
+
+/** Construct an ActorRef<Message> type */
+export function makeActorRefType(message: Type): TypeConstructor {
+  return { kind: "Constructor", name: "ActorRef", args: [message] };
 }
 
 /** Generate a fresh type variable with unique ID for type inference */

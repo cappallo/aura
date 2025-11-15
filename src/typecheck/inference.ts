@@ -2,7 +2,6 @@ import * as ast from "../ast";
 import { alignCallArguments } from "../callargs";
 import { resolveIdentifier } from "../loader";
 import {
-  ACTOR_REF_TYPE,
   BOOL_TYPE,
   INT_TYPE,
   STRING_TYPE,
@@ -14,6 +13,7 @@ import {
   TypeEnv,
   TypeFunction,
   TypecheckContext,
+  makeActorRefType,
   makeError,
   makeFunctionType,
   makeListType,
@@ -517,7 +517,7 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
     argTypes.set(callArg, inferExpr(callArg.expr, env, state));
   }
 
-  const actorSendType = inferActorSendCall(expr, env, state);
+  const actorSendType = inferActorSendCall(expr, env, state, argTypes);
   if (actorSendType) {
     return actorSendType;
   }
@@ -590,7 +590,12 @@ function inferCallExpr(expr: ast.CallExpr, env: TypeEnv, state: InferState): Typ
   return applySubstitution(instantiated.returnType, state);
 }
 
-function inferActorSendCall(expr: ast.CallExpr, env: TypeEnv, state: InferState): Type | null {
+function inferActorSendCall(
+  expr: ast.CallExpr,
+  env: TypeEnv,
+  state: InferState,
+  argTypes: Map<ast.CallArg, Type>,
+): Type | null {
   const targetName = extractActorSendTarget(expr.callee);
   if (!targetName) {
     return null;
@@ -618,12 +623,25 @@ function inferActorSendCall(expr: ast.CallExpr, env: TypeEnv, state: InferState)
     return UNIT_TYPE;
   }
 
-  unify(actorType, ACTOR_REF_TYPE, state, `'.send' requires an ActorRef target`, expr.loc);
+  const messageType = freshTypeVar("ActorMessage", false, state);
+  unify(actorType, makeActorRefType(messageType), state, `'.send' requires an ActorRef target`, expr.loc);
 
   const alignment = alignCallArguments(expr, ["message"]);
   reportCallArgIssues(expr, expr.callee, alignment.issues, state.errors, state.currentFilePath);
 
   verifyEffectSubset(new Set(["Concurrent"]), state.currentFunction.effects, expr.callee, state.currentFunction.name, state.errors);
+
+  const messageArg = alignment.ordered[0];
+  if (messageArg) {
+    const argType = argTypes.get(messageArg) ?? freshTypeVar("ActorMessageArg", false, state);
+    unify(
+      argType,
+      messageType,
+      state,
+      `Message argument to '${expr.callee}' has incompatible type`,
+      messageArg.expr.loc,
+    );
+  }
 
   return UNIT_TYPE;
 }

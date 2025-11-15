@@ -8,6 +8,7 @@ import {
   TypeVar,
   TypecheckContext,
   VariantInfo,
+  makeActorRefType,
   makeError,
   makeListType,
   makeOptionType,
@@ -103,11 +104,6 @@ export function convertTypeExpr(
         return scoped;
       }
 
-      const builtinScalar = BUILTIN_SCALAR_TYPES.get(typeExpr.name);
-      if (builtinScalar && typeExpr.typeArgs.length === 0) {
-        return builtinScalar;
-      }
-
       if (typeExpr.name === "List") {
         if (typeExpr.typeArgs.length !== 1) {
           state.errors.push({ message: "List expects exactly one type argument" });
@@ -124,6 +120,24 @@ export function convertTypeExpr(
         }
         const inner = convertTypeExpr(typeExpr.typeArgs[0]!, scope, state, module);
         return makeOptionType(inner);
+      }
+
+      if (typeExpr.name === "ActorRef") {
+        let messageType: Type;
+        if (typeExpr.typeArgs.length === 0) {
+          messageType = freshTypeVar("ActorMessage", false, state);
+        } else if (typeExpr.typeArgs.length === 1) {
+          messageType = convertTypeExpr(typeExpr.typeArgs[0]!, scope, state, module);
+        } else {
+          state.errors.push({ message: "ActorRef expects at most one type argument" });
+          messageType = freshTypeVar("ActorMessage", false, state);
+        }
+        return makeActorRefType(messageType);
+      }
+
+      const builtinScalar = BUILTIN_SCALAR_TYPES.get(typeExpr.name);
+      if (builtinScalar && typeExpr.typeArgs.length === 0) {
+        return builtinScalar;
       }
 
       const declInfo = findTypeDecl(typeExpr.name, state.ctx, module);

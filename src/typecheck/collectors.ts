@@ -15,8 +15,43 @@ import {
 } from "./types";
 
 /** Helper to create ActorRef type expression */
-function actorRefTypeExpr(): ast.TypeExpr {
-  return { kind: "TypeName", name: "ActorRef", typeArgs: [] };
+function actorRefTypeExpr(messageType?: ast.TypeExpr): ast.TypeExpr {
+  return {
+    kind: "TypeName",
+    name: "ActorRef",
+    typeArgs: messageType ? [messageType] : [],
+  };
+}
+
+/** Determine the sum type representing an actor's messages */
+function inferActorMessageTypeExpr(
+  actor: ast.ActorDecl,
+  variantConstructors?: Map<string, VariantInfo[]>,
+): ast.TypeExpr | undefined {
+  if (!variantConstructors) {
+    return undefined;
+  }
+  let parentQualified: string | null = null;
+  let parentName: string | null = null;
+  for (const handler of actor.handlers) {
+    const candidates = variantConstructors.get(handler.msgTypeName);
+    if (!candidates || candidates.length === 0) {
+      return undefined;
+    }
+    const variantInfo = candidates[0]!;
+    if (!parentQualified) {
+      parentQualified = variantInfo.parentQualifiedName;
+      parentName = variantInfo.parentDecl.name;
+      continue;
+    }
+    if (variantInfo.parentQualifiedName !== parentQualified) {
+      return undefined;
+    }
+  }
+  if (!parentName) {
+    return undefined;
+  }
+  return { kind: "TypeName", name: parentName, typeArgs: [] };
 }
 
 /** Helper to clone parameter (avoiding mutation) */
@@ -28,25 +63,29 @@ function cloneParam(param: ast.Param): ast.Param {
 }
 
 /** Generate synthetic spawn function declaration for an actor */
-function createActorSpawnDecl(actor: ast.ActorDecl): ast.FnDecl {
+function createActorSpawnDecl(actor: ast.ActorDecl, messageType?: ast.TypeExpr): ast.FnDecl {
   return {
     kind: "FnDecl",
     name: `${actor.name}.spawn`,
     typeParams: [],
     params: actor.params.map((param) => cloneParam(param)),
-    returnType: actorRefTypeExpr(),
+    returnType: actorRefTypeExpr(messageType),
     effects: ["Concurrent"],
     body: { kind: "Block", stmts: [] },
   };
 }
 
-function createActorHandlerDecl(actor: ast.ActorDecl, handler: ast.ActorHandler): ast.FnDecl {
+function createActorHandlerDecl(
+  actor: ast.ActorDecl,
+  handler: ast.ActorHandler,
+  messageType?: ast.TypeExpr,
+): ast.FnDecl {
   return {
     kind: "FnDecl",
     name: `${actor.name}.${handler.msgTypeName}`,
     typeParams: [],
     params: [
-      { name: "actor", type: actorRefTypeExpr() },
+      { name: "actor", type: actorRefTypeExpr(messageType) },
       ...handler.msgParams.map((param) => cloneParam(param)),
     ],
     returnType: handler.returnType,
@@ -75,15 +114,17 @@ export function registerActorSignaturesLocal(
   actor: ast.ActorDecl,
   module: ast.Module,
   modulePrefix: string,
+  variantConstructors?: Map<string, VariantInfo[]>,
 ): void {
-  const spawnDecl = createActorSpawnDecl(actor);
+  const messageType = inferActorMessageTypeExpr(actor, variantConstructors);
+  const spawnDecl = createActorSpawnDecl(actor, messageType);
   const spawnQualified = modulePrefix ? `${modulePrefix}.${spawnDecl.name}` : spawnDecl.name;
   const spawnSignature = createSyntheticSignature(spawnDecl, module, spawnQualified);
   map.set(spawnQualified, spawnSignature);
   map.set(spawnDecl.name, spawnSignature);
 
   for (const handler of actor.handlers) {
-    const handlerDecl = createActorHandlerDecl(actor, handler);
+    const handlerDecl = createActorHandlerDecl(actor, handler, messageType);
     const handlerQualified = modulePrefix ? `${modulePrefix}.${handlerDecl.name}` : handlerDecl.name;
     const handlerSignature = createSyntheticSignature(handlerDecl, module, handlerQualified);
     map.set(handlerQualified, handlerSignature);
@@ -96,14 +137,16 @@ export function registerActorSignaturesGlobal(
   actor: ast.ActorDecl,
   module: ast.Module,
   modulePrefix: string,
+  variantConstructors?: Map<string, VariantInfo[]>,
 ): void {
-  const spawnDecl = createActorSpawnDecl(actor);
+  const messageType = inferActorMessageTypeExpr(actor, variantConstructors);
+  const spawnDecl = createActorSpawnDecl(actor, messageType);
   const spawnQualified = modulePrefix ? `${modulePrefix}.${spawnDecl.name}` : spawnDecl.name;
   const spawnSignature = createSyntheticSignature(spawnDecl, module, spawnQualified);
   map.set(spawnQualified, spawnSignature);
 
   for (const handler of actor.handlers) {
-    const handlerDecl = createActorHandlerDecl(actor, handler);
+    const handlerDecl = createActorHandlerDecl(actor, handler, messageType);
     const handlerQualified = modulePrefix ? `${modulePrefix}.${handlerDecl.name}` : handlerDecl.name;
     const handlerSignature = createSyntheticSignature(handlerDecl, module, handlerQualified);
     map.set(handlerQualified, handlerSignature);
@@ -115,7 +158,10 @@ export function registerActorSignaturesGlobal(
  * Includes user-defined functions and synthetic actor functions (spawn and handlers).
  * Indexes by both qualified and unqualified names.
  */
-export function collectModuleFunctions(module: ast.Module): Map<string, FnSignature> {
+export function collectModuleFunctions(
+  module: ast.Module,
+  variantConstructors?: Map<string, VariantInfo[]>,
+): Map<string, FnSignature> {
   const map = new Map<string, FnSignature>();
   const modulePrefix = module.name.join(".");
   for (const decl of module.decls) {
@@ -135,7 +181,7 @@ export function collectModuleFunctions(module: ast.Module): Map<string, FnSignat
     }
 
     if (decl.kind === "ActorDecl") {
-      registerActorSignaturesLocal(map, decl, module, modulePrefix);
+      registerActorSignaturesLocal(map, decl, module, modulePrefix, variantConstructors);
     }
   }
   return map;

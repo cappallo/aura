@@ -199,11 +199,13 @@ function generateFromTypeName(
         return { kind: "String", value: randomString(rng) };
       case "Unit":
         return { kind: "Unit" };
-      case "ActorRef":
-        return makeActorRefValue(-1);
       default:
         break;
     }
+  }
+
+  if (typeExpr.name === "ActorRef") {
+    return makeActorRefValue(-1);
   }
 
   if (typeExpr.name === "List") {

@@ -8,10 +8,10 @@ import {
   INT_TYPE,
   STRING_TYPE,
   UNIT_TYPE,
-  ACTOR_REF_TYPE,
   InferState,
   TypeConstructor,
   TypeFunction,
+  makeActorRefType,
   makeFunctionType,
   makeListType,
   makeOptionType,
@@ -126,7 +126,10 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
     arity: 1,
     paramNames: ["actor"],
     effects: new Set(["Concurrent"]),
-    instantiateType: () => makeFunctionType([ACTOR_REF_TYPE], BOOL_TYPE),
+    instantiateType: (state) => {
+      const messageType = freshTypeVar("ActorMessage", false, state);
+      return makeFunctionType([makeActorRefType(messageType)], BOOL_TYPE);
+    },
   },
   "str.len": {
     arity: 1,
@@ -262,5 +265,4 @@ export const BUILTIN_SCALAR_TYPES = new Map<string, TypeConstructor>([
   ["Bool", BOOL_TYPE],
   ["String", STRING_TYPE],
   ["Unit", UNIT_TYPE],
-  ["ActorRef", ACTOR_REF_TYPE],
 ]);
