@@ -34,7 +34,8 @@ export type TopLevelDecl =
   | FnContractDecl
   | TestDecl
   | PropertyDecl
-  | ActorDecl;
+  | ActorDecl
+  | RefactorDecl;
 
 /** Effect declaration introducing a side effect name */
 export type EffectDecl = {
@@ -382,4 +383,31 @@ export type ActorHandler = {
   /** Effects this handler may perform */
   effects: string[];
   body: Block;
+};
+
+/** Refactor declaration describing structured transformations */
+export type RefactorDecl = {
+  kind: "RefactorDecl";
+  name: string;
+  operations: RefactorOperation[];
+  /** Optional hints on which graph elements to update */
+  updateTargets: string[];
+  /** Optional hints on which regions to ignore */
+  ignoreTargets: string[];
+  docComment?: string;
+};
+
+/** Supported refactor operations */
+export type RefactorOperation = RenameTypeOperation | RenameFunctionOperation;
+
+export type RenameTypeOperation = {
+  kind: "RenameTypeOperation";
+  from: string;
+  to: string;
+};
+
+export type RenameFunctionOperation = {
+  kind: "RenameFunctionOperation";
+  from: string;
+  to: string;
 };

@@ -1,0 +1,29 @@
+module examples.refactor_sample
+
+type Email {
+  value: String
+}
+
+fn email_value(email: Email) -> String {
+  return email.value
+}
+
+fn greet_user(email: Email) -> String {
+  let original: Email = email
+  let inner = original.value
+  return str.concat("Hello ", inner)
+}
+
+test email_examples {
+  let sample = Email { value: "lx" }
+  test.assert_equal("lx", email_value(sample))
+  test.assert_equal("Hello lx", greet_user(sample))
+}
+
+refactor rename_email_entities {
+  rename type examples.refactor_sample.Email -> examples.refactor_sample.UserEmail
+  rename fn examples.refactor_sample.email_value -> examples.refactor_sample.extract_email_value
+  update:
+    type_annotations
+    constructors
+}

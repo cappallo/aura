@@ -91,8 +91,47 @@ function parseTopLevelDecl(value: unknown, ctx: ParseContext): ast.TopLevelDecl 
     }
     case "PropertyDecl":
       return parsePropertyDecl(obj, ctx);
+    case "RefactorDecl":
+      return parseRefactorDecl(obj, ctx);
     default:
       throw fail(ctx, `Unknown declaration kind '${kind}'`);
+  }
+}
+
+function parseRefactorDecl(obj: JsonObject, ctx: ParseContext): ast.RefactorDecl {
+  const operations = expectArray(obj.operations ?? [], child(ctx, "operations")).map(
+    (operation: unknown, index: number) =>
+      parseRefactorOperation(operation, indexPath(child(ctx, "operations"), index)),
+  );
+  const decl: ast.RefactorDecl = {
+    kind: "RefactorDecl",
+    name: expectString(obj.name, child(ctx, "name")),
+    operations,
+    updateTargets: expectStringArray(obj.updateTargets ?? [], child(ctx, "updateTargets")),
+    ignoreTargets: expectStringArray(obj.ignoreTargets ?? [], child(ctx, "ignoreTargets")),
+  };
+  setIfDefined(decl, "docComment", parseOptionalString(obj.docComment, child(ctx, "docComment")));
+  return decl;
+}
+
+function parseRefactorOperation(value: unknown, ctx: ParseContext): ast.RefactorOperation {
+  const obj = expectObject(value, ctx);
+  const kind = expectString(obj.kind, child(ctx, "kind"));
+  switch (kind) {
+    case "RenameTypeOperation":
+      return {
+        kind,
+        from: expectString(obj.from, child(ctx, "from")),
+        to: expectString(obj.to, child(ctx, "to")),
+      };
+    case "RenameFunctionOperation":
+      return {
+        kind,
+        from: expectString(obj.from, child(ctx, "from")),
+        to: expectString(obj.to, child(ctx, "to")),
+      };
+    default:
+      throw fail(ctx, `Unknown refactor operation kind '${kind}'`);
   }
 }
 

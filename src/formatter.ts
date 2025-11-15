@@ -67,6 +67,8 @@ function formatDeclaration(decl: AST.TopLevelDecl, indent: number): string {
       return formatPropertyDecl(decl, indent);
     case "ActorDecl":
       return formatActorDecl(decl, indent);
+    case "RefactorDecl":
+      return formatRefactorDecl(decl, indent);
     default:
       const _exhaustive: never = decl;
       throw new Error(`Unknown declaration kind: ${(decl as any).kind}`);
@@ -234,6 +236,45 @@ function formatPropertyDecl(prop: AST.PropertyDecl, indent: number): string {
   lines.push(`${prefix}}`);
   
   return lines.join("\n");
+}
+
+function formatRefactorDecl(refactor: AST.RefactorDecl, indent: number): string {
+  const prefix = INDENT.repeat(indent);
+  const lines: string[] = [];
+  lines.push(`${prefix}refactor ${refactor.name} {`);
+
+  for (const operation of refactor.operations) {
+    lines.push(`${prefix}${INDENT}${formatRefactorOperation(operation)}`);
+  }
+
+  if (refactor.updateTargets.length > 0) {
+    lines.push(`${prefix}${INDENT}update:`);
+    for (const target of refactor.updateTargets) {
+      lines.push(`${prefix}${INDENT}${INDENT}${target}`);
+    }
+  }
+
+  if (refactor.ignoreTargets.length > 0) {
+    lines.push(`${prefix}${INDENT}ignore:`);
+    for (const target of refactor.ignoreTargets) {
+      lines.push(`${prefix}${INDENT}${INDENT}${target}`);
+    }
+  }
+
+  lines.push(`${prefix}}`);
+  return lines.join("\n");
+}
+
+function formatRefactorOperation(operation: AST.RefactorOperation): string {
+  switch (operation.kind) {
+    case "RenameTypeOperation":
+      return `rename type ${operation.from} -> ${operation.to}`;
+    case "RenameFunctionOperation":
+      return `rename fn ${operation.from} -> ${operation.to}`;
+    default:
+      const _exhaustive: never = operation;
+      throw new Error(`Unknown refactor operation: ${(operation as any).kind}`);
+  }
 }
 
 function formatBlock(block: AST.Block, indent: number): string {

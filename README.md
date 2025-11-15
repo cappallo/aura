@@ -26,6 +26,7 @@ lx check [--format=json|text] [--input=source|ast] <file>
 lx format <file.lx>
 lx explain [--format=json|text] [--input=source|ast] <file> <module.fn> [args...]
 lx patch-body <file.lx> <module.fn> <bodySnippet.lx>
+lx apply-refactor <file.lx> <refactorName>
 ```
 
 Arguments to `lx run` and `lx explain` are parsed as JSON and converted to interpreter values (numbers, strings, booleans, and arrays).
@@ -43,6 +44,8 @@ Arguments to `lx run` and `lx explain` are parsed as JSON and converted to inter
 **LLM-friendly tools:**
 - `lx format` - Produces deterministic, canonical formatting from AST
 - `lx explain` - Shows step-by-step execution trace with function calls, returns, and variable bindings
+- `lx patch-body` - Replaces a single function body without touching surrounding code
+- `lx apply-refactor` - Applies structured refactor declarations (`rename type`, `rename fn`) across all affected modules
 
 Examples:
 ```bash

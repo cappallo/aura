@@ -18,7 +18,8 @@ import {
 } from "./interpreter";
 import { loadModules, buildSymbolTable, generateTypesFromSchemas } from "./loader";
 import * as ast from "./ast";
-import { StructuredOutput, formatStructuredOutput } from "./structured";
+import { StructuredOutput, StructuredError, formatStructuredOutput } from "./structured";
+import { applyRefactor, findRefactorDecl, RefactorError } from "./refactors";
 
 export type OutputFormat = "text" | "json";
 
@@ -60,6 +61,8 @@ function main() {
         return handleExplain(args, ctx);
       case "patch-body":
         return handlePatchBody(args, ctx);
+      case "apply-refactor":
+        return handleApplyRefactor(args, ctx);
       default:
         console.error(`Unknown command '${command}'`);
         printUsage();
@@ -519,6 +522,141 @@ function handlePatchBody(args: string[], ctx: CliContext) {
   console.log(`Patched ${fnName} in ${filePath}`);
 }
 
+function handleApplyRefactor(args: string[], ctx: CliContext) {
+  const [filePath, refactorName] = args;
+  if (!filePath || !refactorName) {
+    console.error("Usage: lx apply-refactor <file.lx> <refactorName>");
+    process.exit(1);
+  }
+  if (ctx.input !== "source") {
+    console.error("Refactor operations currently require --input=source");
+    process.exit(1);
+  }
+
+  const loadResult = loadModuleWithDependencies(filePath, ctx);
+  if (loadResult.errors && loadResult.errors.length > 0) {
+    if (ctx.format === "json") {
+      const output: StructuredOutput = { status: "error", errors: loadResult.errors };
+      console.log(formatStructuredOutput(output));
+    } else {
+      for (const error of loadResult.errors) {
+        console.error(`${error.message}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  const modules = loadResult.modules;
+  const symbolTable = loadResult.symbolTable;
+  if (!modules || !symbolTable) {
+    console.error("Internal error: module graph not available for refactor");
+    process.exit(1);
+  }
+
+  const refactorInfo = findRefactorDecl(modules, refactorName);
+  if (!refactorInfo) {
+    const message = `Refactor '${refactorName}' not found`;
+    if (ctx.format === "json") {
+    const error: StructuredError = {
+      kind: "error",
+      errorType: "RefactorError",
+      message,
+    };
+      const output: StructuredOutput = { status: "error", errors: [error] };
+      console.log(formatStructuredOutput(output));
+    } else {
+      console.error(message);
+    }
+    process.exit(1);
+  }
+
+  let applyResult;
+  try {
+    applyResult = applyRefactor(refactorInfo.decl, modules, symbolTable);
+  } catch (error) {
+    if (error instanceof RefactorError) {
+      if (ctx.format === "json") {
+        const structuredError: StructuredError = {
+          kind: "error",
+          errorType: "RefactorError",
+          message: error.message,
+        };
+        const output: StructuredOutput = { status: "error", errors: [structuredError] };
+        console.log(formatStructuredOutput(output));
+      } else {
+        console.error(`Refactor error: ${error.message}`);
+      }
+      process.exit(1);
+    }
+    throw error;
+  }
+
+  const updatedSymbolTable = buildSymbolTable(modules);
+  generateTypesFromSchemas(updatedSymbolTable);
+  const typeErrors = typecheckModules(modules, updatedSymbolTable);
+  if (typeErrors.length > 0) {
+    if (ctx.format === "json") {
+      const errors = typeErrors.map(convertToStructuredError);
+      const output: StructuredOutput = { status: "error", errors };
+      console.log(formatStructuredOutput(output));
+    } else {
+      for (const error of typeErrors) {
+        console.error(formatError(error));
+      }
+    }
+    process.exit(1);
+  }
+
+  const { formatModule } = require("./formatter");
+  for (const change of applyResult.moduleChanges) {
+    const targetModule = modules.find((mod) => mod.moduleName.join(".") === change.module);
+    if (!targetModule) {
+      continue;
+    }
+    const formatted = formatModule(targetModule.ast);
+    fs.writeFileSync(targetModule.filePath, formatted, "utf8");
+  }
+
+  if (ctx.format === "json") {
+    const output: StructuredOutput = {
+      status: "success",
+      result: {
+        refactor: applyResult.refactorName,
+        operations: applyResult.operationSummaries,
+        modules: applyResult.moduleChanges,
+      },
+    };
+    console.log(formatStructuredOutput(output));
+  } else {
+    console.log(`Applied refactor '${applyResult.refactorName}'`);
+    if (applyResult.operationSummaries.length === 0) {
+      console.log("  (no operations defined)");
+    } else {
+      for (const summary of applyResult.operationSummaries) {
+        if (summary.kind === "rename_type") {
+          console.log(
+            `  - renamed type ${summary.from} -> ${summary.to} (type refs: ${summary.typeReferencesUpdated}, constructors: ${summary.recordConstructorsUpdated})`,
+          );
+        } else {
+          console.log(
+            `  - renamed function ${summary.from} -> ${summary.to} (call sites: ${summary.callSitesUpdated}, contracts: ${summary.contractsRenamed})`,
+          );
+        }
+      }
+    }
+    if (applyResult.moduleChanges.length === 0) {
+      console.log("No files modified.");
+    } else {
+      for (const change of applyResult.moduleChanges) {
+        console.log(`  * ${change.filePath}`);
+        for (const reason of change.changes) {
+          console.log(`    - ${reason}`);
+        }
+      }
+    }
+  }
+}
+
 function formatError(error: import("./typecheck").TypeCheckError): string {
   let msg = "Type error: ";
   if (error.filePath) {
@@ -663,6 +801,7 @@ function printUsage() {
   console.log("  lx format <file.lx>");
   console.log("  lx explain [--format=json|text] [--input=source|ast] [--seed=N] <file> <module.fnName> [args...]");
   console.log("  lx patch-body <file.lx> <module.fnName> <bodySnippet.lx>");
+  console.log("  lx apply-refactor <file.lx> <refactorName>");
   console.log("");
   console.log("Options:");
   console.log("  --format=json    Output structured JSON for LLM consumption");

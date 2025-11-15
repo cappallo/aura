@@ -75,6 +75,7 @@ TopLevelDeclCore
 	/ ContractDecl
 	/ TestDecl
 	/ PropertyDecl
+	/ RefactorDecl
 
 EffectDecl
 	= "effect" __ name:Ident Terminator+ {
@@ -275,6 +276,75 @@ PropertyDecl
 				params: params || [],
 				body,
 			};
+		}
+
+RefactorDecl
+	= "refactor" __ name:Ident __ "{" BlockGap items:RefactorItemList? BlockGap "}" Terminator* {
+			const entries = items || [];
+			const operations = entries.filter((entry) => entry.kind === "Operation").map((entry) => entry.operation);
+			const updateTargets = entries
+				.filter((entry) => entry.kind === "Update")
+				.flatMap((entry) => entry.entries);
+			const ignoreTargets = entries
+				.filter((entry) => entry.kind === "Ignore")
+				.flatMap((entry) => entry.entries);
+			return {
+				kind: "RefactorDecl",
+				name,
+				operations,
+				updateTargets,
+				ignoreTargets,
+			};
+		}
+
+RefactorItemList
+	= head:RefactorItem tail:(BlockGap RefactorItem)* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+RefactorItem
+	= RefactorOperationItem
+	/ RefactorUpdateDirective
+	/ RefactorIgnoreDirective
+
+RefactorOperationItem
+	= "rename" __ target:("type" { return "type"; } / "fn" { return "fn"; }) __ from:QualifiedIdent __ "->" __ to:QualifiedIdent Terminator* {
+			if (target === "type") {
+				return {
+					kind: "Operation",
+					operation: { kind: "RenameTypeOperation", from, to },
+				};
+			}
+			return {
+				kind: "Operation",
+				operation: { kind: "RenameFunctionOperation", from, to },
+			};
+		}
+
+RefactorUpdateDirective
+	= "update" _ ":" BlockGap entries:RefactorDirectiveEntries? {
+			return {
+				kind: "Update",
+				entries: entries || [],
+			};
+		}
+
+RefactorIgnoreDirective
+	= "ignore" _ ":" BlockGap entries:RefactorDirectiveEntries? {
+			return {
+				kind: "Ignore",
+				entries: entries || [],
+			};
+		}
+
+RefactorDirectiveEntries
+	= head:RefactorDirectiveEntry tail:(Terminator+ RefactorDirectiveEntry)* Terminator* {
+			return [head, ...tail.map((part) => part[1])];
+		}
+
+RefactorDirectiveEntry
+	= _? name:Ident {
+			return name;
 		}
 
 PropertyParamList

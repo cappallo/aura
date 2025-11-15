@@ -34,6 +34,7 @@ runCommand("node", [cliPath, "test", "examples/actor_basic.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_async_group.lx"]);
 runCommand("node", [cliPath, "test", "--scheduler=deterministic", "examples/actor_scheduler.lx"]);
 runCommand("node", [cliPath, "test", "examples/actor_supervision.lx"]);
+runCommand("node", [cliPath, "test", "examples/refactor_sample.lx"]);
 runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
 runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
 
@@ -44,6 +45,11 @@ fs.copyFileSync("examples/median.lx", patchedMedian);
 runCommand("node", [cliPath, "patch-body", patchedMedian, "app.stats.median", "examples/patches/median_body.lxsnip"]);
 runCommand("node", [cliPath, "check", patchedMedian]);
 fs.unlinkSync(patchedMedian);
+const refactorTarget = path.join(tmpDir, "refactor_sample.lx");
+fs.copyFileSync("examples/refactor_sample.lx", refactorTarget);
+runCommand("node", [cliPath, "apply-refactor", refactorTarget, "rename_email_entities"]);
+runCommand("node", [cliPath, "check", refactorTarget]);
+fs.unlinkSync(refactorTarget);
 
 runExpectFailure(
   "Expected contract failure when clamp is called with min > max",

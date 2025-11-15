@@ -284,7 +284,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Implement patch-based editing (replace function body by stable ID) (THOUGHTS.md §6.1)
 - [x] Add `hole("name")` expressions for partial code (THOUGHTS.md §8)
 - [x] Add named arguments support (`name: value` syntax in calls) (THOUGHTS.md §1.3)
-- [ ] Create tooling commands for guided refactors (SPEC.md §10.1)
+- [x] Create tooling commands for guided refactors (SPEC.md §10.1)
 
 **Completed:** Code formatter (`src/formatter.ts`) produces deterministic, canonical output from AST with consistent indentation and spacing. Execution tracing captures function calls, returns, let bindings with nesting depth. The `lx explain` command provides step-by-step execution traces in both human-readable and JSON formats for LLM consumption. Patch-based editing is implemented via `lx patch-body` command which rewrites function bodies by symbol ID. AST input format (`--input=ast`) allows direct JSON AST execution. All core LLM tooling commands (`format`, `explain`, `patch-body`) are fully functional in the CLI.
 
@@ -385,6 +385,13 @@ Phase 5 (Long-term): Evolution
   - Builtins like `Concurrent.stop` accept any `ActorRef<Msg>` via polymorphic signatures
   - Updated `examples/actor_supervision.lx` to showcase typed actor references in state and message payloads
 
+**Recent Work (November 13, 2025):**
+- ✅ Implemented structured refactor declarations + CLI tooling
+  - Extended AST/grammar/formatter with `refactor` blocks and rename operations
+  - Added `lx apply-refactor` command that enforces refactor scripts and rewrites all affected modules
+  - Rename operations handle type annotations, record constructors, pattern matches, and call sites across dependency graph
+  - Added `examples/refactor_sample.lx` and automated coverage in `npm test`
+
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
@@ -395,7 +402,7 @@ With the core language, schemas, LLM tooling (including deterministic execution)
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
    - ✅ Deterministic execution mode / seedable RNG
-   - ⚠️ Guided refactor operations (SPEC.md §10.1) - Implement programmatic refactoring tools
+   - 🟡 Guided refactor operations (SPEC.md §10.1) - Rename type/fn tooling shipped; move/parameter rewrites still pending
 
 ---
 
@@ -447,7 +454,7 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **No guided refactor operations** - No structured commands for refactoring (SPEC.md §10.1, THOUGHTS.md §6.2)
+1. **Refactor DSL still limited** - `refactor` blocks support rename operations today; move/parameter-update/replace-pattern primitives are still pending (SPEC.md §10.1, THOUGHTS.md §6.2)
 
 ### Language Features
 2. **No REPL** - Must write files to test code
@@ -474,7 +481,7 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§5.1 Deterministic replayable runs** | ✅ Good | Structured logging (✅) and seedable RNG (✅) both implemented |
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
 | **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs, AST input/output format |
-| **§6.2 Guided refactors** | ❌ Missing | In SPEC but not implemented |
+| **§6.2 Guided refactors** | 🟡 Partial | Rename operations + CLI implemented; move/param rewrites pending |
 | **§7 Safe concurrency model** | � Strong | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode, supervision trees |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 

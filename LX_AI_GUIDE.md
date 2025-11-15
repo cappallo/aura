@@ -270,6 +270,24 @@ The wrapper forwards all arguments to `node dist/cli.js`, giving you a concise e
 
 ---
 
+## Refactors
+
+Structured refactor blocks let you describe graph-wide changes declaratively. The analyzer validates them and the CLI applies them consistently.
+
+```lx
+refactor rename_email_entities {
+  rename type app.user.Email -> app.user.UserEmail
+  rename fn app.user.email_value -> app.user.extract_email_value
+  update:
+    type_annotations
+    constructors
+}
+```
+
+Run `lx apply-refactor <file.lx> <refactorName>` to apply the block. The current implementation supports `rename type` and `rename fn` operations and rewrites all affected modules, including type annotations, record constructors, pattern matches, and call sites.
+
+---
+
 ## Actors (Concurrency)
 
 Actors provide safe concurrent mutable state. Each actor processes messages sequentially (single-threaded internally).
