@@ -1,0 +1,37 @@
+module fibonacci
+
+// Helper function for iterative Fibonacci
+fn fib_iter(n: Int, a: Int, b: Int, i: Int) -> Int {
+  if i > n {
+    return b
+  } else {
+    return fib_iter(n, b, a + b, i + 1)
+  }
+}
+
+// Calculate the nth Fibonacci number
+fn fib(n: Int) -> Int {
+  if n <= 0 {
+    return 0
+  } else {
+    if n == 1 {
+      return 1
+    } else {
+      return fib_iter(n, 0, 1, 2)
+    }
+  }
+}
+
+fn main() -> Int {
+  return fib(50)
+}
+
+test fibonacci_tests {
+  test.assert_equal(fib(0), 0)
+  test.assert_equal(fib(1), 1)
+  test.assert_equal(fib(2), 1)
+  test.assert_equal(fib(3), 2)
+  test.assert_equal(fib(4), 3)
+  test.assert_equal(fib(5), 5)
+  test.assert_equal(fib(6), 8)
+}

@@ -1,0 +1,17 @@
+module examples.fibonacci
+
+fn fibonacci_50() -> Int {
+  return fib_iter(1, 0, 1, 50)
+}
+
+fn fib_iter(index: Int, prev: Int, curr: Int, target: Int) -> Int {
+  return if index >= target {
+    curr
+  } else {
+    fib_iter(index + 1, curr, prev + curr, target)
+  }
+}
+
+test fibonacci_tests {
+  test.assert_equal(fibonacci_50(), 12586269025)
+}

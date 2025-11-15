@@ -125,6 +125,8 @@ let x: Int = 0
 x = x + 1  // Reassignment
 ```
 
+> **Current limitation:** `let` bindings presently support only `let name = expr` form; inline type annotations like `let value: Int = ...` are rejected by the parser. Prefer annotating function signatures and types instead.
+
 ### Control Flow
 
 **If-else (must be exhaustive):**
@@ -148,17 +150,19 @@ match option {
 }
 ```
 
-**For loops:**
+> **Note:** The current parser build (Nov 2025) does not yet support `for` or `while` loops even though they are part of the planned syntax. Use recursion (tail-recursive helpers or higher-order list functions) to express iteration for now.
+
+**For loops (planned):**
 ```lx
 for item in list {
-  // Process item
+  // Planned syntax – not yet available
 }
 ```
 
-**While loops:**
+**While loops (planned):**
 ```lx
 while condition {
-  // Loop body
+  // Planned syntax – not yet available
 }
 ```
 
