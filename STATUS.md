@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 11, 2025  
+**Last Updated:** November 15, 2025  
 **Overall Progress:** ~84% (Core language ~86% complete, LLM-first tooling ~86% complete, Concurrency ~80% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -10,8 +10,8 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## ✅ Fully Implemented (Core v0.1)
 
 ### 1. Language Infrastructure
-- ✅ PEG parser (Peggy-based) with ~706 lines grammar
-- ✅ Full AST definitions in TypeScript (~320 lines)
+- ✅ PEG parser (Peggy-based) with ~777 lines grammar
+- ✅ Full AST definitions in TypeScript (~413 lines)
 - ✅ Parser wrapper with error handling
 - ✅ CLI with `run`, `test`, `check`, `format`, `explain`, and `patch-body` commands
 - ✅ Build system with automatic parser generation
@@ -39,7 +39,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ Field access
 
 ### 4. Interpreter
-- ✅ Expression evaluation (~2557 lines total interpreter)
+- ✅ Expression evaluation (~2904 lines total interpreter)
 - ✅ Function calls with parameter binding
 - ✅ Pattern matching runtime (constructor, variable, wildcard patterns)
 - ✅ Built-in functions: 
@@ -115,9 +115,9 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ✅ `Concurrent` effect for actor/task operations (CONCURRENCY.md §6) - **Built-in effect added**
 
 ### 2. Refactors (§10.1 of SPEC)
-- ❌ `refactor` declarations
-- ❌ Symbol graph operations (rename, move, etc.)
-- ❌ Refactor validation and application
+- ✅ `refactor` declarations
+- 🟡 Symbol graph operations (rename type/function implemented; move, parameter updates pending)
+- ✅ Refactor validation and application via `lx apply-refactor` command
 
 ### 3. Migrations (§10.2 of SPEC)
 - ❌ `migration` declarations
@@ -146,13 +146,13 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §7.4 | Properties | ✅ Complete |
 | §8 | Schemas & I/O | ✅ Complete (HTTP bindings future enhancement) |
 | §9 | Logging/tracing | ✅ Complete (structured logging + execution tracing) |
-| §10 | Refactors/migrations | ❌ Not started |
+| §10 | Refactors/migrations | 🟡 Refactors partially complete (rename operations); migrations not started |
 
 ---
 
 ## 🎯 Working Examples
 
-The implementation successfully runs 36 example files (27 runnable + 9 error test cases) including:
+The implementation successfully runs 49 example files (39 runnable + 10 error test cases) including:
 - ✅ `option.lx` - Sum types, pattern matching
 - ✅ `contracts.lx` - Contract enforcement
 - ✅ `logging.lx` - Effect tracking
@@ -173,6 +173,7 @@ The implementation successfully runs 36 example files (27 runnable + 9 error tes
 - ✅ `list_concat.lx` - List concatenation examples
 - ✅ `list_operations.lx` - List append and concat builtin operations
 - ✅ `queens.lx` - N-queens solver demonstrating backtracking search with list operations
+- ✅ `fibonacci.lx`, `codex_fib.lx`, `sonnet_fib.lx` - Multiple fibonacci implementations
 - ✅ `actor_basic.lx` - Basic actor declarations with state and message handlers
 - ✅ `actor_scheduler.lx` - Deterministic actor scheduling with `Concurrent.step/flush`
 - ✅ `actor_async_group.lx` - Structured async tasks inside actors with cooperative scheduling
@@ -325,7 +326,7 @@ Phase 4 (Mid-term): Concurrency & Tools
 │  ├─ Structured async tasks within actors → ✅ Cooperative scheduler with cancellation
 │  └─ Supervision trees → ✅ Completed (failure propagation + `ChildFailed` notifications)
 ├─ Data-parallel primitives (parallel_map, parallel_fold, parallel_for_each) → 🟡 Builtins/purity checks done; parallel scheduler TBD
-├─ Refactor operations (SPEC.md §10.1) → ❌ Not started
+├─ Refactor operations (SPEC.md §10.1) → 🟡 Partially complete (rename type/function + CLI implemented)
 └─ Effect polymorphism (SPEC.md §5.3) → ❌ Not started
 
 Phase 5 (Long-term): Evolution
@@ -485,11 +486,12 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§7 Safe concurrency model** | � Strong | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode, supervision trees |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, and deterministic testing support. Remaining enhancements needed:
-- Guided refactor operations with structured commands (§6.2/§10.1)
-- Supervision trees for actor failure handling (CONCURRENCY.md §7)
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, supervision trees, and deterministic testing support. Refactor operations (§6.2) support rename type/function operations. Remaining enhancements needed:
+- Complete guided refactor operations with move/parameter update commands (§6.2/§10.1)
+- Schema migrations (§10.2)
+- True parallel execution for data-parallel primitives
 
-**Impact:** The language core is solid (~85% complete), the LLM developer experience layer is nearly complete (~85% complete), and the concurrency model has reached ~75% completion with structured async tasks. Overall progress is ~82%. Structured error and log output, deterministic property testing with seedable RNG, execution tracing, canonical formatting, patch-based editing, AST input format, schema codecs, and cooperative concurrency primitives enable the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~86% complete), the LLM developer experience layer is nearly complete (~86% complete), and the concurrency model has reached ~80% completion with supervision trees. Overall progress is ~84%. Structured error and log output, deterministic property testing with seedable RNG, execution tracing, canonical formatting, patch-based editing, AST input format, schema codecs, cooperative concurrency primitives, and basic refactor operations enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 
