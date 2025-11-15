@@ -1,0 +1,22 @@
+module examples.fibonacci
+
+fn fib_tail(remaining: Int, current: Int, next: Int) -> Int {
+  if remaining == 0 {
+    return current
+  } else {
+    return fib_tail(remaining - 1, next, current + next)
+  }
+}
+
+fn fibonacci(n: Int) -> Int {
+  if n < 0 {
+    return 0
+  } else {
+    return fib_tail(n, 0, 1)
+  }
+}
+
+fn main() -> Int {
+  let target = 50
+  return fibonacci(target)
+}
