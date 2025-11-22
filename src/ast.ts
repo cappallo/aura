@@ -398,7 +398,11 @@ export type RefactorDecl = {
 };
 
 /** Supported refactor operations */
-export type RefactorOperation = RenameTypeOperation | RenameFunctionOperation;
+export type RefactorOperation =
+  | RenameTypeOperation
+  | RenameFunctionOperation
+  | MoveTypeOperation
+  | MoveFunctionOperation;
 
 export type RenameTypeOperation = {
   kind: "RenameTypeOperation";
@@ -410,4 +414,18 @@ export type RenameFunctionOperation = {
   kind: "RenameFunctionOperation";
   from: string;
   to: string;
+};
+
+export type MoveTypeOperation = {
+  kind: "MoveTypeOperation";
+  symbol: string;
+  fromModule: string;
+  toModule: string;
+};
+
+export type MoveFunctionOperation = {
+  kind: "MoveFunctionOperation";
+  symbol: string;
+  fromModule: string;
+  toModule: string;
 };

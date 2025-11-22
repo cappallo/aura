@@ -304,6 +304,7 @@ RefactorItemList
 
 RefactorItem
 	= RefactorOperationItem
+	/ RefactorMoveOperationItem
 	/ RefactorUpdateDirective
 	/ RefactorIgnoreDirective
 
@@ -318,6 +319,20 @@ RefactorOperationItem
 			return {
 				kind: "Operation",
 				operation: { kind: "RenameFunctionOperation", from, to },
+			};
+		}
+
+RefactorMoveOperationItem
+	= "move" __ target:("type" { return "type"; } / "fn" { return "fn"; }) __ symbol:Ident __ "from" __ fromModule:QualifiedIdent __ "to" __ toModule:QualifiedIdent Terminator* {
+			if (target === "type") {
+				return {
+					kind: "Operation",
+					operation: { kind: "MoveTypeOperation", symbol, fromModule, toModule },
+				};
+			}
+			return {
+				kind: "Operation",
+				operation: { kind: "MoveFunctionOperation", symbol, fromModule, toModule },
 			};
 		}
 
@@ -457,7 +472,7 @@ MatchCase
 
 Pattern
 	= "_" { return { kind: "WildcardPattern" }; }
-	/ ctor:CtorName __ "{" __ fields:PatternFieldList? __ "}" {
+	/ ctor:QualifiedIdent __ "{" __ fields:PatternFieldList? __ "}" {
 			return {
 				kind: "CtorPattern",
 				ctorName: ctor,
@@ -595,7 +610,7 @@ ExprList
 		}
 
 RecordLiteral
-	= name:CtorName __ "{" BlockGap fields:RecordFieldList? BlockGap "}" {
+	= name:QualifiedIdent _ "{" BlockGap fields:RecordFieldList? BlockGap "}" {
 			return {
 				kind: "RecordExpr",
 				typeName: name,
@@ -711,7 +726,7 @@ TypeExpr
 		}
 
 TypePrimary
-	= name:Ident typeArgs:TypeArgList? {
+	= name:QualifiedIdent typeArgs:TypeArgList? {
 			return { kind: "TypeName", name, typeArgs: typeArgs || [] };
 		}
 	/ "(" __ type:TypeExpr __ ")" { return type; }

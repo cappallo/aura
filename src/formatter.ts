@@ -271,6 +271,10 @@ function formatRefactorOperation(operation: AST.RefactorOperation): string {
       return `rename type ${operation.from} -> ${operation.to}`;
     case "RenameFunctionOperation":
       return `rename fn ${operation.from} -> ${operation.to}`;
+    case "MoveTypeOperation":
+      return `move type ${operation.symbol} from ${operation.fromModule} to ${operation.toModule}`;
+    case "MoveFunctionOperation":
+      return `move fn ${operation.symbol} from ${operation.fromModule} to ${operation.toModule}`;
     default:
       const _exhaustive: never = operation;
       throw new Error(`Unknown refactor operation: ${(operation as any).kind}`);

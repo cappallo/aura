@@ -535,6 +535,7 @@ function handleApplyRefactor(args: string[], ctx: CliContext) {
 
   const loadResult = loadModuleWithDependencies(filePath, ctx);
   if (loadResult.errors && loadResult.errors.length > 0) {
+    console.log("Load errors:", JSON.stringify(loadResult.errors, null, 2));
     if (ctx.format === "json") {
       const output: StructuredOutput = { status: "error", errors: loadResult.errors };
       console.log(formatStructuredOutput(output));
@@ -633,14 +634,27 @@ function handleApplyRefactor(args: string[], ctx: CliContext) {
       console.log("  (no operations defined)");
     } else {
       for (const summary of applyResult.operationSummaries) {
-        if (summary.kind === "rename_type") {
-          console.log(
-            `  - renamed type ${summary.from} -> ${summary.to} (type refs: ${summary.typeReferencesUpdated}, constructors: ${summary.recordConstructorsUpdated})`,
-          );
-        } else {
-          console.log(
-            `  - renamed function ${summary.from} -> ${summary.to} (call sites: ${summary.callSitesUpdated}, contracts: ${summary.contractsRenamed})`,
-          );
+        switch (summary.kind) {
+          case "rename_type":
+            console.log(
+              `  - renamed type ${summary.from} -> ${summary.to} (type refs: ${summary.typeReferencesUpdated}, constructors: ${summary.recordConstructorsUpdated})`,
+            );
+            break;
+          case "rename_function":
+            console.log(
+              `  - renamed function ${summary.from} -> ${summary.to} (call sites: ${summary.callSitesUpdated}, contracts: ${summary.contractsRenamed})`,
+            );
+            break;
+          case "move_type":
+            console.log(
+              `  - moved type ${summary.symbol} from ${summary.fromModule} to ${summary.toModule} (refs: ${summary.referencesUpdated})`,
+            );
+            break;
+          case "move_function":
+            console.log(
+              `  - moved function ${summary.symbol} from ${summary.fromModule} to ${summary.toModule} (call sites: ${summary.callSitesUpdated})`,
+            );
+            break;
         }
       }
     }

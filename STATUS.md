@@ -116,7 +116,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ### 2. Refactors (§10.1 of SPEC)
 - ✅ `refactor` declarations
-- 🟡 Symbol graph operations (rename type/function implemented; move, parameter updates pending)
+- 🟡 Symbol graph operations (rename type/function implemented; move type/function implemented; parameter updates pending)
 - ✅ Refactor validation and application via `lx apply-refactor` command
 
 ### 3. Migrations (§10.2 of SPEC)
@@ -326,7 +326,7 @@ Phase 4 (Mid-term): Concurrency & Tools
 │  ├─ Structured async tasks within actors → ✅ Cooperative scheduler with cancellation
 │  └─ Supervision trees → ✅ Completed (failure propagation + `ChildFailed` notifications)
 ├─ Data-parallel primitives (parallel_map, parallel_fold, parallel_for_each) → 🟡 Builtins/purity checks done; parallel scheduler TBD
-├─ Refactor operations (SPEC.md §10.1) → 🟡 Partially complete (rename type/function + CLI implemented)
+├─ Refactor operations (SPEC.md §10.1) → 🟡 Partially complete (rename/move type/function implemented; param updates pending)
 └─ Effect polymorphism (SPEC.md §5.3) → ❌ Not started
 
 Phase 5 (Long-term): Evolution
@@ -393,6 +393,13 @@ Phase 5 (Long-term): Evolution
   - Rename operations handle type annotations, record constructors, pattern matches, and call sites across dependency graph
   - Added `examples/refactor_sample.lx` and automated coverage in `npm test`
 
+**Recent Work (November 22, 2025):**
+- ✅ Implemented `move type` and `move fn` refactor operations
+  - Extended AST/grammar/formatter with `move` operations
+  - Implemented `applyMoveType` and `applyMoveFunction` in `src/refactors.ts`
+  - Updated `rewriteIdentifier` to handle cross-module moves
+  - Verified with `examples/multifile/refactor_move_main.lx`
+
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
@@ -403,7 +410,15 @@ With the core language, schemas, LLM tooling (including deterministic execution)
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
    - ✅ Deterministic execution mode / seedable RNG
-   - 🟡 Guided refactor operations (SPEC.md §10.1) - Rename type/fn tooling shipped; move/parameter rewrites still pending
+   - 🟡 Guided refactor operations (SPEC.md §10.1) - Rename/move type/fn tooling shipped; parameter rewrites still pending
+
+### **Priority 9: Complete Refactor Operations (§10.1)**
+**Status:** 🟡 In Progress
+**Goal:** Finish remaining refactor primitives
+- [ ] Implement `update param_list` operation
+- [ ] Implement `replace pattern` operation
+- [ ] Add automatic import insertion for move operations
+- [ ] Fix parser limitation for `type Alias = Qualified.Name`
 
 ---
 
@@ -455,7 +470,9 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **Refactor DSL still limited** - `refactor` blocks support rename operations today; move/parameter-update/replace-pattern primitives are still pending (SPEC.md §10.1, THOUGHTS.md §6.2)
+1. **Refactor DSL still limited** - `refactor` blocks support rename and move operations; parameter-update/replace-pattern primitives are still pending (SPEC.md §10.1, THOUGHTS.md §6.2).
+   - *Note:* Move operations currently use fully qualified names in the target; automatic import insertion is a future enhancement.
+2. **Parser Limitation** - `type Alias = Qualified.Name` syntax is not yet supported (workaround: use local alias or wrapper type).
 
 ### Language Features
 2. **No REPL** - Must write files to test code

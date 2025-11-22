@@ -22,6 +22,20 @@ export type RefactorOperationSummary =
       to: string;
       callSitesUpdated: number;
       contractsRenamed: number;
+    }
+  | {
+      kind: "move_type";
+      symbol: string;
+      fromModule: string;
+      toModule: string;
+      referencesUpdated: number;
+    }
+  | {
+      kind: "move_function";
+      symbol: string;
+      fromModule: string;
+      toModule: string;
+      callSitesUpdated: number;
     };
 
 export type ModuleChangeSummary = {
@@ -40,6 +54,7 @@ type RenameContext = {
   fromQualified: string;
   toQualified: string;
   fromModule: string;
+  toModule: string;
   fromSymbol: string;
   newSymbol: string;
 };
@@ -116,6 +131,12 @@ class RefactorApplier {
         case "RenameFunctionOperation":
           this.operationSummaries.push(this.applyRenameFunction(operation));
           break;
+        case "MoveTypeOperation":
+          this.operationSummaries.push(this.applyMoveType(operation));
+          break;
+        case "MoveFunctionOperation":
+          this.operationSummaries.push(this.applyMoveFunction(operation));
+          break;
         default:
           const _exhaustive: never = operation;
           throw new RefactorError(`Unsupported refactor operation ${(operation as ast.RefactorOperation).kind}`);
@@ -160,6 +181,7 @@ class RefactorApplier {
       fromQualified: operation.from,
       toQualified: operation.to,
       fromModule: fromParts.module,
+      toModule: toParts.module,
       fromSymbol: fromParts.symbol,
       newSymbol: toParts.symbol,
     };
@@ -212,6 +234,7 @@ class RefactorApplier {
       fromQualified: operation.from,
       toQualified: operation.to,
       fromModule: fromParts.module,
+      toModule: toParts.module,
       fromSymbol: fromParts.symbol,
       newSymbol: toParts.symbol,
     };
@@ -263,10 +286,12 @@ class RefactorApplier {
       let moduleCount = 0;
       walkModule(mod.ast, {
         onRecordExpr: (expr) => {
-          if (expr.typeName === context.fromSymbol) {
-            expr.typeName = context.newSymbol;
-            moduleCount += 1;
+          const resolved = resolveIdentifier(expr.typeName, mod.ast, this.symbolTable);
+          if (resolved !== context.fromQualified) {
+            return;
           }
+            expr.typeName = this.rewriteIdentifier(expr.typeName, mod.ast, context);
+          moduleCount += 1;
         },
         onPatternCtor: (pattern) => {
           if (pattern.ctorName === context.fromSymbol) {
@@ -344,10 +369,22 @@ class RefactorApplier {
 
   private rewriteIdentifier(original: string, module: ast.Module, context: RenameContext): string {
     const naming = this.getNaming(module);
+    const currentModule = module.name.join(".");
+    const isMove = context.fromModule !== context.toModule;
+
     if (!original.includes(".")) {
+      if (isMove) {
+        if (currentModule === context.toModule) {
+          return context.newSymbol;
+        }
+        return context.toQualified;
+      }
       return context.newSymbol;
     }
     if (original.startsWith(`${context.fromModule}.`)) {
+      if (isMove) {
+        return context.toQualified;
+      }
       const parts = original.split(".");
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
@@ -356,11 +393,17 @@ class RefactorApplier {
     const first = parts[0]!;
     const aliasTarget = naming.aliasToModule.get(first);
     if (aliasTarget === context.fromModule) {
+      if (isMove) {
+        return context.toQualified;
+      }
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
     }
     const shortTarget = naming.shortNameToModule.get(first);
     if (shortTarget === context.fromModule) {
+      if (isMove) {
+        return context.toQualified;
+      }
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
     }
@@ -391,6 +434,109 @@ class RefactorApplier {
     };
     this.namingCache.set(module, naming);
     return naming;
+  }
+
+  private applyMoveType(operation: ast.MoveTypeOperation): RefactorOperationSummary {
+    const sourceModule = this.getModule(operation.fromModule);
+    const targetModule = this.getModule(operation.toModule);
+
+    const declIndex = sourceModule.ast.decls.findIndex((decl) => isTypeDeclNamed(decl, operation.symbol));
+    if (declIndex === -1) {
+      throw new RefactorError(`Type '${operation.symbol}' not found in module '${operation.fromModule}'`);
+    }
+    const decl = sourceModule.ast.decls[declIndex] as ast.TypeDecl;
+
+    if (targetModule.ast.decls.some((d) => isTypeDeclNamed(d, operation.symbol))) {
+      throw new RefactorError(`Type '${operation.symbol}' already exists in module '${operation.toModule}'`);
+    }
+
+    sourceModule.ast.decls.splice(declIndex, 1);
+    targetModule.ast.decls.push(decl);
+
+    this.recordModuleChange(sourceModule, `moved type ${operation.symbol} to ${operation.toModule}`);
+    this.recordModuleChange(targetModule, `received type ${operation.symbol} from ${operation.fromModule}`);
+
+    const context: RenameContext = {
+      fromQualified: `${operation.fromModule}.${operation.symbol}`,
+      toQualified: `${operation.toModule}.${operation.symbol}`,
+      fromModule: operation.fromModule,
+      toModule: operation.toModule,
+      fromSymbol: operation.symbol,
+      newSymbol: operation.symbol,
+    };
+
+    const refs = this.renameTypeReferences(context);
+    let constructorUpdates = 0;
+    if (decl.kind === "RecordTypeDecl") {
+      constructorUpdates = this.renameRecordConstructors(context);
+    }
+
+    this.symbolTable.types.delete(context.fromQualified);
+    this.symbolTable.types.set(context.toQualified, decl);
+
+    return {
+      kind: "move_type",
+      symbol: operation.symbol,
+      fromModule: operation.fromModule,
+      toModule: operation.toModule,
+      referencesUpdated: refs,
+    };
+  }
+
+  private applyMoveFunction(operation: ast.MoveFunctionOperation): RefactorOperationSummary {
+    const sourceModule = this.getModule(operation.fromModule);
+    const targetModule = this.getModule(operation.toModule);
+
+    const declIndex = sourceModule.ast.decls.findIndex(
+      (decl) => decl.kind === "FnDecl" && decl.name === operation.symbol,
+    );
+    if (declIndex === -1) {
+      throw new RefactorError(`Function '${operation.symbol}' not found in module '${operation.fromModule}'`);
+    }
+    const decl = sourceModule.ast.decls[declIndex] as ast.FnDecl;
+
+    if (targetModule.ast.decls.some((d) => d.kind === "FnDecl" && d.name === operation.symbol)) {
+      throw new RefactorError(`Function '${operation.symbol}' already exists in module '${operation.toModule}'`);
+    }
+
+    sourceModule.ast.decls.splice(declIndex, 1);
+    targetModule.ast.decls.push(decl);
+
+    this.recordModuleChange(sourceModule, `moved function ${operation.symbol} to ${operation.toModule}`);
+    this.recordModuleChange(targetModule, `received function ${operation.symbol} from ${operation.fromModule}`);
+
+    // Move contract if exists
+    const contractIndex = sourceModule.ast.decls.findIndex(
+      (d) => d.kind === "FnContractDecl" && d.name === operation.symbol,
+    );
+    if (contractIndex !== -1) {
+      const contract = sourceModule.ast.decls[contractIndex]!;
+      sourceModule.ast.decls.splice(contractIndex, 1);
+      targetModule.ast.decls.push(contract);
+      this.recordModuleChange(sourceModule, `moved contract for ${operation.symbol}`);
+    }
+
+    const context: RenameContext = {
+      fromQualified: `${operation.fromModule}.${operation.symbol}`,
+      toQualified: `${operation.toModule}.${operation.symbol}`,
+      fromModule: operation.fromModule,
+      toModule: operation.toModule,
+      fromSymbol: operation.symbol,
+      newSymbol: operation.symbol,
+    };
+
+    const callSites = this.renameCallSites(context);
+
+    this.symbolTable.functions.delete(context.fromQualified);
+    this.symbolTable.functions.set(context.toQualified, decl);
+
+    return {
+      kind: "move_function",
+      symbol: operation.symbol,
+      fromModule: operation.fromModule,
+      toModule: operation.toModule,
+      callSitesUpdated: callSites,
+    };
   }
 }
 
