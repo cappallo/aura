@@ -1,0 +1,10 @@
+module examples.type_alias_bug
+
+import examples.multifile.math
+
+type MyInt = examples.multifile.math.IntAlias
+
+fn main() -> Int {
+  let x: MyInt = 42
+  x
+}

@@ -1,6 +1,6 @@
 module examples.actor_supervision_error
 
-type WorkerMsg = Crash
+type WorkerMsg = | Crash
 
 actor Worker() {
   on Crash() -> [Concurrent] Unit {

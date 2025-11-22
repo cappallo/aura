@@ -1,0 +1,11 @@
+module examples.alias_test
+
+type MyInt = Int
+type MyString = String
+type MyQualified = examples.alias_test.MyInt
+
+test alias_check {
+  let x: MyInt = 42
+  let y: Int = x
+  assert(x == y)
+}

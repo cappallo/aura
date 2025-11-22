@@ -106,15 +106,7 @@ SchemaField
 		}
 
 TypeDecl
-	= "type" __ name:Ident params:TypeParams? __ "=" __ sum:SumType Terminator+ {
-			return {
-				kind: "SumTypeDecl",
-				name,
-				typeParams: params || [],
-				variants: sum,
-			};
-		}
-	/ "type" __ name:Ident params:TypeParams? __ "=" __ alias:TypeExpr Terminator+ {
+	= "type" __ name:Ident params:TypeParams? __ "=" __ alias:TypeExpr Terminator+ {
 			return {
 				kind: "AliasTypeDecl",
 				name,
@@ -122,7 +114,15 @@ TypeDecl
 				target: alias,
 			};
 		}
-		/ "type" __ name:Ident params:TypeParams? __ "{" BlockGap fields:FieldDeclList? BlockGap "}" Terminator+ {
+	/ "type" __ name:Ident params:TypeParams? __ "=" __ sum:SumType Terminator+ {
+			return {
+				kind: "SumTypeDecl",
+				name,
+				typeParams: params || [],
+				variants: sum,
+			};
+		}
+	/ "type" __ name:Ident params:TypeParams? __ "{" BlockGap fields:FieldDeclList? BlockGap "}" Terminator+ {
 			return {
 				kind: "RecordTypeDecl",
 				name,
@@ -137,7 +137,7 @@ TypeParams
 		}
 
 SumType
-	= first:Variant rest:(__ "|" __ Variant)* {
+	= ("|" _)? first:Variant rest:(__ "|" __ Variant)* {
 			return [first, ...rest.map((part) => part[3])];
 		}
 

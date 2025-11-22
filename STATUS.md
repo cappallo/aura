@@ -1,6 +1,6 @@
 # Lx Implementation Status Report
 
-**Last Updated:** November 15, 2025  
+**Last Updated:** November 22, 2025  
 **Overall Progress:** ~84% (Core language ~86% complete, LLM-first tooling ~86% complete, Concurrency ~80% complete)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP. Here's the breakdown:
@@ -400,6 +400,13 @@ Phase 5 (Long-term): Evolution
   - Updated `rewriteIdentifier` to handle cross-module moves
   - Verified with `examples/multifile/refactor_move_main.lx`
 
+**Recent Work (November 22, 2025 - Part 2):**
+- ✅ Fixed parser limitation for type aliases
+  - `type Alias = Qualified.Name` and `type Alias = SimpleName` now parse as aliases correctly
+  - Swapped `TypeDecl` priority to prefer aliases over sum types
+  - Updated `SumType` grammar to allow optional leading pipe (`|`) to disambiguate single-variant sum types (e.g., `type Msg = | Crash`)
+  - Added `examples/alias_test.lx` to verify alias behavior
+
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
@@ -418,7 +425,7 @@ With the core language, schemas, LLM tooling (including deterministic execution)
 - [ ] Implement `update param_list` operation
 - [ ] Implement `replace pattern` operation
 - [ ] Add automatic import insertion for move operations
-- [ ] Fix parser limitation for `type Alias = Qualified.Name`
+- [x] Fix parser limitation for `type Alias = Qualified.Name` (Note: Single-variant SumTypes now require leading `|` if variant name is a valid type expression)
 
 ---
 
@@ -472,7 +479,6 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ### Tooling Gaps (LLM-First Design)
 1. **Refactor DSL still limited** - `refactor` blocks support rename and move operations; parameter-update/replace-pattern primitives are still pending (SPEC.md §10.1, THOUGHTS.md §6.2).
    - *Note:* Move operations currently use fully qualified names in the target; automatic import insertion is a future enhancement.
-2. **Parser Limitation** - `type Alias = Qualified.Name` syntax is not yet supported (workaround: use local alias or wrapper type).
 
 ### Language Features
 2. **No REPL** - Must write files to test code

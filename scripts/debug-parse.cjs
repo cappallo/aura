@@ -8,8 +8,8 @@ if (!filePath) {
 }
 
 try {
-  parser.parse(fs.readFileSync(filePath, "utf8"));
-  console.log("ok");
+  const ast = parser.parse(fs.readFileSync(filePath, "utf8"));
+  console.log(JSON.stringify(ast, null, 2));
 } catch (error) {
   console.error(error.message);
   if (error.location) {
