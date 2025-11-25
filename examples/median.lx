@@ -6,12 +6,21 @@ type Stats {
   values: List<Int>
 }
 
+/// spec:
+///   description: "Compute the median of a list of integers."
+///   inputs:
+///     - list: "The list of numbers"
+///   outputs:
+///     - "The median value (lower middle for even length)"
+///   laws:
+///     - "result is element of list"
+/// prompt: Optimize this for sorted lists if possible.
 fn median(list: List<Int>) -> Int {
-  let n = list.len(list)
+  let n: Int = list.len(list)
   if n == 0 {
     return 0
   }
-  let idx = (n - 1) / 2
+  let idx: Int = (n - 1) / 2
   return list[idx]
 }
 

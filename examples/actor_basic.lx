@@ -2,21 +2,26 @@ module examples.actor_basic
 
 type CounterMsg = Increment | Add { amount: Int } | AddPair { left: Int, right: Int } | GetValue
 
+/// spec:
+///   description: "A simple counter actor."
+///   fields:
+///     - count: "The current count"
+/// context: examples.actor_basic.CounterMsg
 actor Counter(initial: Int) {
   state {
     count: Int
   }
 
   on Increment() -> [Concurrent] Unit {
-    let count = count + 1
+    let count: Int = count + 1
   }
 
   on Add(amount: Int) -> [Concurrent] Unit {
-    let count = count + amount
+    let count: Int = count + amount
   }
 
   on AddPair(left: Int, right: Int) -> [Concurrent] Unit {
-    let count = count + left + right
+    let count: Int = count + left + right
   }
 
   on GetValue() -> [Concurrent] Int {
