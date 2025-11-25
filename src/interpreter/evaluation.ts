@@ -43,9 +43,29 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "list.len": ["list"],
   "list.append": ["list", "item"],
   "list.concat": ["left", "right"],
+  "list.head": ["list"],
+  "list.tail": ["list"],
+  "list.take": ["list", "count"],
+  "list.drop": ["list", "count"],
+  "list.reverse": ["list"],
+  "list.contains": ["list", "item"],
+  "list.find": ["list", "predicate"],
+  "list.flat_map": ["list", "mapper"],
+  "list.zip": ["left", "right"],
+  "list.enumerate": ["list"],
   "test.assert_equal": ["expected", "actual"],
   assert: ["condition"],
   "str.concat": ["left", "right"],
+  "str.split": ["text", "delimiter"],
+  "str.join": ["list", "delimiter"],
+  "str.contains": ["text", "substring"],
+  "str.starts_with": ["text", "prefix"],
+  "str.ends_with": ["text", "suffix"],
+  "str.trim": ["text"],
+  "str.to_upper": ["text"],
+  "str.to_lower": ["text"],
+  "str.replace": ["text", "pattern", "replacement"],
+  "str.index_of": ["text", "substring"],
   __negate: ["value"],
   __not: ["value"],
   "Log.debug": ["label", "payload"],
@@ -391,12 +411,52 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinListAppend(expr, env, runtime);
     case "list.concat":
       return builtinListConcat(expr, env, runtime);
+    case "list.head":
+      return builtinListHead(expr, env, runtime);
+    case "list.tail":
+      return builtinListTail(expr, env, runtime);
+    case "list.take":
+      return builtinListTake(expr, env, runtime);
+    case "list.drop":
+      return builtinListDrop(expr, env, runtime);
+    case "list.reverse":
+      return builtinListReverse(expr, env, runtime);
+    case "list.contains":
+      return builtinListContains(expr, env, runtime);
+    case "list.find":
+      return builtinListFind(expr, env, runtime);
+    case "list.flat_map":
+      return builtinListFlatMap(expr, env, runtime);
+    case "list.zip":
+      return builtinListZip(expr, env, runtime);
+    case "list.enumerate":
+      return builtinListEnumerate(expr, env, runtime);
     case "test.assert_equal":
       return builtinAssertEqual(expr, env, runtime);
     case "assert":
       return builtinAssert(expr, env, runtime);
     case "str.concat":
       return builtinStrConcat(expr, env, runtime);
+    case "str.split":
+      return builtinStrSplit(expr, env, runtime);
+    case "str.join":
+      return builtinStrJoin(expr, env, runtime);
+    case "str.contains":
+      return builtinStrContains(expr, env, runtime);
+    case "str.starts_with":
+      return builtinStrStartsWith(expr, env, runtime);
+    case "str.ends_with":
+      return builtinStrEndsWith(expr, env, runtime);
+    case "str.trim":
+      return builtinStrTrim(expr, env, runtime);
+    case "str.to_upper":
+      return builtinStrToUpper(expr, env, runtime);
+    case "str.to_lower":
+      return builtinStrToLower(expr, env, runtime);
+    case "str.replace":
+      return builtinStrReplace(expr, env, runtime);
+    case "str.index_of":
+      return builtinStrIndexOf(expr, env, runtime);
     case "str.len":
       return builtinStrLen(expr, env, runtime);
     case "str.slice":
@@ -654,6 +714,338 @@ function builtinStrAt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
     name: "Some",
     fields,
   };
+}
+
+// === New String Builtins ===
+
+function builtinStrSplit(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.split"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const delimiter = expectValue(values, "delimiter", expr.callee);
+
+  if (text.kind !== "String" || delimiter.kind !== "String") {
+    throw new RuntimeError("str.split expects string arguments");
+  }
+
+  const parts = text.value.split(delimiter.value);
+  return { kind: "List", elements: parts.map((s) => ({ kind: "String", value: s }) as Value) };
+}
+
+function builtinStrJoin(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.join"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  const delimiter = expectValue(values, "delimiter", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("str.join expects a list as first argument");
+  }
+  if (delimiter.kind !== "String") {
+    throw new RuntimeError("str.join expects a string delimiter");
+  }
+
+  const strings: string[] = [];
+  for (const elem of list.elements) {
+    if (elem.kind !== "String") {
+      throw new RuntimeError("str.join expects a list of strings");
+    }
+    strings.push(elem.value);
+  }
+
+  return { kind: "String", value: strings.join(delimiter.value) };
+}
+
+function builtinStrContains(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.contains"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const substring = expectValue(values, "substring", expr.callee);
+
+  if (text.kind !== "String" || substring.kind !== "String") {
+    throw new RuntimeError("str.contains expects string arguments");
+  }
+
+  return { kind: "Bool", value: text.value.includes(substring.value) };
+}
+
+function builtinStrStartsWith(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.starts_with"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const prefix = expectValue(values, "prefix", expr.callee);
+
+  if (text.kind !== "String" || prefix.kind !== "String") {
+    throw new RuntimeError("str.starts_with expects string arguments");
+  }
+
+  return { kind: "Bool", value: text.value.startsWith(prefix.value) };
+}
+
+function builtinStrEndsWith(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.ends_with"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const suffix = expectValue(values, "suffix", expr.callee);
+
+  if (text.kind !== "String" || suffix.kind !== "String") {
+    throw new RuntimeError("str.ends_with expects string arguments");
+  }
+
+  return { kind: "Bool", value: text.value.endsWith(suffix.value) };
+}
+
+function builtinStrTrim(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.trim"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+
+  if (text.kind !== "String") {
+    throw new RuntimeError("str.trim expects a string argument");
+  }
+
+  return { kind: "String", value: text.value.trim() };
+}
+
+function builtinStrToUpper(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.to_upper"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+
+  if (text.kind !== "String") {
+    throw new RuntimeError("str.to_upper expects a string argument");
+  }
+
+  return { kind: "String", value: text.value.toUpperCase() };
+}
+
+function builtinStrToLower(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.to_lower"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+
+  if (text.kind !== "String") {
+    throw new RuntimeError("str.to_lower expects a string argument");
+  }
+
+  return { kind: "String", value: text.value.toLowerCase() };
+}
+
+function builtinStrReplace(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.replace"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const pattern = expectValue(values, "pattern", expr.callee);
+  const replacement = expectValue(values, "replacement", expr.callee);
+
+  if (text.kind !== "String" || pattern.kind !== "String" || replacement.kind !== "String") {
+    throw new RuntimeError("str.replace expects string arguments");
+  }
+
+  // Replace all occurrences
+  return { kind: "String", value: text.value.split(pattern.value).join(replacement.value) };
+}
+
+function builtinStrIndexOf(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("str.index_of"), env, runtime);
+  const text = expectValue(values, "text", expr.callee);
+  const substring = expectValue(values, "substring", expr.callee);
+
+  if (text.kind !== "String" || substring.kind !== "String") {
+    throw new RuntimeError("str.index_of expects string arguments");
+  }
+
+  const idx = text.value.indexOf(substring.value);
+  if (idx === -1) {
+    return { kind: "Ctor", name: "None", fields: new Map() };
+  }
+
+  const fields = new Map<string, Value>();
+  fields.set("value", { kind: "Int", value: idx });
+  return { kind: "Ctor", name: "Some", fields };
+}
+
+// === New List Builtins ===
+
+function builtinListHead(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.head"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.head expects a list argument");
+  }
+
+  if (list.elements.length === 0) {
+    return { kind: "Ctor", name: "None", fields: new Map() };
+  }
+
+  const fields = new Map<string, Value>();
+  fields.set("value", list.elements[0]!);
+  return { kind: "Ctor", name: "Some", fields };
+}
+
+function builtinListTail(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.tail"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.tail expects a list argument");
+  }
+
+  return { kind: "List", elements: list.elements.slice(1) };
+}
+
+function builtinListTake(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.take"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  const count = expectValue(values, "count", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.take expects a list as first argument");
+  }
+  if (count.kind !== "Int") {
+    throw new RuntimeError("list.take expects an integer count");
+  }
+
+  return { kind: "List", elements: list.elements.slice(0, count.value) };
+}
+
+function builtinListDrop(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.drop"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  const count = expectValue(values, "count", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.drop expects a list as first argument");
+  }
+  if (count.kind !== "Int") {
+    throw new RuntimeError("list.drop expects an integer count");
+  }
+
+  return { kind: "List", elements: list.elements.slice(count.value) };
+}
+
+function builtinListReverse(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.reverse"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.reverse expects a list argument");
+  }
+
+  return { kind: "List", elements: [...list.elements].reverse() };
+}
+
+function builtinListContains(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.contains"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  const item = expectValue(values, "item", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.contains expects a list as first argument");
+  }
+
+  // Deep equality check
+  const found = list.elements.some((elem) => valueEquals(elem, item));
+  return { kind: "Bool", value: found };
+}
+
+function builtinListFind(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const paramNames = getBuiltinParamNames("list.find");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["predicate"] });
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.find expects a list as first argument");
+  }
+
+  const predicateArg = getArgumentByName(alignment, paramNames, "predicate");
+  if (!predicateArg || predicateArg.expr.kind !== "VarRef") {
+    throw new RuntimeError("list.find expects a function as second argument");
+  }
+
+  const fn = resolveFunctionReference(predicateArg.expr.name, runtime, "list.find");
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("list.find expects a predicate that takes exactly one argument");
+  }
+
+  for (const elem of list.elements) {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, elem);
+    const result = evalBlock(fn.body!, callEnv, runtime);
+    const boolVal = result.type === "return" ? result.value : result.value;
+    if (boolVal.kind === "Bool" && boolVal.value) {
+      const fields = new Map<string, Value>();
+      fields.set("value", elem);
+      return { kind: "Ctor", name: "Some", fields };
+    }
+  }
+
+  return { kind: "Ctor", name: "None", fields: new Map() };
+}
+
+function builtinListFlatMap(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const paramNames = getBuiltinParamNames("list.flat_map");
+  const { alignment, values } = bindCallArguments(expr, paramNames, env, runtime, { skip: ["mapper"] });
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.flat_map expects a list as first argument");
+  }
+
+  const mapperArg = getArgumentByName(alignment, paramNames, "mapper");
+  if (!mapperArg || mapperArg.expr.kind !== "VarRef") {
+    throw new RuntimeError("list.flat_map expects a function as second argument");
+  }
+
+  const fn = resolveFunctionReference(mapperArg.expr.name, runtime, "list.flat_map");
+  if (fn.params.length !== 1) {
+    throw new RuntimeError("list.flat_map expects a function that takes exactly one argument");
+  }
+
+  const result: Value[] = [];
+  for (const elem of list.elements) {
+    const callEnv: Env = new Map();
+    callEnv.set(fn.params[0]!.name, elem);
+    const mappedResult = evalBlock(fn.body!, callEnv, runtime);
+    const mappedVal = mappedResult.type === "return" ? mappedResult.value : mappedResult.value;
+    if (mappedVal.kind !== "List") {
+      throw new RuntimeError("list.flat_map mapper must return a list");
+    }
+    result.push(...mappedVal.elements);
+  }
+
+  return { kind: "List", elements: result };
+}
+
+function builtinListZip(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.zip"), env, runtime);
+  const left = expectValue(values, "left", expr.callee);
+  const right = expectValue(values, "right", expr.callee);
+
+  if (left.kind !== "List" || right.kind !== "List") {
+    throw new RuntimeError("list.zip expects two list arguments");
+  }
+
+  const minLen = Math.min(left.elements.length, right.elements.length);
+  const result: Value[] = [];
+  for (let i = 0; i < minLen; i++) {
+    const fields = new Map<string, Value>();
+    fields.set("first", left.elements[i]!);
+    fields.set("second", right.elements[i]!);
+    result.push({ kind: "Ctor", name: "Pair", fields });
+  }
+
+  return { kind: "List", elements: result };
+}
+
+function builtinListEnumerate(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("list.enumerate"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+
+  if (list.kind !== "List") {
+    throw new RuntimeError("list.enumerate expects a list argument");
+  }
+
+  const result: Value[] = list.elements.map((elem, idx) => {
+    const fields = new Map<string, Value>();
+    fields.set("index", { kind: "Int", value: idx });
+    fields.set("value", elem);
+    return { kind: "Ctor", name: "Indexed", fields } as Value;
+  });
+
+  return { kind: "List", elements: result };
 }
 
 function builtinMathAbs(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {

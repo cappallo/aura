@@ -1,0 +1,238 @@
+module examples.string_list_builtins
+
+/// context: Demonstrates the standard library string and list operations.
+
+/// String operations
+
+fn test_split_join() -> Bool {
+  let parts: List<String> = str.split("hello,world,foo", ",")
+  let joined: String = str.join(parts, "-")
+  joined == "hello-world-foo"
+}
+
+fn test_contains() -> Bool {
+  let has_lo: Bool = str.contains("hello", "lo")
+  let no_xyz: Bool = str.contains("hello", "xyz")
+  has_lo && !no_xyz
+}
+
+fn test_starts_ends_with() -> Bool {
+  let starts: Bool = str.starts_with("hello world", "hello")
+  let ends: Bool = str.ends_with("hello world", "world")
+  let not_starts: Bool = str.starts_with("hello world", "world")
+  starts && ends && !not_starts
+}
+
+fn test_trim() -> Bool {
+  let trimmed: String = str.trim("  hello  ")
+  trimmed == "hello"
+}
+
+fn test_case_conversion() -> Bool {
+  let upper: String = str.to_upper("Hello World")
+  let lower: String = str.to_lower("Hello World")
+  upper == "HELLO WORLD" && lower == "hello world"
+}
+
+fn test_replace() -> Bool {
+  let replaced: String = str.replace("foo bar foo baz", "foo", "qux")
+  replaced == "qux bar qux baz"
+}
+
+/// Test index_of using inline comparison
+fn test_index_of() -> Bool {
+  let result = str.index_of("hello world", "wor")
+  // result is Some { value: 6 } or None
+  match result {
+    case Some { value: idx } => {
+      return idx == 6
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn test_index_of_not_found() -> Bool {
+  match str.index_of("hello", "xyz") {
+    case Some { value: idx } => {
+      return false
+    }
+    case None => {
+      return true
+    }
+  }
+}
+
+/// List operations
+
+fn test_head() -> Bool {
+  let nums: List<Int> = [1, 2, 3]
+  match list.head(nums) {
+    case Some { value: h } => {
+      return h == 1
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn test_head_empty() -> Bool {
+  let empty: List<Int> = []
+  match list.head(empty) {
+    case Some { value: h } => {
+      return false
+    }
+    case None => {
+      return true
+    }
+  }
+}
+
+fn test_tail() -> Bool {
+  let nums: List<Int> = [1, 2, 3, 4]
+  let t: List<Int> = list.tail(nums)
+  list.len(t) == 3
+}
+
+fn test_take_drop() -> Bool {
+  let nums: List<Int> = [1, 2, 3, 4, 5]
+  let taken: List<Int> = list.take(nums, 3)
+  let dropped: List<Int> = list.drop(nums, 2)
+  list.len(taken) == 3 && list.len(dropped) == 3
+}
+
+fn test_reverse() -> Bool {
+  let nums: List<Int> = [1, 2, 3]
+  let rev: List<Int> = list.reverse(nums)
+  // Check first element of reversed is last element of original
+  match list.head(rev) {
+    case Some { value: h } => {
+      return h == 3
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn test_contains_list() -> Bool {
+  let nums: List<Int> = [1, 2, 3, 4, 5]
+  let has3: Bool = list.contains(nums, 3)
+  let no9: Bool = list.contains(nums, 9)
+  has3 && !no9
+}
+
+fn is_even(n: Int) -> Bool {
+  (n / 2) * 2 == n
+}
+
+fn test_find() -> Bool {
+  let nums: List<Int> = [1, 3, 5, 4, 7]
+  match list.find(nums, is_even) {
+    case Some { value: found } => {
+      return found == 4
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+fn duplicate(s: String) -> List<String> {
+  [s, s]
+}
+
+fn test_flat_map() -> Bool {
+  let words: List<String> = ["a", "b"]
+  let doubled: List<String> = list.flat_map(words, duplicate)
+  list.len(doubled) == 4
+}
+
+fn test_zip() -> Bool {
+  let nums: List<Int> = [1, 2, 3]
+  let strs: List<String> = ["a", "b", "c"]
+  let zipped = list.zip(nums, strs)
+  list.len(zipped) == 3
+}
+
+fn test_enumerate() -> Bool {
+  let words: List<String> = ["a", "b", "c"]
+  let indexed = list.enumerate(words)
+  list.len(indexed) == 3
+}
+
+/// Tests
+
+test string_split_join {
+  assert(test_split_join())
+}
+
+test string_contains {
+  assert(test_contains())
+}
+
+test string_starts_ends {
+  assert(test_starts_ends_with())
+}
+
+test string_trim {
+  assert(test_trim())
+}
+
+test string_case {
+  assert(test_case_conversion())
+}
+
+test string_replace {
+  assert(test_replace())
+}
+
+test string_index_of {
+  assert(test_index_of())
+}
+
+test string_index_of_not_found {
+  assert(test_index_of_not_found())
+}
+
+test list_head {
+  assert(test_head())
+}
+
+test list_head_empty {
+  assert(test_head_empty())
+}
+
+test list_tail {
+  assert(test_tail())
+}
+
+test list_take_drop {
+  assert(test_take_drop())
+}
+
+test list_reverse {
+  assert(test_reverse())
+}
+
+test list_contains {
+  assert(test_contains_list())
+}
+
+test list_find {
+  assert(test_find())
+}
+
+test list_flat_map {
+  assert(test_flat_map())
+}
+
+test list_zip {
+  assert(test_zip())
+}
+
+test list_enumerate {
+  assert(test_enumerate())
+}

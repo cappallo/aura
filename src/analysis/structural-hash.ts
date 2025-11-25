@@ -11,6 +11,7 @@ import * as ast from "../ast";
  * - Source Locations: Ignored.
  */
 // Use a union type for all possible AST nodes if AST type is not exported
+// Note: Param and Field don't have kind properties, so they're handled separately
 type ASTNode = 
   | ast.Module 
   | ast.TopLevelDecl 
@@ -18,10 +19,7 @@ type ASTNode =
   | ast.Stmt 
   | ast.Expr 
   | ast.TypeExpr 
-  | ast.Pattern
-  // MatchCase removed as it has no kind
-  | ast.Field // Correct type for RecordField
-  | ast.Param;
+  | ast.Pattern;
 
 export function computeStructuralHash(node: ASTNode): string {
   const ctx = new HashContext();
@@ -64,13 +62,7 @@ function visit(node: ASTNode | null | undefined, ctx: HashContext): string {
       const fnCtx = new HashContext();
       // Pre-normalize parameters
       n.params.forEach((p) => fnCtx.normalizeVar(p.name));
-      return `FnDecl(${n.name},[${n.params.map((p) => visit(p, fnCtx)).join(",")}],${visit(n.body, fnCtx)})`;
-    }
-
-    case "Param": {
-      const n = node as ast.Param;
-      // Type is part of the signature, so we preserve it
-      return `Param(${ctx.normalizeVar(n.name)},${visit(n.type, ctx)})`;
+      return `FnDecl(${n.name},[${n.params.map((p) => visitParam(p, fnCtx)).join(",")}],${visit(n.body, fnCtx)})`;
     }
 
     case "Block": {
@@ -78,21 +70,9 @@ function visit(node: ASTNode | null | undefined, ctx: HashContext): string {
       return `Block([${n.stmts.map((s) => visit(s, ctx)).join(",")}])`;
     }
 
-    case "VarDecl": {
-      const n = node as any; 
-      if (n.kind === "LetStmt") {
-         return `Let(${ctx.normalizeVar(n.name)},${n.typeAnnotation ? visit(n.typeAnnotation, ctx) : "null"},${visit(n.expr, ctx)})`;
-      }
-      return `VarDecl(${ctx.normalizeVar(n.name)},${visit(n.value, ctx)})`;
-    }
-
     case "LetStmt": {
       const n = node as ast.LetStmt;
       return `Let(${ctx.normalizeVar(n.name)},${n.typeAnnotation ? visit(n.typeAnnotation, ctx) : "null"},${visit(n.expr, ctx)})`;
-    }
-
-    case "AssignStmt": {
-       return (node as any).kind;
     }
 
     case "ReturnStmt": {
@@ -171,6 +151,11 @@ function visit(node: ASTNode | null | undefined, ctx: HashContext): string {
 function visitMatchCase(node: ast.MatchCase, ctx: HashContext): string {
   // MatchCase has no kind, so we handle it directly
   return `Case(${visit(node.pattern, ctx)},${visit(node.body, ctx)})`;
+}
+
+function visitParam(param: ast.Param, ctx: HashContext): string {
+  // Param has no kind, so we handle it directly
+  return `Param(${ctx.normalizeVar(param.name)},${visit(param.type, ctx)})`;
 }
 
 function visitCallArg(arg: ast.CallArg, ctx: HashContext): string {

@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~87% (Core ~86%, Tooling ~95%, Concurrency ~80%)
+**Overall Progress:** ~88% (Core ~87%, Tooling ~95%, Concurrency ~80%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -12,8 +12,10 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 This section tracks **future** work. Completed items are moved to the [Detailed Implementation Status](#-detailed-implementation-status) section.
 
 ### **Priority 10: The Basics (Standard Library & I/O)**
-**Status:** ❌ Not Started
+**Status:** 🟡 In Progress
 **Goal:** Enable real-world application development.
+- [x] **String Operations**: split, join, contains, starts_with, ends_with, trim, to_upper, to_lower, replace, index_of
+- [x] **List Operations**: head, tail, take, drop, reverse, contains, find, flat_map, zip, enumerate
 - [ ] **Networking**: TCP/UDP sockets, HTTP client/server bindings
 - [ ] **File I/O**: File reading/writing, directory traversal, path manipulation
 - [ ] **System**: Environment variables, process arguments, subprocess spawning
@@ -111,6 +113,7 @@ The `examples/` directory contains verified "gold standard" code.
 - `option.lx` / `simple_option.lx`: Option type usage
 - `result.lx`: Error handling patterns
 - `fibonacci.lx`: Recursion benchmarks
+- `string_list_builtins.lx`: Extended string and list operations (split, join, trim, head, tail, zip, etc.)
 
 ### Concurrency & Actors
 - `actor_basic.lx`: Core actor patterns (state, handlers, sending)

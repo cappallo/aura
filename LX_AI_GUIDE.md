@@ -218,6 +218,16 @@ list.concat(list1, list2)      // Concatenate
 list.map(numbers, double)      // Map function over list
 list.filter(numbers, is_pos)   // Filter with predicate
 list.fold(numbers, 0, add)     // Fold/reduce
+list.head(numbers)             // First element (Option<T>)
+list.tail(numbers)             // All but first element
+list.take(numbers, 2)          // First N elements
+list.drop(numbers, 1)          // Drop first N elements
+list.reverse(numbers)          // Reverse order
+list.contains(numbers, 2)      // Check membership
+list.find(numbers, is_even)    // Find first match (Option<T>)
+list.flat_map(words, split)    // Map and flatten
+list.zip(nums, strs)           // Combine two lists
+list.enumerate(numbers)        // Add indices
 ```
 
 ### Records and Variants
@@ -597,6 +607,17 @@ module app.auth
 - `str.len(text: String) -> Int`
 - `str.slice(text: String, start: Int, end: Int) -> String`
 - `str.concat(left: String, right: String) -> String`
+- `str.at(text: String, index: Int) -> Option<String>` - Get character at index
+- `str.split(text: String, delimiter: String) -> List<String>` - Split string
+- `str.join(list: List<String>, delimiter: String) -> String` - Join strings
+- `str.contains(text: String, substring: String) -> Bool` - Check substring
+- `str.starts_with(text: String, prefix: String) -> Bool`
+- `str.ends_with(text: String, suffix: String) -> Bool`
+- `str.trim(text: String) -> String` - Remove leading/trailing whitespace
+- `str.to_upper(text: String) -> String`
+- `str.to_lower(text: String) -> String`
+- `str.replace(text: String, pattern: String, replacement: String) -> String`
+- `str.index_of(text: String, substring: String) -> Option<Int>` - Find substring position
 
 **Math operations:**
 - `math.abs(x: Int) -> Int`
@@ -610,6 +631,16 @@ module app.auth
 - `list.map(list: List<T>, mapper: fn(T) -> U) -> List<U>`
 - `list.filter(list: List<T>, predicate: fn(T) -> Bool) -> List<T>`
 - `list.fold(list: List<T>, initial: U, folder: fn(U, T) -> U) -> U`
+- `list.head(list: List<T>) -> Option<T>` - Get first element
+- `list.tail(list: List<T>) -> List<T>` - Get all but first element
+- `list.take(list: List<T>, count: Int) -> List<T>` - Take first N elements
+- `list.drop(list: List<T>, count: Int) -> List<T>` - Drop first N elements
+- `list.reverse(list: List<T>) -> List<T>`
+- `list.contains(list: List<T>, item: T) -> Bool` - Check membership
+- `list.find(list: List<T>, predicate: fn(T) -> Bool) -> Option<T>` - Find first match
+- `list.flat_map(list: List<T>, mapper: fn(T) -> List<U>) -> List<U>` - Map and flatten
+- `list.zip(left: List<A>, right: List<B>) -> List<Pair<A, B>>` - Combine two lists
+- `list.enumerate(list: List<T>) -> List<Indexed<T>>` - Add indices
 
 **Printing (requires `[Io]` effect):**
 - `print(value: String) -> [Io] Unit`

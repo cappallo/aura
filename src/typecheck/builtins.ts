@@ -152,6 +152,172 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([STRING_TYPE, INT_TYPE], optionType);
     },
   },
+  "str.split": {
+    arity: 2,
+    paramNames: ["text", "delimiter"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], makeListType(STRING_TYPE)),
+  },
+  "str.join": {
+    arity: 2,
+    paramNames: ["list", "delimiter"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([makeListType(STRING_TYPE), STRING_TYPE], STRING_TYPE),
+  },
+  "str.contains": {
+    arity: 2,
+    paramNames: ["text", "substring"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], BOOL_TYPE),
+  },
+  "str.starts_with": {
+    arity: 2,
+    paramNames: ["text", "prefix"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], BOOL_TYPE),
+  },
+  "str.ends_with": {
+    arity: 2,
+    paramNames: ["text", "suffix"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], BOOL_TYPE),
+  },
+  "str.trim": {
+    arity: 1,
+    paramNames: ["text"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE], STRING_TYPE),
+  },
+  "str.to_upper": {
+    arity: 1,
+    paramNames: ["text"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE], STRING_TYPE),
+  },
+  "str.to_lower": {
+    arity: 1,
+    paramNames: ["text"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE], STRING_TYPE),
+  },
+  "str.replace": {
+    arity: 3,
+    paramNames: ["text", "pattern", "replacement"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE, STRING_TYPE], STRING_TYPE),
+  },
+  "str.index_of": {
+    arity: 2,
+    paramNames: ["text", "substring"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], makeOptionType(INT_TYPE)),
+  },
+  "list.head": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element)], makeOptionType(element));
+    },
+  },
+  "list.tail": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element)], makeListType(element));
+    },
+  },
+  "list.take": {
+    arity: 2,
+    paramNames: ["list", "count"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element), INT_TYPE], makeListType(element));
+    },
+  },
+  "list.drop": {
+    arity: 2,
+    paramNames: ["list", "count"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element), INT_TYPE], makeListType(element));
+    },
+  },
+  "list.reverse": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element)], makeListType(element));
+    },
+  },
+  "list.contains": {
+    arity: 2,
+    paramNames: ["list", "item"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element), element], BOOL_TYPE);
+    },
+  },
+  "list.find": {
+    arity: 2,
+    paramNames: ["list", "predicate"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      const fnType = makeFunctionType([element], BOOL_TYPE);
+      return makeFunctionType([makeListType(element), fnType], makeOptionType(element));
+    },
+  },
+  "list.flat_map": {
+    arity: 2,
+    paramNames: ["list", "mapper"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const inputElem = freshTypeVar("A", false, state);
+      const outputElem = freshTypeVar("B", false, state);
+      const fnType = makeFunctionType([inputElem], makeListType(outputElem));
+      return makeFunctionType([makeListType(inputElem), fnType], makeListType(outputElem));
+    },
+  },
+  "list.zip": {
+    arity: 2,
+    paramNames: ["left", "right"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const a = freshTypeVar("A", false, state);
+      const b = freshTypeVar("B", false, state);
+      // Returns List<{first: A, second: B}> - we'll use a tuple-like record
+      const pairType: TypeConstructor = {
+        kind: "Constructor",
+        name: "Pair",
+        args: [a, b],
+      };
+      return makeFunctionType([makeListType(a), makeListType(b)], makeListType(pairType));
+    },
+  },
+  "list.enumerate": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      // Returns List<{index: Int, value: T}>
+      const indexedType: TypeConstructor = {
+        kind: "Constructor",
+        name: "Indexed",
+        args: [element],
+      };
+      return makeFunctionType([makeListType(element)], makeListType(indexedType));
+    },
+  },
   "math.abs": {
     arity: 1,
     paramNames: ["value"],
