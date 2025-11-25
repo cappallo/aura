@@ -1,3 +1,5 @@
+/// file: examples/actor_basic.lx
+/// purpose: Demonstrates basic actor definition, state, and message handling.
 module examples.actor_basic
 
 type CounterMsg = Increment | Add { amount: Int } | AddPair { left: Int, right: Int } | GetValue

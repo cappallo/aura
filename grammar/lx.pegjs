@@ -21,7 +21,12 @@
 }
 
 start
-	= WSAny* module:Module WSAny* { return module; }
+	= WSAny* docs:DocCommentBlock? WSAny* module:Module WSAny* {
+			if (docs) {
+				module.docComment = docs;
+			}
+			return module;
+		}
 
 Module
 	= "module" __ name:ModuleName Terminator+ imports:Import* decls:TopLevelDecl* {

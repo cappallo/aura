@@ -853,10 +853,40 @@ Active comments are structured directives (`/// keyword:`) that serve as first-c
 *   **`/// spec:`** (See §7.1)
     *   **Purpose:** Functional requirements and contracts.
 
-### 12.2. Usage
+*   **`/// file: <filename>`**
+    *   **Purpose:** Restores file identity when code is viewed in isolation (e.g., RAG context).
+    *   **Example:** `/// file: examples/median.lx`
+
+*   **`/// purpose: <description>`**
+    *   **Purpose:** High-level intent of the file. Explains *why* this file exists.
+    *   **Example:** `/// purpose: Core statistical functions.`
+
+*   **`/// layer: <name>`**
+    *   **Purpose:** Defines architectural boundary (e.g., "Core", "UI", "Adapter").
+    *   **Example:** `/// layer: Core`
+
+### 12.2. The Anti-Redundancy Rule
+
+**Golden Rule:** Provide what the parser *cannot* see, and nothing else.
+
+*   **DO NOT** list imports or exports (the parser sees them).
+*   **DO NOT** list authors or dates (git history tracks them).
+*   **DO NOT** include license boilerplate (repo root handles it).
+*   **DO** include intent, identity, and architectural constraints.
+
+### 12.3. Usage
 
 Active comments bind to the immediately following declaration (function, type, module).
 
+**Standard File Header:**
+```lx
+/// file: app/users.lx
+/// purpose: User authentication and profile management.
+/// layer: Core
+module app.users
+```
+
+**Function Annotation:**
 ```lx
 /// prompt: Ensure this handles unicode characters correctly.
 /// why: We support international usernames.

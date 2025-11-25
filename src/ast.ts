@@ -14,6 +14,7 @@ export type Module = {
   name: string[];
   imports: ImportDecl[];
   decls: TopLevelDecl[];
+  docComment?: string;
 };
 
 /** Import declaration referencing another module */

@@ -534,6 +534,24 @@ fn process_items(items: List<Item>) -> List<Item> {
 }
 ```
 
+### File Headers
+
+Give every file a standard header to orient the LLM immediately.
+
+**The Golden Rule:** Provide what the parser *cannot* see, and nothing else.
+*   **Identity:** `/// file: path/to/file.lx` (Essential for RAG)
+*   **Intent:** `/// purpose: Why this file exists` (Essential for understanding)
+*   **Layer:** `/// layer: Core` (Optional architectural boundary)
+
+**Do NOT** include imports, exports, authors, or dates.
+
+```lx
+/// file: app/auth.lx
+/// purpose: Handles user login and session management.
+/// layer: Core
+module app.auth
+```
+
 
 **String operations:**
 - `str.len(text: String) -> Int`
