@@ -129,6 +129,13 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 - ❌ Standard library beyond basic builtins
 - ❌ Standard library versioning
 
+### 5. The Basics (Standard Library)
+- ❌ Networking (TCP/UDP, HTTP)
+- ❌ File System I/O
+- ❌ System Interaction (Env, Process)
+- ❌ Date & Time
+- ❌ Random (General purpose)
+
 ---
 
 ## 📊 Feature Completeness by Section
@@ -445,6 +452,15 @@ With the core language, schemas, LLM tooling (including deterministic execution)
 - [x] Implement `replace pattern` operation
 - [x] Add automatic import insertion for move operations
 - [x] Fix parser limitation for `type Alias = Qualified.Name` (Note: Single-variant SumTypes now require leading `|` if variant name is a valid type expression)
+
+### **Priority 10: The Basics (Standard Library & I/O)**
+**Status:** ❌ Not Started
+**Goal:** Enable real-world application development (networking, files, system)
+- [ ] **Networking**: TCP/UDP sockets, HTTP client/server bindings
+- [ ] **File I/O**: File reading/writing, directory traversal, path manipulation
+- [ ] **System**: Environment variables, process arguments, subprocess spawning
+- [ ] **Date & Time**: Clock access, durations, formatting
+- [ ] **Random**: General purpose RNG (beyond testing)
 
 ---
 
