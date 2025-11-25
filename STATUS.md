@@ -99,7 +99,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## ⚠️ Not Yet Implemented / In Progress (Per SPEC.md)
 
 ### 1. Actors & Concurrency (§6 of SPEC, CONCURRENCY.md)
-**Note:** See [`CONCURRENCY.md`](CONCURRENCY.md) for the complete concurrency design specification.
+**Note:** See [`SPEC.md`](SPEC.md) §6 for the complete concurrency design specification.
 **Status:** Core features complete; supervision trees implemented
 - ✅ `actor` declarations with typed state (CONCURRENCY.md §2) - **Syntax and typechecking implemented**
 - ✅ Message protocols (ADT-based message types) (CONCURRENCY.md §3) - **Syntax supported, validated in typechecker**
@@ -141,13 +141,13 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 ## 📊 Feature Completeness by Section
 
 | Spec Section | Feature | Status |
-|--------------|---------|--------|
+|--------------|---------|--------
 | §3.2 | Modules & imports | ✅ Complete |
 | §3.3 | Types (Product/Sum/Alias) | ✅ Complete |
 | §3.4 | Functions & effects | ✅ Complete |
 | §4 | Type system | ✅ Complete |
 | §5 | Effect system | 🟡 Declarations + checking complete; effect polymorphism not implemented |
-| §6 + CONCURRENCY.md | Actors & Concurrency | � Core features complete (syntax, typechecking, mailbox, scheduling, async_group, supervision trees) |
+| §6 | Actors & Concurrency |  Core features complete (syntax, typechecking, mailbox, scheduling, async_group, supervision trees) |
 | §7.1-7.2 | Contracts | 🟡 Runtime enforcement complete; static SMT verification not implemented |
 | §7.3 | Tests | ✅ Complete |
 | §7.4 | Properties | ✅ Complete |
@@ -326,7 +326,7 @@ Phase 3 (Near-term): LLM-First Tooling & I/O
 └─ AST input format → ✅ Complete (Priority 7)
 
 Phase 4 (Mid-term): Concurrency & Tools
-├─ Actor model implementation (CONCURRENCY.md) → Priority 8 (MOSTLY COMPLETE)
+├─ Actor model implementation (SPEC.md §6) → Priority 8 (MOSTLY COMPLETE)
 │  ├─ Basic actor declarations with typed state → ✅ Complete
 │  ├─ Message protocols and handlers → ✅ Complete
 │  ├─ Actor spawning and message sending → ✅ Complete (`.send` + mailbox queuing)
@@ -438,7 +438,7 @@ With the core language, schemas, LLM tooling (including deterministic execution)
 1. **Actor Runtime Enhancements** (Priority 8, continuing):
   - ✅ Mailbox scheduling with deterministic test mode (via `--scheduler` flag and `Concurrent.step` / `Concurrent.flush`)
   - ✅ Add cooperative execution + cancellation semantics for async_group tasks
-  - ✅ Supervision trees for failure handling (CONCURRENCY.md §7) with `ChildFailed` notifications and recursive teardown
+  - ✅ Supervision trees for failure handling (SPEC.md §6.7) with `ChildFailed` notifications and recursive teardown
   - ✅ Add richer actor reference typing (`ActorRef<MsgType>`) for type safety
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):

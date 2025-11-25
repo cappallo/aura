@@ -317,93 +317,125 @@ This is still analyzable: the compiler can instantiate `e` at call sites.
 
 ## 6. Concurrency model
 
-**Note:** This section provides a high-level overview. For the complete concurrency design including structured async, supervision trees, deterministic testing, and data-parallel primitives, see [`CONCURRENCY.md`](CONCURRENCY.md).
+This section defines the concurrency model implemented in the language runtime and core libraries. The design is centered on:
 
-### 6.1. Actors
+- **Typed actors** as the units of mutable state and concurrency.
+- **Structured async tasks** inside actors for concurrent work and I/O.
+- **Pure data-parallel primitives** for CPU-bound parallelism.
+- **Explicit effects** for all concurrency and I/O.
 
-Actors are single-threaded entities with:
+### 6.1. Design Goals
 
-* Internal mutable state,
-* A typed message protocol (`Msg` ADT),
-* A mailbox.
+1. **No shared mutable state across concurrent units.** All mutable state must belong to a single actor.
+2. **Local reasoning inside an actor.** Code that handles a message within an actor must be logically single-threaded and sequential.
+3. **Explicit concurrency and effects.** All concurrency (actors, tasks, parallel operations) must be visible in types or function signatures.
+4. **Deterministic, reproducible testing.** The runtime must support deterministic scheduling and structured traces to replay and debug concurrent behavior.
+5. **Small, orthogonal primitives.** Prefer a small set of composable concurrency primitives over many ad-hoc features.
 
-Syntax:
+### 6.2. Actors
 
+An **actor** is the fundamental unit of mutable state, message handling, and concurrency control. Each actor owns its state exclusively, processes one message at a time, and interacts with other actors only via messages.
+
+**Properties:**
+- **Single-threaded semantics:** At most one message handler runs at a time per actor.
+- **Private state:** Actor state is not directly accessible from outside.
+- **Typed handlers:** Each actor declares the set of message types it can handle.
+
+**Example:**
 ```lx
-type MailerMsg =
-  | SendEmail { req: EmailRequest }
-  | Shutdown
-
-actor Mailer {
+actor ChatRoom(id: RoomId) {
   state {
-    sent_count: Int
+    users: Map<UserId, UserHandle>
+    history: List<Message>
   }
 
-  on SendEmail(msg: SendEmail) -> [Http, Log] Result<Unit, MailError> {
-    Log.info("sending_email", { to: msg.req.to })
-    Http.send_email(msg.req)?
-    state.sent_count = state.sent_count + 1
-    return Ok { value: () }
+  on Join(user: UserHandle) -> [Concurrent] JoinResult {
+    // handle join request
   }
 
-  on Shutdown(msg: Shutdown) -> [Log] Unit {
-    Log.info("mailer_shutdown", { total: state.sent_count })
-    // actor terminates after handler completes
+  on SendMessage(from: UserId, text: String) -> [Concurrent] Unit {
+    // handle new message
   }
 }
 ```
 
-Message send:
+### 6.3. Messages and Protocols
+
+Messages must be strongly typed. Each actor declares the complete set of message types it accepts.
 
 ```lx
-fn notify_user(user: User, text: String, mailer: MailerRef)
-  -> [Log] Unit 
-{
-  let msg = SendEmail { req: EmailRequest { to: user.email, body: text } }
-  mailer.send(msg)
+type ChatRoomMsg =
+  | Join { user: UserHandle }
+  | Leave { userId: UserId }
+  | SendMessage { from: UserId, text: String }
+  | Heartbeat
+```
+
+Actors can define **protocol states** (e.g., `Initial`, `Active`, `Closed`) encoded in types to make message validity and ordering constraints explicit.
+
+### 6.4. Structured Async Tasks
+
+Within a message handler, an actor may spawn **async tasks** for concurrent work. These tasks are **scoped**: they belong to the actor and a specific logical scope. When the scope ends, tasks must either complete or be cancelled.
+
+**Requirements:**
+- No global, unstructured "fire-and-forget" tasks.
+- Every spawned task is awaited or attached to a supervised scope.
+- If a parent scope fails or is cancelled, child tasks are also cancelled.
+
+**Example:**
+```lx
+on SendMessage(from: UserId, text: String) -> [Concurrent] Unit {
+  async_group {
+    for user in users {
+      async {
+        user.handle.send(NewMessage { msg })
+      }
+    }
+  }
 }
 ```
 
-### 6.2. Semantics
+### 6.5. Data-Parallel Primitives
 
-* Each actor has a **type**: `Actor<Msg, State>` (opaque in user code).
-* `mailer: MailerRef` is a value of some abstract type representing a handle to the `Mailer` actor.
-* `mailer.send(msg)`:
+For CPU-bound work without side effects, use pure data-parallel primitives:
 
-  * enqueues `msg` into the mailbox (non-blocking),
-  * returns `Unit` or a typed `Result` if we support request/response patterns.
+- `parallel_map(list, mapper)`
+- `parallel_fold(list, initial, reducer)`
+- `parallel_for_each(list, action)`
 
-Ordering & delivery:
+**Constraints:** The function passed must be **pure** (no side effects, no dependence on external mutable state).
 
-* Messages from a single sender to a single actor are **ordered**.
-* Delivery is at-least-once by default (simplest assumption). At-most-once can be a runtime configuration, not a type property in v1.
+### 6.6. Effects and Type System
 
-Effects:
+Concurrency must be reflected in function signatures via the `Concurrent` effect. Pure functions cannot spawn actors, create tasks, or perform I/O.
 
-* Inside an actor handler, you can use any effects you declare in the handler signature.
-* The **Actor** model itself does not appear as an effect; the concurrency semantics are defined operationally, not as an effect.
+**Common Effects:**
+- `[Io]`: General I/O
+- `[Concurrent]`: Actor/task operations
+- `[Log]`: Logging
 
-Backpressure / failure:
+### 6.7. Supervision and Lifetimes
 
-* Simple v1:
+Actors are arranged in a **supervision hierarchy**. A supervisor actor is responsible for starting, stopping, and restarting its child actors.
 
-  * `send` never blocks; if the actor is terminated, `send` returns a `Result<Unit, ActorError>`.
-* More advanced patterns (streams, backpressure, supervision trees) are deferred to future versions.
+- When a supervisor terminates, its children are stopped.
+- Failures in a child actor are reported to its supervisor (`ChildFailed` signal).
+- Strategies: Restart on failure, stop on failure, etc.
 
-Key property: All actor interaction is via **typed messages**, so the analyzer can construct a message graph (who sends what to whom).
+### 6.8. Deterministic Testing
 
-### 6.3. Structured Async and Parallelism
+The runtime exposes a **deterministic scheduling mode** for tests (`--scheduler=deterministic`).
+- Message deliveries and task scheduling follow a reproducible strategy (controlled by seed).
+- Tests can step through message queues in a defined order.
+- On failure, the runtime emits a **structured trace** (JSON) including actor events, message payloads, and task hierarchy.
 
-**For v0.1:** Actors use simple synchronous message handlers.
+### 6.9. Forbidden Features
 
-**Future enhancements** (detailed in [`CONCURRENCY.md`](CONCURRENCY.md)):
-- **Structured async tasks** within actors for concurrent I/O operations
-- **Data-parallel primitives** (`parallel_map`, `parallel_fold`) for pure CPU-bound work
-- **Supervision trees** for robust failure handling and actor lifecycle management
-- **Deterministic scheduling** mode for reproducible testing and debugging
-- **Concurrency effect** (`Effect<Concurrent>`) for spawning actors and tasks
-
-These features will be added incrementally after the core actor model is implemented.
+To preserve safety and LLM-friendliness, the following are **forbidden**:
+- Raw shared-memory threads.
+- User-level locks/mutexes.
+- Unstructured "fire-and-forget" tasks.
+- Implicit global mutable state.
 
 ---
 
