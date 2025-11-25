@@ -116,7 +116,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 
 ### 2. Refactors (§10.1 of SPEC)
 - ✅ `refactor` declarations
-- 🟡 Symbol graph operations (rename type/function implemented; move type/function implemented; parameter updates pending)
+- ✅ Symbol graph operations (rename, move, update params, replace pattern implemented)
 - ✅ Refactor validation and application via `lx apply-refactor` command
 
 ### 3. Migrations (§10.2 of SPEC)
@@ -146,7 +146,7 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 | §7.4 | Properties | ✅ Complete |
 | §8 | Schemas & I/O | ✅ Complete (HTTP bindings future enhancement) |
 | §9 | Logging/tracing | ✅ Complete (structured logging + execution tracing) |
-| §10 | Refactors/migrations | 🟡 Refactors partially complete (rename operations); migrations not started |
+| §10 | Refactors/migrations | 🟡 Refactors complete; migrations not started |
 
 ---
 
@@ -415,6 +415,15 @@ Phase 5 (Long-term): Evolution
   - Verified with `examples/refactor_update_params.lx`
 - ✅ Fixed formatter bug for function effects
   - Corrected `formatFnDecl` to output `-> [Effects] Type` instead of invalid `[Effects] -> Type`
+- ✅ Implemented `replace pattern` refactor operation
+  - Extended AST/grammar/formatter with `replace pattern` syntax
+  - Implemented `applyReplacePattern` in `src/refactors.ts` using AST pattern matching
+  - Added `parsePattern` and `patternsEqual` helpers
+  - Verified with `examples/refactor_replace_pattern.lx`
+- ✅ Implemented automatic import insertion for move operations
+  - Updated `rewriteIdentifier` in `src/refactors.ts` to detect cross-module moves
+  - Implemented `ensureImport` to add imports with alias conflict resolution
+  - Verified with `examples/refactor_move_import.lx`
 
 With the core language, schemas, LLM tooling (including deterministic execution), and actor runtime (including async_group) mostly complete, the next priorities are:
 
@@ -426,14 +435,14 @@ With the core language, schemas, LLM tooling (including deterministic execution)
    
 2. **LLM Tooling Enhancements** (Priority 7 - nearly complete):
   - ✅ Deterministic execution mode / seedable RNG
-  - 🟡 Guided refactor operations (SPEC.md §10.1) - Rename/move type/fn tooling shipped; param rewrites implemented; replace pattern pending
+  - ✅ Guided refactor operations (SPEC.md §10.1) - Rename/move type/fn tooling shipped; param rewrites implemented; replace pattern implemented
 
 ### **Priority 9: Complete Refactor Operations (§10.1)**
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete
 **Goal:** Finish remaining refactor primitives
 - [x] Implement `update param_list` operation
-- [ ] Implement `replace pattern` operation
-- [ ] Add automatic import insertion for move operations
+- [x] Implement `replace pattern` operation
+- [x] Add automatic import insertion for move operations
 - [x] Fix parser limitation for `type Alias = Qualified.Name` (Note: Single-variant SumTypes now require leading `|` if variant name is a valid type expression)
 
 ---
@@ -486,8 +495,8 @@ lx patch-body <file.lx> <module.fn> <bodySnippet.lx>                            
 ## 🐛 Known Issues
 
 ### Tooling Gaps (LLM-First Design)
-1. **Refactor DSL still limited** - `refactor` blocks support rename, move, and parameter update operations; replace-pattern primitives are still pending (SPEC.md §10.1, THOUGHTS.md §6.2).
-   - *Note:* Move operations currently use fully qualified names in the target; automatic import insertion is a future enhancement.
+1. **Refactor DSL** - `refactor` blocks support rename, move, parameter update, and replace pattern operations.
+   - *Note:* Move operations now support automatic import insertion.
 
 ### Language Features
 2. **No REPL** - Must write files to test code
@@ -514,16 +523,15 @@ This section tracks how well the implementation follows the LLM-first design phi
 | **§5.1 Deterministic replayable runs** | ✅ Good | Structured logging (✅) and seedable RNG (✅) both implemented |
 | **§5.2 Explicit explain hooks** | ✅ Good | Execution tracing with `lx explain` command implemented |
 | **§6.1 Patch-based edits** | ✅ Good | `lx patch-body` rewrites function bodies via symbol IDs, AST input/output format |
-| **§6.2 Guided refactors** | 🟡 Partial | Rename/move operations implemented; param rewrites implemented; replace pattern pending |
-| **§7 Safe concurrency model** | � Strong | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode, supervision trees |
+| **§6.2 Guided refactors** | ✅ Good | Rename/move operations implemented; param rewrites implemented; replace pattern implemented |
+| **§7 Safe concurrency model** |  Strong | Actors with typed messages, async_group cooperative scheduler, deterministic testing mode, supervision trees |
 | **§8 Holes/partial code** | ✅ Good | `hole("label")` expressions parsed + validated |
 
-**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, supervision trees, and deterministic testing support. Refactor operations (§6.2) support rename, move, and parameter update operations. Remaining enhancements needed:
-- Complete guided refactor operations with replace pattern commands (§6.2/§10.1)
+**Summary:** Core language semantics (types, effects, purity) align well with LLM-first principles. Comments, documentation (§3.1), structured output (§2.2, §5.1), execution tracing (§5.2), canonical formatting (§6.1), patch-based edits (§6.1), AST input format (§1.2), hole-aware workflows (§8), deterministic execution/seedable RNG (§5.1), and schema-first data (§4.2) are now complete. Property-based testing (§3.2) is fully functional with shrinking and deterministic replay. Actor model (§7) includes typed messages, cooperative async_group scheduling with cancellation, supervision trees, and deterministic testing support. Refactor operations (§6.2) support rename, move, parameter update, and replace pattern operations. Remaining enhancements needed:
 - Schema migrations (§10.2)
 - True parallel execution for data-parallel primitives
 
-**Impact:** The language core is solid (~86% complete), the LLM developer experience layer is nearly complete (~86% complete), and the concurrency model has reached ~80% completion with supervision trees. Overall progress is ~84%. Structured error and log output, deterministic property testing with seedable RNG, execution tracing, canonical formatting, patch-based editing, AST input format, schema codecs, cooperative concurrency primitives, and basic refactor operations enable the tight LLM feedback loop envisioned in THOUGHTS.md.
+**Impact:** The language core is solid (~86% complete), the LLM developer experience layer is nearly complete (~90% complete), and the concurrency model has reached ~80% completion with supervision trees. Overall progress is ~85%. Structured error and log output, deterministic property testing with seedable RNG, execution tracing, canonical formatting, patch-based edits, AST input format, schema codecs, cooperative concurrency primitives, and comprehensive refactor operations enable the tight LLM feedback loop envisioned in THOUGHTS.md.
 
 ---
 

@@ -533,6 +533,7 @@ function handleApplyRefactor(args: string[], ctx: CliContext) {
     process.exit(1);
   }
 
+  console.log(`Loading ${filePath} for refactor...`);
   const loadResult = loadModuleWithDependencies(filePath, ctx);
   if (loadResult.errors && loadResult.errors.length > 0) {
     console.log("Load errors:", JSON.stringify(loadResult.errors, null, 2));

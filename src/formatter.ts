@@ -292,6 +292,8 @@ function formatRefactorOperation(operation: AST.RefactorOperation): string {
         })
         .join(", ");
       return `update param_list ${operation.symbol}(${params})`;
+    case "ReplacePatternOperation":
+      return `replace pattern "${operation.pattern}" with "${operation.replacement}"`;
     default:
       const _exhaustive: never = operation;
       throw new Error(`Unknown refactor operation: ${(operation as any).kind}`);

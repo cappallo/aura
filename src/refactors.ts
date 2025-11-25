@@ -1,5 +1,6 @@
 import * as ast from "./ast";
 import { ResolvedModule, SymbolTable, resolveIdentifier } from "./loader";
+import { parseModule } from "./parser";
 
 export class RefactorError extends Error {
   constructor(message: string) {
@@ -41,6 +42,12 @@ export type RefactorOperationSummary =
       kind: "update_param_list";
       symbol: string;
       callSitesUpdated: number;
+    }
+  | {
+      kind: "replace_pattern";
+      pattern: string;
+      replacement: string;
+      occurrencesReplaced: number;
     };
 
 export type ModuleChangeSummary = {
@@ -77,6 +84,7 @@ type VisitorCallbacks = {
   onCallExpr?: (call: ast.CallExpr) => void;
   onRecordExpr?: (expr: ast.RecordExpr) => void;
   onPatternCtor?: (pattern: CtorPattern) => void;
+  onPattern?: (pattern: ast.Pattern) => void;
 };
 
 export function findRefactorDecl(
@@ -144,6 +152,9 @@ class RefactorApplier {
           break;
         case "UpdateParamListOperation":
           this.operationSummaries.push(this.applyUpdateParamList(operation));
+          break;
+        case "ReplacePatternOperation":
+          this.operationSummaries.push(this.applyReplacePattern(operation));
           break;
         default:
           const _exhaustive: never = operation;
@@ -380,19 +391,19 @@ class RefactorApplier {
     const currentModule = module.name.join(".");
     const isMove = context.fromModule !== context.toModule;
 
-    if (!original.includes(".")) {
-      if (isMove) {
-        if (currentModule === context.toModule) {
-          return context.newSymbol;
-        }
-        return context.toQualified;
+    if (isMove) {
+      if (currentModule === context.toModule) {
+        return context.newSymbol;
       }
+      // For cross-module moves, ensure target is imported and use qualified name
+      const alias = this.ensureImport(module, context.toModule);
+      return `${alias}.${context.newSymbol}`;
+    }
+
+    if (!original.includes(".")) {
       return context.newSymbol;
     }
     if (original.startsWith(`${context.fromModule}.`)) {
-      if (isMove) {
-        return context.toQualified;
-      }
       const parts = original.split(".");
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
@@ -401,21 +412,100 @@ class RefactorApplier {
     const first = parts[0]!;
     const aliasTarget = naming.aliasToModule.get(first);
     if (aliasTarget === context.fromModule) {
-      if (isMove) {
-        return context.toQualified;
-      }
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
     }
     const shortTarget = naming.shortNameToModule.get(first);
     if (shortTarget === context.fromModule) {
-      if (isMove) {
-        return context.toQualified;
-      }
       parts[parts.length - 1] = context.newSymbol;
       return parts.join(".");
     }
     return context.toQualified;
+  }
+
+  private ensureImport(module: ast.Module, targetModule: string): string {
+    const naming = this.getNaming(module);
+
+    // Check if already imported via alias
+    for (const [alias, modName] of naming.aliasToModule) {
+      if (modName === targetModule) {
+        return alias;
+      }
+    }
+    // Check if already imported via short name
+    for (const [short, modName] of naming.shortNameToModule) {
+      if (modName === targetModule) {
+        return short;
+      }
+    }
+
+    // Not imported, add import
+    const parts = targetModule.split(".");
+    const shortName = parts[parts.length - 1]!;
+    
+    let alias = shortName;
+    let counter = 1;
+    while (this.isNameConflict(module, alias)) {
+      alias = `${shortName}_${counter}`;
+      counter++;
+    }
+
+    const newImport: ast.ImportDecl = {
+      kind: "ImportDecl",
+      moduleName: parts,
+      ...(alias !== shortName ? { alias } : {}),
+    };
+    
+    // Insert import (at the end of imports for simplicity, or sorted?)
+    // AST doesn't enforce order, but usually imports are at top.
+    // module.imports is an array.
+    module.imports.push(newImport);
+
+    // Update naming cache
+    if (alias === shortName) {
+      naming.shortNameToModule.set(shortName, targetModule);
+    } else {
+      naming.aliasToModule.set(alias, targetModule);
+    }
+
+    const resolvedModule = this.getResolvedModule(module);
+    this.recordModuleChange(resolvedModule, `added import ${targetModule} as ${alias}`);
+
+    return alias;
+  }
+
+  private isNameConflict(module: ast.Module, name: string): boolean {
+    const naming = this.getNaming(module);
+    if (naming.aliasToModule.has(name) || naming.shortNameToModule.has(name)) {
+      return true;
+    }
+    
+    return module.decls.some((d) => {
+      if (
+        d.kind === "AliasTypeDecl" ||
+        d.kind === "RecordTypeDecl" ||
+        d.kind === "SumTypeDecl" ||
+        d.kind === "FnDecl" ||
+        d.kind === "ActorDecl" ||
+        d.kind === "SchemaDecl" ||
+        d.kind === "RefactorDecl" ||
+        d.kind === "TestDecl" ||
+        d.kind === "PropertyDecl" ||
+        d.kind === "FnContractDecl"
+      ) {
+        return d.name === name;
+      }
+      return false;
+    });
+  }
+
+  private getResolvedModule(module: ast.Module): ResolvedModule {
+    const name = module.name.join(".");
+    const resolved = this.moduleByName.get(name);
+    if (!resolved) {
+      throw new RefactorError(`Module '${name}' not found in loaded modules`);
+    }
+    return resolved;
   }
 
   private getNaming(module: ast.Module): ModuleNaming {
@@ -575,6 +665,55 @@ class RefactorApplier {
     };
   }
 
+  private applyReplacePattern(operation: ast.ReplacePatternOperation): RefactorOperationSummary {
+    const { pattern, replacement } = operation;
+
+    let targetPattern: ast.Pattern;
+    let replacementPattern: ast.Pattern;
+    try {
+      targetPattern = parsePattern(pattern);
+      replacementPattern = parsePattern(replacement);
+    } catch (e: any) {
+      throw new RefactorError(`Invalid pattern or replacement: ${e.message}`);
+    }
+
+    let occurrencesReplaced = 0;
+
+    for (const mod of this.modules) {
+      walkModule(mod.ast, {
+        onPattern: (p) => {
+          if (patternsEqual(p, targetPattern)) {
+            // Mutate p to match replacementPattern
+            // We can't assign to 'p' directly to change the reference, but we can modify its properties.
+            // Since Pattern is a discriminated union, we need to be careful.
+            // We'll cast to any to overwrite properties.
+            const pAny = p as any;
+            
+            // Clear existing properties
+            for (const key in pAny) {
+              if (Object.prototype.hasOwnProperty.call(pAny, key)) {
+                delete pAny[key];
+              }
+            }
+            
+            // Copy new properties
+            Object.assign(pAny, replacementPattern);
+            
+            occurrencesReplaced++;
+            this.recordModuleChange(mod, `replaced pattern '${pattern}' with '${replacement}'`);
+          }
+        },
+      });
+    }
+
+    return {
+      kind: "replace_pattern",
+      pattern,
+      replacement,
+      occurrencesReplaced,
+    };
+  }
+
   private updateCallSites(
     targetSymbol: string,
     oldParams: ast.Param[],
@@ -678,6 +817,7 @@ function walkModule(module: ast.Module, visitors: VisitorCallbacks): void {
   };
 
   const visitPattern = (pattern: ast.Pattern) => {
+    visitors.onPattern?.(pattern);
     if (pattern.kind === "CtorPattern") {
       visitors.onPatternCtor?.(pattern);
       for (const field of pattern.fields) {
@@ -855,4 +995,55 @@ function walkModule(module: ast.Module, visitors: VisitorCallbacks): void {
         throw new RefactorError(`Unsupported declaration kind ${(decl as ast.TopLevelDecl).kind}`);
     }
   }
+}
+
+function parsePattern(code: string): ast.Pattern {
+  const dummyCode = `
+    module dummy
+    fn dummy() -> Unit {
+      match x {
+        case ${code} => {}
+      }
+    }
+  `;
+  const mod = parseModule(dummyCode);
+  const fn = mod.decls.find((d) => d.kind === "FnDecl") as ast.FnDecl;
+  const matchStmt = fn.body.stmts[0] as ast.MatchStmt;
+  if (!matchStmt || !matchStmt.cases || matchStmt.cases.length === 0) {
+      throw new Error("Failed to parse pattern");
+  }
+  return matchStmt.cases[0]!.pattern;
+}
+
+function patternsEqual(a: ast.Pattern, b: ast.Pattern): boolean {
+  if (a.kind !== b.kind) {
+    return false;
+  }
+  if (a.kind === "WildcardPattern") {
+    return true;
+  }
+  if (a.kind === "VarPattern") {
+    return a.name === (b as typeof a).name;
+  }
+  if (a.kind === "CtorPattern") {
+    const bCtor = b as typeof a;
+    if (a.ctorName !== bCtor.ctorName) {
+      return false;
+    }
+    if (a.fields.length !== bCtor.fields.length) {
+      return false;
+    }
+    for (let i = 0; i < a.fields.length; i++) {
+      const fieldA = a.fields[i]!;
+      const fieldB = bCtor.fields[i]!;
+      if (fieldA.name !== fieldB.name) {
+        return false;
+      }
+      if (!patternsEqual(fieldA.pattern, fieldB.pattern)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
 }

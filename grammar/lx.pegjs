@@ -306,6 +306,7 @@ RefactorItem
 	= RefactorOperationItem
 	/ RefactorMoveOperationItem
 	/ RefactorUpdateParamListOperation
+	/ RefactorReplacePatternOperation
 	/ RefactorUpdateDirective
 	/ RefactorIgnoreDirective
 
@@ -349,17 +350,30 @@ RefactorUpdateParamListOperation
 			};
 		}
 
+RefactorReplacePatternOperation
+	= "replace" __ "pattern" __ pattern:StringLiteral __ "with" __ replacement:StringLiteral Terminator* {
+			return {
+				kind: "Operation",
+				operation: {
+					kind: "ReplacePatternOperation",
+					pattern: pattern.value,
+					replacement: replacement.value
+				}
+			};
+		}
+
 RefactorParamList
 	= head:RefactorParam tail:(_ "," _ RefactorParam)* {
 			return foldList(head, tail, 3);
 		}
 
 RefactorParam
-	= name:Ident _ ":" _ type:TypeExpr _ "=" _ def:Expr {
-			return { name, type, defaultValue: def };
-		}
-	/ name:Ident _ ":" _ type:TypeExpr {
-			return { name, type, defaultValue: null };
+	= name:Ident _ ":" _ type:TypeExpr defaultValue:(_ "=" _ Expr)? {
+			return {
+				name,
+				type,
+				defaultValue: defaultValue ? defaultValue[3] : null
+			};
 		}
 
 RefactorUpdateDirective
@@ -520,7 +534,7 @@ Pattern
 		}
 
 PatternFieldList
-	= head:PatternField tail:(__ "," __ PatternField)* {
+	= head:PatternField tail:(_ "," _ PatternField)* {
 			return foldList(head, tail, 3);
 		}
 

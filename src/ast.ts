@@ -403,7 +403,8 @@ export type RefactorOperation =
   | RenameFunctionOperation
   | MoveTypeOperation
   | MoveFunctionOperation
-  | UpdateParamListOperation;
+  | UpdateParamListOperation
+  | ReplacePatternOperation;
 
 export type RenameTypeOperation = {
   kind: "RenameTypeOperation";
@@ -435,6 +436,12 @@ export type UpdateParamListOperation = {
   kind: "UpdateParamListOperation";
   symbol: string;
   params: RefactorParam[];
+};
+
+export type ReplacePatternOperation = {
+  kind: "ReplacePatternOperation";
+  pattern: string;
+  replacement: string;
 };
 
 export type RefactorParam = {

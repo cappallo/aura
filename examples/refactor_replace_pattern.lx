@@ -1,0 +1,15 @@
+module examples.refactor_replace_pattern
+
+type Point = Point { x: Int, y: Int }
+
+fn get_x(p: Point) -> Int {
+  match p {
+    case Point { x: _, y: x } => {
+      x
+    }
+  }
+}
+
+refactor swap_point_pattern {
+  replace pattern "Point { x: x, y: _ }" with "Point { x: _, y: x }"
+}
