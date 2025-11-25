@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import * as ast from "./ast";
+import { parseActiveComments, ActiveComments } from "./ast";
 
 type GeneratedParser = {
   parse(input: string, options?: { grammarSource?: string }): ast.Module;
@@ -18,11 +19,37 @@ function loadParser(): GeneratedParser {
 
 const DEFAULT_SOURCE_NAME = "<input>";
 
+/**
+ * Post-process parsed AST to populate activeComments from docComment strings.
+ */
+function populateActiveComments(module: ast.Module): ast.Module {
+  // Process module-level docComment
+  if (module.docComment) {
+    const parsed = parseActiveComments(module.docComment);
+    if (parsed) {
+      module.activeComments = parsed;
+    }
+  }
+
+  // Process all declarations
+  for (const decl of module.decls) {
+    if ("docComment" in decl && decl.docComment) {
+      const parsed = parseActiveComments(decl.docComment);
+      if (parsed) {
+        (decl as { activeComments?: ActiveComments }).activeComments = parsed;
+      }
+    }
+  }
+
+  return module;
+}
+
 export function parseModule(code: string, filePath?: string): ast.Module {
   const parser = loadParser();
   const sourceName = filePath ?? DEFAULT_SOURCE_NAME;
   try {
-    return parser.parse(code, { grammarSource: sourceName });
+    const module = parser.parse(code, { grammarSource: sourceName });
+    return populateActiveComments(module);
   } catch (err) {
     throw formatParserError(err, sourceName, code);
   }

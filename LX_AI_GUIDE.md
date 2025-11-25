@@ -57,6 +57,40 @@ Documentation comments use the `/// spec:` format and are:
 - **Preserved in the AST** for tooling and IDE integration
 - **Machine-readable** for automated documentation generation
 
+**Active Comments (LLM Control Plane):**
+
+Active comments are structured directives that serve as first-class instructions for LLMs and tooling:
+
+```lx
+/// file: examples/my_module.lx
+/// purpose: User authentication and profile management.
+/// layer: Core
+module examples.my_module
+
+/// prompt: Optimize this for readability over performance.
+/// why: This is a teaching example, so clarity is paramount.
+/// context: examples.other_module
+type Person {
+  name: String
+  age: Int
+}
+```
+
+**Supported directives:**
+- `/// prompt:` - Direct instruction to the LLM for future edits
+- `/// context:` - Links relevant context (symbols or files)
+- `/// why:` - Documents design rationale (Chesterton's Fence)
+- `/// spec:` - Functional requirements and contracts
+- `/// file:` - File identity for isolated context
+- `/// purpose:` - High-level intent of the file/module
+- `/// layer:` - Architectural boundary (e.g., "Core", "UI", "Adapter")
+
+Use `lx active-comments <file.lx>` to extract and view all active comments:
+```bash
+lx active-comments examples/my_file.lx
+lx active-comments --format=json examples/my_file.lx
+```
+
 ### Types
 
 **Primitive Types:**

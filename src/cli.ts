@@ -63,6 +63,8 @@ function main() {
         return handlePatchBody(args, ctx);
       case "apply-refactor":
         return handleApplyRefactor(args, ctx);
+      case "active-comments":
+        return handleActiveComments(args, ctx);
       default:
         console.error(`Unknown command '${command}'`);
         printUsage();
@@ -356,6 +358,102 @@ function handleCheck(args: string[], ctx: CliContext) {
     console.log(formatStructuredOutput(output));
   } else {
     console.log("Typecheck succeeded");
+  }
+}
+
+type ActiveCommentEntry = {
+  symbol: string;
+  kind: string;
+  activeComments: ast.ActiveComments;
+};
+
+type ActiveCommentsOutput = {
+  file: string;
+  module: string;
+  entries: ActiveCommentEntry[];
+};
+
+function handleActiveComments(args: string[], ctx: CliContext) {
+  const [filePath] = args;
+  if (!filePath) {
+    console.error("Usage: lx active-comments [--format=json|text] <file.lx>");
+    process.exit(1);
+  }
+
+  const mod = ctx.input === "ast"
+    ? parseModuleFromAstFile(filePath)
+    : parseModuleFromFile(filePath);
+
+  const moduleName = mod.name.join(".");
+  const entries: ActiveCommentEntry[] = [];
+
+  // Check module-level active comments
+  if (mod.activeComments) {
+    entries.push({
+      symbol: moduleName,
+      kind: "Module",
+      activeComments: mod.activeComments,
+    });
+  }
+
+  // Check all declarations
+  for (const decl of mod.decls) {
+    if ("activeComments" in decl && decl.activeComments) {
+      entries.push({
+        symbol: `${moduleName}.${decl.name}`,
+        kind: decl.kind,
+        activeComments: decl.activeComments,
+      });
+    }
+  }
+
+  const output: ActiveCommentsOutput = {
+    file: filePath,
+    module: moduleName,
+    entries,
+  };
+
+  if (ctx.format === "json") {
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    // Text format
+    console.log(`Active Comments in ${filePath} (module ${moduleName}):`);
+    console.log("=".repeat(60));
+    
+    if (entries.length === 0) {
+      console.log("No active comments found.");
+    } else {
+      for (const entry of entries) {
+        console.log(`\n${entry.kind}: ${entry.symbol}`);
+        console.log("-".repeat(40));
+        const ac = entry.activeComments;
+        
+        if (ac.file) {
+          console.log(`  file: ${ac.file}`);
+        }
+        if (ac.purpose) {
+          console.log(`  purpose: ${ac.purpose}`);
+        }
+        if (ac.layer) {
+          console.log(`  layer: ${ac.layer}`);
+        }
+        for (const prompt of ac.prompts) {
+          console.log(`  prompt: ${prompt}`);
+        }
+        for (const why of ac.whys) {
+          console.log(`  why: ${why}`);
+        }
+        for (const context of ac.contexts) {
+          console.log(`  context: ${context}`);
+        }
+        for (const spec of ac.specs) {
+          console.log(`  spec:`);
+          for (const line of spec.split("\n")) {
+            console.log(`    ${line}`);
+          }
+        }
+      }
+    }
   }
 }
 

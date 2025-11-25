@@ -44,6 +44,8 @@ runCommand("node", [cliPath, "test", "--scheduler=deterministic", "examples/acto
 runCommand("node", [cliPath, "test", "examples/actor_supervision.lx"]);
 runCommand("node", [cliPath, "test", "examples/refactor_sample.lx"]);
 runCommand("node", [cliPath, "test", "examples/alias_test.lx"]);
+runCommand("node", [cliPath, "test", "examples/active_comments.lx"]);
+runCommand("node", [cliPath, "active-comments", "--format=json", "examples/active_comments.lx"]);
 runCommand("node", [cliPath, "test", "--input=ast", "examples/ast_demo.json"]);
 runCommand("node", [cliPath, "run", "--input=ast", "examples/ast_demo.json", "app.ast_demo.add", "2", "3"]);
 

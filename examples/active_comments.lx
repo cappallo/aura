@@ -1,0 +1,44 @@
+/// file: examples/active_comments.lx
+/// purpose: Demonstrate active comment directives for LLM tooling.
+/// layer: Examples
+module examples.active_comments
+
+/// prompt: Optimize this for readability over performance.
+/// why: This is a teaching example, so clarity is paramount.
+/// context: examples.median
+type Person {
+	name: String
+	age: Int
+}
+
+/// prompt: Ensure this handles edge cases like empty strings.
+/// why: User-facing input validation must be robust.
+fn validate_name(name: String) -> Bool {
+	return str.len(name) > 0;
+}
+
+/// spec:
+///   description: "Calculate years until retirement at age 65."
+///   inputs:
+///     - person: "The person to calculate for"
+///   outputs:
+///     - "Years remaining, or 0 if already retired"
+/// prompt: Consider making retirement age configurable.
+fn years_to_retirement(person: Person) -> Int {
+	let retirement_age = 65;
+	if person.age >= retirement_age {
+		return 0;
+	} else {
+		return retirement_age - person.age;
+	};
+}
+
+test active_comments_test {
+	let p = Person { name: "Alice", age: 30 };
+	test.assert_equal(years_to_retirement(p), 35);
+	
+	let retired = Person { name: "Bob", age: 70 };
+	test.assert_equal(years_to_retirement(retired), 0);
+	
+	test.assert_equal(validate_name("Alice"), true);
+}

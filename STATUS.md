@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~85% (Core ~86%, Tooling ~90%, Concurrency ~80%)
+**Overall Progress:** ~87% (Core ~86%, Tooling ~95%, Concurrency ~80%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -21,12 +21,12 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 - [ ] **Random**: General purpose RNG (beyond testing)
 
 ### **Priority 11: Active Comments (LLM Control Plane)**
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete
 **Goal:** Implement first-class support for `/// prompt`, `/// context`, and `/// why`.
 - [x] Define syntax and semantics in `SPEC.md`
 - [x] Update parser to recognize top-level active comments
-- [ ] Expose active comments in AST for tooling
-- [ ] Update `lx explain` / `lx check` to surface these comments to LLMs
+- [x] Expose active comments in AST for tooling
+- [x] Add `lx active-comments` command to extract and report active comments
 
 ### **Future Priorities**
 - **Schema Migrations**: Version transforms and data migration execution (SPEC §10.2).
@@ -57,7 +57,7 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 | | Execution Tracing | ✅ | `lx explain` (step-by-step trace) |
 | | Formatting | ✅ | Canonical, deterministic output |
 | | Refactoring | ✅ | Rename, Move, Update Params, Replace Pattern |
-| | Active Comments | 🟡 | Parser ✅, Tooling ❌ |
+| | Active Comments | ✅ | Parser, AST, `lx active-comments` command |
 
 ---
 

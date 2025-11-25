@@ -15,6 +15,8 @@ export type Module = {
   imports: ImportDecl[];
   decls: TopLevelDecl[];
   docComment?: string;
+  /** Parsed active comments (prompt, context, why, etc.) */
+  activeComments?: ActiveComments;
 };
 
 /** Import declaration referencing another module */
@@ -43,6 +45,7 @@ export type EffectDecl = {
   kind: "EffectDecl";
   name: string;
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Schema declaration for structured data with versioning (used for codecs) */
@@ -52,6 +55,7 @@ export type SchemaDecl = {
   version: number;
   fields: SchemaField[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Field within a schema, may be optional */
@@ -71,6 +75,7 @@ export type AliasTypeDecl = {
   typeParams: string[];
   target: TypeExpr;
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Record type declaration with named fields (like a struct) */
@@ -80,6 +85,7 @@ export type RecordTypeDecl = {
   typeParams: string[];
   fields: Field[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Sum type declaration with multiple variants (like a tagged union) */
@@ -89,6 +95,7 @@ export type SumTypeDecl = {
   typeParams: string[];
   variants: Variant[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Named field with a type, used in records and variants */
@@ -119,6 +126,7 @@ export type FnDecl = {
   effects: string[];
   body: Block;
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Function or message handler parameter */
@@ -334,6 +342,7 @@ export type TestDecl = {
   name: string;
   body: Block;
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Property-based test declaration with generated inputs */
@@ -345,6 +354,7 @@ export type PropertyDecl = {
   /** Number of test iterations, defaults to 100 */
   iterations?: number;
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Function contract declaration with preconditions (requires) and postconditions (ensures) */
@@ -358,6 +368,7 @@ export type FnContractDecl = {
   /** Postconditions that must hold on exit (can reference 'result') */
   ensures: Expr[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Actor declaration defining stateful concurrent entity with message handlers */
@@ -371,6 +382,7 @@ export type ActorDecl = {
   /** Message type handlers */
   handlers: ActorHandler[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Actor message handler defining response to a specific message type */
@@ -396,6 +408,7 @@ export type RefactorDecl = {
   /** Optional hints on which regions to ignore */
   ignoreTargets: string[];
   docComment?: string;
+  activeComments?: ActiveComments;
 };
 
 /** Supported refactor operations */
@@ -450,3 +463,134 @@ export type RefactorParam = {
   type: TypeExpr;
   defaultValue: Expr | null;
 };
+
+// ============================================================================
+// Active Comments - Structured LLM/Tooling Directives
+// ============================================================================
+
+/**
+ * Types of active comment directives.
+ * See SPEC.md §12 for full documentation.
+ */
+export type ActiveCommentKind =
+  | "prompt"    // Direct instruction to LLM for future edits
+  | "context"   // Links relevant context (symbols/files)
+  | "why"       // Design rationale (Chesterton's Fence)
+  | "spec"      // Functional requirements and contracts
+  | "file"      // File identity for isolated context
+  | "purpose"   // High-level intent of file/module
+  | "layer";    // Architectural boundary
+
+/**
+ * A single active comment directive parsed from a doc comment.
+ */
+export type ActiveComment = {
+  kind: ActiveCommentKind;
+  /** The content/value of the directive */
+  value: string;
+};
+
+/**
+ * Collection of active comments organized by directive type.
+ * This provides both list access and quick lookup by kind.
+ */
+export type ActiveComments = {
+  /** All active comments in source order */
+  all: ActiveComment[];
+  /** Prompt instructions for LLMs */
+  prompts: string[];
+  /** Context references (symbols or files) */
+  contexts: string[];
+  /** Design rationale ("why" decisions) */
+  whys: string[];
+  /** Spec content (YAML or structured) */
+  specs: string[];
+  /** File identity */
+  file?: string;
+  /** Purpose description */
+  purpose?: string;
+  /** Architectural layer */
+  layer?: string;
+};
+
+/**
+ * Parse a raw docComment string into structured ActiveComments.
+ * Recognizes directives like `prompt:`, `context:`, `why:`, etc.
+ */
+export function parseActiveComments(docComment: string | undefined): ActiveComments | undefined {
+  if (!docComment) return undefined;
+
+  const result: ActiveComments = {
+    all: [],
+    prompts: [],
+    contexts: [],
+    whys: [],
+    specs: [],
+  };
+
+  const lines = docComment.split("\n");
+  let currentDirective: ActiveCommentKind | null = null;
+  let currentValue: string[] = [];
+
+  const flushCurrent = () => {
+    if (currentDirective && currentValue.length > 0) {
+      const value = currentValue.join("\n").trim();
+      const comment: ActiveComment = { kind: currentDirective, value };
+      result.all.push(comment);
+
+      switch (currentDirective) {
+        case "prompt":
+          result.prompts.push(value);
+          break;
+        case "context":
+          result.contexts.push(value);
+          break;
+        case "why":
+          result.whys.push(value);
+          break;
+        case "spec":
+          result.specs.push(value);
+          break;
+        case "file":
+          result.file = value;
+          break;
+        case "purpose":
+          result.purpose = value;
+          break;
+        case "layer":
+          result.layer = value;
+          break;
+      }
+    }
+    currentDirective = null;
+    currentValue = [];
+  };
+
+  const directivePattern = /^(prompt|context|why|spec|file|purpose|layer):\s*(.*)$/;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(directivePattern);
+
+    if (match) {
+      flushCurrent();
+      currentDirective = match[1] as ActiveCommentKind;
+      if (match[2]) {
+        currentValue.push(match[2]);
+      }
+    } else if (currentDirective) {
+      // Continuation line for multi-line directives (like spec:)
+      currentValue.push(trimmed);
+    }
+    // Lines without a directive and not continuing one are ignored
+  }
+
+  flushCurrent();
+
+  // Return undefined if no active comments were found
+  if (result.all.length === 0) {
+    return undefined;
+  }
+
+  return result;
+}
