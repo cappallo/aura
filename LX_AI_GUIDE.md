@@ -268,6 +268,63 @@ lx test examples.demo.lx
 
 The wrapper forwards all arguments to `node dist/cli.js`, giving you a concise entry point for every command.
 
+
+---
+
+## Debugging & Tracing
+
+Lx provides powerful built-in tools to understand code execution, designed specifically for LLM analysis.
+
+### Execution Tracing (`lx explain`)
+
+Use `lx explain` to run a function and get a detailed, step-by-step trace of its execution. This is invaluable for debugging complex logic or understanding control flow.
+
+```bash
+lx explain examples/my_file.lx my_module.my_function
+```
+
+**Output includes:**
+- Function calls and returns (with values)
+- Variable bindings (`let`)
+- Control flow decisions (`if`, `match`)
+- Recursive depth
+
+### Structured Errors
+
+For tool-based analysis, always use the `--format=json` flag. This provides machine-readable error objects with precise source locations, eliminating the need to parse console output.
+
+```bash
+lx check --format=json examples/my_file.lx
+```
+
+### Best Practice
+
+**When in doubt, trace it out.** If you are unsure why a function returns a specific value, run it with `lx explain`. The trace provides the ground truth of execution.
+
+---
+
+## Tooling
+
+Lx is built for tooling.
+
+### Canonical Formatting (`lx format`)
+Deterministic code formatting. Always run this before committing.
+```bash
+lx format my_file.lx
+```
+
+### Patch-Based Editing (`lx patch-body`)
+Surgically replace a function body using its stable symbol ID. Ideal for LLM code generation.
+```bash
+lx patch-body my_file.lx my_module.my_function new_body.lx
+```
+
+### Type Checking (`lx check`)
+Run the compiler's static analysis without executing.
+```bash
+lx check my_file.lx
+```
+
 ---
 
 ## Refactors
@@ -284,7 +341,11 @@ refactor rename_email_entities {
 }
 ```
 
-Run `lx apply-refactor <file.lx> <refactorName>` to apply the block. The current implementation supports `rename type` and `rename fn` operations and rewrites all affected modules, including type annotations, record constructors, pattern matches, and call sites.
+Run `lx apply-refactor <file.lx> <refactorName>` to apply the block. Supported operations:
+- `rename type`, `rename fn`: Renames symbols across the dependency graph.
+- `move type`, `move fn`: Moves symbols to another module (auto-updates imports).
+- `update param_list`: Changes function parameters and updates call sites (supports defaults).
+- `replace pattern`: Rewrites AST patterns (e.g., `foo(x)` -> `bar(x, 0)`).
 
 ---
 
@@ -331,6 +392,21 @@ fn use_counter() -> [Concurrent] Int {
 - `ActorName.MessageName(ref)` sends a message and waits for the response
 - All actor operations require `[Concurrent]` effect
 
+### Structured Async (`async_group`)
+Run tasks in parallel within an actor handler. If one fails, all are cancelled.
+```lx
+async_group {
+  async { ... }
+  async { ... }
+}
+```
+
+### Supervision Trees
+Actors form a hierarchy. If a child actor fails, the supervisor receives a `ChildFailed` signal and can restart it.
+
+### Deterministic Scheduling
+For testing, use `--scheduler=deterministic`. This ensures message delivery order is reproducible (controlled by `--seed`).
+
 ---
 
 ## Schemas
@@ -353,6 +429,13 @@ schema UserRecord {
 ```
 
 Schemas can be converted to/from types for internal domain models.
+
+### JSON Codecs
+Schemas automatically generate `json.encode` and `json.decode` functions.
+```lx
+let json_str = json.encode(user)
+let decoded = json.decode(json_str) // Returns Result<UserRecord, String>
+```
 
 ---
 
