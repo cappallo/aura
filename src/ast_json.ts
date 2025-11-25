@@ -130,9 +130,40 @@ function parseRefactorOperation(value: unknown, ctx: ParseContext): ast.Refactor
         from: expectString(obj.from, child(ctx, "from")),
         to: expectString(obj.to, child(ctx, "to")),
       };
+    case "MoveTypeOperation":
+      return {
+        kind,
+        symbol: expectString(obj.symbol, child(ctx, "symbol")),
+        fromModule: expectString(obj.fromModule, child(ctx, "fromModule")),
+        toModule: expectString(obj.toModule, child(ctx, "toModule")),
+      };
+    case "MoveFunctionOperation":
+      return {
+        kind,
+        symbol: expectString(obj.symbol, child(ctx, "symbol")),
+        fromModule: expectString(obj.fromModule, child(ctx, "fromModule")),
+        toModule: expectString(obj.toModule, child(ctx, "toModule")),
+      };
+    case "UpdateParamListOperation":
+      return {
+        kind,
+        symbol: expectString(obj.symbol, child(ctx, "symbol")),
+        params: expectArray(obj.params, child(ctx, "params")).map((p, i) =>
+          parseRefactorParam(p, indexPath(child(ctx, "params"), i)),
+        ),
+      };
     default:
       throw fail(ctx, `Unknown refactor operation kind '${kind}'`);
   }
+}
+
+function parseRefactorParam(value: unknown, ctx: ParseContext): ast.RefactorParam {
+  const obj = expectObject(value, ctx);
+  return {
+    name: expectString(obj.name, child(ctx, "name")),
+    type: parseTypeExpr(obj.type, child(ctx, "type")),
+    defaultValue: obj.defaultValue ? parseExpr(obj.defaultValue, child(ctx, "defaultValue")) : null,
+  };
 }
 
 function parseSchemaDecl(obj: JsonObject, ctx: ParseContext): ast.SchemaDecl {

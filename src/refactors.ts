@@ -36,6 +36,11 @@ export type RefactorOperationSummary =
       fromModule: string;
       toModule: string;
       callSitesUpdated: number;
+    }
+  | {
+      kind: "update_param_list";
+      symbol: string;
+      callSitesUpdated: number;
     };
 
 export type ModuleChangeSummary = {
@@ -136,6 +141,9 @@ class RefactorApplier {
           break;
         case "MoveFunctionOperation":
           this.operationSummaries.push(this.applyMoveFunction(operation));
+          break;
+        case "UpdateParamListOperation":
+          this.operationSummaries.push(this.applyUpdateParamList(operation));
           break;
         default:
           const _exhaustive: never = operation;
@@ -537,6 +545,103 @@ class RefactorApplier {
       toModule: operation.toModule,
       callSitesUpdated: callSites,
     };
+  }
+
+  private applyUpdateParamList(operation: ast.UpdateParamListOperation): RefactorOperationSummary {
+    const { module: moduleName, symbol: functionName } = splitQualified(operation.symbol);
+    const mod = this.getModule(moduleName);
+
+    const fnDecl = mod.ast.decls.find(
+      (d): d is ast.FnDecl => d.kind === "FnDecl" && d.name === functionName,
+    );
+
+    if (!fnDecl) {
+      throw new RefactorError(`Function '${functionName}' not found in module '${moduleName}'`);
+    }
+
+    const oldParams = [...fnDecl.params]; // Copy old params
+
+    // Update function declaration
+    fnDecl.params = operation.params.map((p) => ({ name: p.name, type: p.type }));
+    this.recordModuleChange(mod, `Updated parameters of function '${functionName}'`);
+
+    // Update call sites
+    const callSitesUpdated = this.updateCallSites(operation.symbol, oldParams, operation.params);
+
+    return {
+      kind: "update_param_list",
+      symbol: operation.symbol,
+      callSitesUpdated,
+    };
+  }
+
+  private updateCallSites(
+    targetSymbol: string,
+    oldParams: ast.Param[],
+    newParams: ast.RefactorParam[],
+  ): number {
+    let total = 0;
+    for (const mod of this.modules) {
+      let moduleCount = 0;
+      walkModule(mod.ast, {
+        onCallExpr: (call) => {
+          const resolved = resolveIdentifier(call.callee, mod.ast, this.symbolTable);
+          if (resolved === targetSymbol) {
+            this.updateCallArgs(call, oldParams, newParams);
+            moduleCount++;
+          }
+        },
+      });
+      if (moduleCount > 0) {
+        total += moduleCount;
+        this.recordModuleChange(mod, `updated ${moduleCount} call site(s) for ${targetSymbol}`);
+      }
+    }
+    return total;
+  }
+
+  private updateCallArgs(
+    call: ast.CallExpr,
+    oldParams: ast.Param[],
+    newParams: ast.RefactorParam[],
+  ): void {
+    const argsMap = new Map<string, ast.Expr>();
+
+    // Map existing arguments
+    call.args.forEach((arg, index) => {
+      if (arg.kind === "NamedArg") {
+        argsMap.set(arg.name, arg.expr);
+      } else {
+        const oldParam = oldParams[index];
+        if (oldParam) {
+          argsMap.set(oldParam.name, arg.expr);
+        }
+      }
+    });
+
+    const newArgs: ast.CallArg[] = [];
+
+    for (const param of newParams) {
+      if (argsMap.has(param.name)) {
+        newArgs.push({
+          kind: "NamedArg",
+          name: param.name,
+          expr: argsMap.get(param.name)!,
+        });
+      } else if (param.defaultValue) {
+        newArgs.push({
+          kind: "NamedArg",
+          name: param.name,
+          expr: param.defaultValue,
+        });
+      } else {
+        throw new RefactorError(
+          `Cannot update call to '${call.callee}': Parameter '${param.name}' is missing and has no default value.`,
+        );
+      }
+    }
+
+    call.args = newArgs;
   }
 }
 

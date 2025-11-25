@@ -78,16 +78,22 @@ function formatDeclaration(decl: AST.TopLevelDecl, indent: number): string {
 function formatFnDecl(fn: AST.FnDecl, indent: number): string {
   const prefix = INDENT.repeat(indent);
   const lines: string[] = [];
-  
+
   // Function signature
-  const params = fn.params.map(p => `${p.name}: ${formatTypeExpr(p.type)}`).join(", ");
-  const effects = fn.effects.length > 0 ? ` [${fn.effects.join(", ")}]` : "";
-  lines.push(`${prefix}fn ${fn.name}(${params})${effects} -> ${formatTypeExpr(fn.returnType)} {`);
-  
+  const params = fn.params.map((p) => `${p.name}: ${formatTypeExpr(p.type)}`).join(", ");
+  let returnSpec = "";
+  if (fn.effects.length > 0) {
+    returnSpec = `-> [${fn.effects.join(", ")}] ${formatTypeExpr(fn.returnType)}`;
+  } else {
+    returnSpec = `-> ${formatTypeExpr(fn.returnType)}`;
+  }
+
+  lines.push(`${prefix}fn ${fn.name}(${params}) ${returnSpec} {`);
+
   // Body
   lines.push(formatBlock(fn.body, indent + 1));
   lines.push(`${prefix}}`);
-  
+
   return lines.join("\n");
 }
 
@@ -275,6 +281,17 @@ function formatRefactorOperation(operation: AST.RefactorOperation): string {
       return `move type ${operation.symbol} from ${operation.fromModule} to ${operation.toModule}`;
     case "MoveFunctionOperation":
       return `move fn ${operation.symbol} from ${operation.fromModule} to ${operation.toModule}`;
+    case "UpdateParamListOperation":
+      const params = operation.params
+        .map((p) => {
+          const type = formatTypeExpr(p.type);
+          if (p.defaultValue) {
+            return `${p.name}: ${type} = ${formatExpr(p.defaultValue, 0)}`;
+          }
+          return `${p.name}: ${type}`;
+        })
+        .join(", ");
+      return `update param_list ${operation.symbol}(${params})`;
     default:
       const _exhaustive: never = operation;
       throw new Error(`Unknown refactor operation: ${(operation as any).kind}`);

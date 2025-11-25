@@ -402,7 +402,8 @@ export type RefactorOperation =
   | RenameTypeOperation
   | RenameFunctionOperation
   | MoveTypeOperation
-  | MoveFunctionOperation;
+  | MoveFunctionOperation
+  | UpdateParamListOperation;
 
 export type RenameTypeOperation = {
   kind: "RenameTypeOperation";
@@ -428,4 +429,16 @@ export type MoveFunctionOperation = {
   symbol: string;
   fromModule: string;
   toModule: string;
+};
+
+export type UpdateParamListOperation = {
+  kind: "UpdateParamListOperation";
+  symbol: string;
+  params: RefactorParam[];
+};
+
+export type RefactorParam = {
+  name: string;
+  type: TypeExpr;
+  defaultValue: Expr | null;
 };

@@ -305,6 +305,7 @@ RefactorItemList
 RefactorItem
 	= RefactorOperationItem
 	/ RefactorMoveOperationItem
+	/ RefactorUpdateParamListOperation
 	/ RefactorUpdateDirective
 	/ RefactorIgnoreDirective
 
@@ -334,6 +335,31 @@ RefactorMoveOperationItem
 				kind: "Operation",
 				operation: { kind: "MoveFunctionOperation", symbol, fromModule, toModule },
 			};
+		}
+
+RefactorUpdateParamListOperation
+	= "update" __ "param_list" __ symbol:QualifiedIdent _ "(" _ params:RefactorParamList? _ ")" Terminator* {
+			return {
+				kind: "Operation",
+				operation: {
+					kind: "UpdateParamListOperation",
+					symbol,
+					params: params || []
+				}
+			};
+		}
+
+RefactorParamList
+	= head:RefactorParam tail:(_ "," _ RefactorParam)* {
+			return foldList(head, tail, 3);
+		}
+
+RefactorParam
+	= name:Ident _ ":" _ type:TypeExpr _ "=" _ def:Expr {
+			return { name, type, defaultValue: def };
+		}
+	/ name:Ident _ ":" _ type:TypeExpr {
+			return { name, type, defaultValue: null };
 		}
 
 RefactorUpdateDirective
