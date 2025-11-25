@@ -58,6 +58,7 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 | | Formatting | ✅ | Canonical, deterministic output |
 | | Refactoring | ✅ | Rename, Move, Update Params, Replace Pattern |
 | | Active Comments | ✅ | Parser, AST, `lx active-comments` command |
+| | DRY Enforcement | ✅ | Structural hashing detects duplicates |
 
 ---
 
@@ -89,6 +90,7 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
     - `update param_list`: Updates signatures and call sites (supports default values).
     - `replace pattern`: AST-based pattern replacement.
 - **Documentation**: `/// spec:` comments are parsed and validated against function signatures.
+- **DRY Enforcement**: `lx check` performs structural hashing to detect duplicated code logic (ignoring variable/field names) and suggests reuse.
 
 ### 4. Testing & Verification
 - **Unit Tests**: `test name { ... }` blocks.

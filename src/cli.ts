@@ -359,6 +359,43 @@ function handleCheck(args: string[], ctx: CliContext) {
   } else {
     console.log("Typecheck succeeded");
   }
+
+  // --- DRY Enforcement (Structural Hashing) ---
+  const { computeStructuralHash } = require("./analysis/structural-hash");
+  const { loadModules } = require("./loader");
+  
+  // We need to check all loaded modules for duplicates
+  const loadResult = loadModuleWithDependencies(filePath, ctx);
+  const allModules = loadResult.modules || (loadResult.module ? [{ ast: loadResult.module, filePath }] : []);
+  
+  const hashMap = new Map<string, string[]>(); // hash -> [qualifiedName]
+
+  for (const mod of allModules) {
+    const modulePrefix = mod.ast.name.join(".");
+    for (const decl of mod.ast.decls) {
+      if (decl.kind === "FnDecl") {
+        const hash = computeStructuralHash(decl);
+        const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;
+        
+        if (!hashMap.has(hash)) {
+          hashMap.set(hash, []);
+        }
+        hashMap.get(hash)!.push(qualifiedName);
+      }
+    }
+  }
+
+  let foundDuplicates = false;
+  for (const [hash, names] of hashMap.entries()) {
+    if (names.length > 1) {
+      foundDuplicates = true;
+      console.warn(`\n⚠️  DRY Warning: The following functions are structurally identical:`);
+      for (const name of names) {
+        console.warn(`   - ${name}`);
+      }
+      console.warn(`   Consider extracting common logic to a shared helper.`);
+    }
+  }
 }
 
 type ActiveCommentEntry = {

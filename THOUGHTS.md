@@ -71,6 +71,19 @@ Tokens are cheap, bugs are not. So you’d *encourage* light redundancy:
 
 Redundancy makes it easier for the model to recover if it half-forgets context.
 
+### 1.4. Logic Uniqueness vs. Syntactic Redundancy
+
+*Wait, didn't 1.3 just say redundancy is good?*
+
+There is a critical distinction:
+*   **Syntactic Redundancy** (Good): Explicit types, named args, verbose keywords. This helps the LLM *read* and *recover* context locally.
+*   **Logic Duplication** (Bad): Copy-pasting the same algorithm or business rule in two places. This leads to "drift" where one copy gets fixed and the other doesn't.
+
+The language tooling should aggressively detect **structural logic duplication**:
+*   If two functions have the same AST shape (ignoring variable names and field names), they are duplicates.
+*   **Goal**: Force the LLM to extract generic helpers (e.g., `validate_threshold(value, limit)`).
+*   **Philosophy**: We want *verbose* code (easy to read) that is *unique* in behavior (single source of truth).
+
 ---
 
 ## 2. Semantics: how the language behaves

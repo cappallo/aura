@@ -359,6 +359,12 @@ Run the compiler's static analysis without executing.
 lx check my_file.lx
 ```
 
+### DRY Enforcement
+`lx check` automatically detects structurally identical functions (ignoring variable and field names).
+- **Goal**: Encourage abstraction and code reuse.
+- **Trigger**: Two functions have the same logic structure (e.g., `a + b` vs `x + y`).
+- **Resolution**: Extract the common logic into a helper function.
+
 ---
 
 ## Refactors

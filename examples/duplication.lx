@@ -1,0 +1,37 @@
+module examples.duplication
+
+type User {
+  name: String
+  score: Int
+  bonus: Int
+}
+
+type Product {
+  title: String
+  price: Int
+  tax: Int
+}
+
+// Function 1: Calculates a total for a User
+fn calculate_score(u: User) -> Int {
+  let base = u.score
+  let extra = u.bonus
+  return base + extra * 2
+}
+
+// Function 2: Calculates a total for a Product
+// Logically identical to calculate_score: (field1 + field2 * 2)
+// Should be flagged as a duplicate even though fields are different (.price vs .score)
+fn compute_rating(p: Product) -> Int {
+  let cost = p.price
+  let fee = p.tax
+  return cost + fee * 2
+}
+
+// Function 3: Different logic (multiplier is 3)
+// Should NOT be flagged
+fn distinct_calc(u: User) -> Int {
+  let base = u.score
+  let extra = u.bonus
+  return base + extra * 3
+}
