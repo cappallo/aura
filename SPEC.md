@@ -829,7 +829,40 @@ This is the “nerve system” between Lx, the analyzer, and the LLM.
    * affected contracts/tests,
    * affected schemas, actors, etc.
 
-4. **Context slice**
+## 12. Active Comments
+
+Active comments are structured directives (`/// keyword:`) that serve as first-class instructions for LLMs and tooling. They are part of the source code and are preserved by the compiler.
+
+### 12.1. Directives
+
+*   **`/// prompt: <instruction>`**
+    *   **Purpose:** Direct instruction to the LLM for future edits or refactors.
+    *   **Example:** `/// prompt: Optimize this function for memory usage, ignoring speed.`
+    *   **Semantics:** When an LLM processes this code, it *must* prioritize this instruction over general heuristics.
+
+*   **`/// context: <symbol_or_file>`**
+    *   **Purpose:** Explicitly links relevant context that might not be visible via static analysis.
+    *   **Example:** `/// context: app.user.UserSchema`
+    *   **Semantics:** Tooling should include the definition of the referenced symbol/file in the prompt window when editing this block.
+
+*   **`/// why: <reason>`**
+    *   **Purpose:** Documents design rationale to prevent regression ("Chesterton's Fence").
+    *   **Example:** `/// why: Using a linked list here because insertions are frequent and random access is rare.`
+    *   **Semantics:** LLMs should treat this as a hard constraint or invariant to preserve.
+
+*   **`/// spec:`** (See §7.1)
+    *   **Purpose:** Functional requirements and contracts.
+
+### 12.2. Usage
+
+Active comments bind to the immediately following declaration (function, type, module).
+
+```lx
+/// prompt: Ensure this handles unicode characters correctly.
+/// why: We support international usernames.
+fn validate_username(name: String) -> Bool { ... }
+```
+
 
    ```json
    {

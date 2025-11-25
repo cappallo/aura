@@ -83,9 +83,9 @@ The interpreter now exposes `parallel_map`, `parallel_fold`, and `parallel_for_e
 ## Documentation
 
 - **[SPEC.md](SPEC.md)** - Full language specification
-- **[CONCURRENCY.md](CONCURRENCY.md)** - Detailed concurrency model (actors, structured async, supervision)
+- **[SPEC.md](SPEC.md)** - Full language specification (including Concurrency)
 - **[THOUGHTS.md](THOUGHTS.md)** - Design philosophy and LLM-first principles
-- **[STATUS.md](STATUS.md)** - Current implementation status and next priorities
+- **[STATUS.md](STATUS.md)** - **Source of Truth** for implementation status and roadmap
 
 ## Development workflow
 

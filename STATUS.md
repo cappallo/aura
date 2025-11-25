@@ -462,6 +462,14 @@ With the core language, schemas, LLM tooling (including deterministic execution)
 - [ ] **Date & Time**: Clock access, durations, formatting
 - [ ] **Random**: General purpose RNG (beyond testing)
 
+### **Priority 11: Active Comments (LLM Control Plane)**
+**Status:** 🟡 Spec Complete
+**Goal:** Implement first-class support for `/// prompt`, `/// context`, and `/// why`
+- [x] Define syntax and semantics in `SPEC.md`
+- [ ] Update parser to recognize active comment directives
+- [ ] Expose active comments in AST for tooling
+- [ ] Update `lx explain` / `lx check` to surface these comments to LLMs
+
 ---
 
 ## 🔧 Development Notes

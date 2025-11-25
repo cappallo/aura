@@ -505,7 +505,35 @@ fn manhattan_distance(p1: Point, p2: Point) -> Int {
 
 ---
 
-## Built-in Functions
+## Active Comments
+
+Active comments (`/// keyword:`) allow you to give direct instructions to the LLM or tooling. They are preserved in the code and serve as a persistent "control plane".
+
+### Directives
+
+*   **`/// prompt: <instruction>`**
+    *   Tells the LLM what to do next or how to modify the code.
+    *   *Example:* `/// prompt: Refactor this to use a tail-recursive helper.`
+
+*   **`/// context: <symbol>`**
+    *   Explicitly links related code that the LLM should look at.
+    *   *Example:* `/// context: app.types.User`
+
+*   **`/// why: <reason>`**
+    *   Explains a design decision to prevent accidental "fixes".
+    *   *Example:* `/// why: Using a list instead of a set to preserve insertion order.`
+
+### Example Usage
+
+```lx
+/// prompt: Optimize this for large lists.
+/// why: This is called in the hot loop of the renderer.
+/// context: app.renderer.RenderConfig
+fn process_items(items: List<Item>) -> List<Item> {
+  // ...
+}
+```
+
 
 **String operations:**
 - `str.len(text: String) -> Int`
