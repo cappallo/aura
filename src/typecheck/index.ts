@@ -316,6 +316,156 @@ export function typecheckModules(
       moduleSumTypes.set("Option", builtinOptionInfo);
     }
 
+    // Register builtin Pair<A, B> type for http.request headers
+    // Only if the module doesn't define its own Pair type
+    const moduleDefinesPair = typeInfo?.recordTypes.has("Pair") || typeInfo?.sumTypes.has("Pair");
+    const builtinPairRecordDecl: ast.RecordTypeDecl = {
+      kind: "RecordTypeDecl",
+      name: "Pair",
+      typeParams: ["A", "B"],
+      fields: [
+        { name: "first", type: { kind: "TypeName", name: "A", typeArgs: [] } },
+        { name: "second", type: { kind: "TypeName", name: "B", typeArgs: [] } },
+      ],
+    };
+
+    if (!moduleRecordTypes.has("Pair") && !moduleDefinesPair) {
+      const builtinPairInfo: RecordTypeInfo = {
+        name: "Pair",
+        qualifiedName: "Pair",
+        typeParams: ["A", "B"],
+        decl: builtinPairRecordDecl,
+        module,
+      };
+      moduleRecordTypes.set("Pair", builtinPairInfo);
+    }
+
+    // Register Pair as a variant constructor so Pair { first: ..., second: ... } works
+    // Only if the module doesn't define its own Pair type
+    if (!moduleDefinesPair) {
+      const pairCtor: VariantInfo = {
+        name: "Pair",
+        qualifiedName: "Pair",
+        parentQualifiedName: "Pair",
+        typeParams: ["A", "B"],
+        fields: [
+          { name: "first", type: { kind: "TypeName", name: "A", typeArgs: [] } },
+          { name: "second", type: { kind: "TypeName", name: "B", typeArgs: [] } },
+        ],
+        module,
+        parentDecl: { kind: "SumTypeDecl", name: "Pair", typeParams: ["A", "B"], variants: [] } as ast.SumTypeDecl,
+      };
+      if (!moduleVariantConstructors.has("Pair")) {
+        moduleVariantConstructors.set("Pair", [pairCtor]);
+      }
+    }
+
+    // Register builtin HttpResponse type
+    const builtinHttpResponseRecordDecl: ast.RecordTypeDecl = {
+      kind: "RecordTypeDecl",
+      name: "HttpResponse",
+      typeParams: [],
+      fields: [
+        { name: "status", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+        { name: "body", type: { kind: "TypeName", name: "String", typeArgs: [] } },
+        { name: "headers", type: { kind: "TypeName", name: "List", typeArgs: [{ kind: "TypeName", name: "Pair", typeArgs: [{ kind: "TypeName", name: "String", typeArgs: [] }, { kind: "TypeName", name: "String", typeArgs: [] }] }] } },
+      ],
+    };
+
+    if (!moduleRecordTypes.has("HttpResponse")) {
+      const builtinHttpResponseInfo: RecordTypeInfo = {
+        name: "HttpResponse",
+        qualifiedName: "HttpResponse",
+        typeParams: [],
+        decl: builtinHttpResponseRecordDecl,
+        module,
+      };
+      moduleRecordTypes.set("HttpResponse", builtinHttpResponseInfo);
+    }
+
+    // Register HttpResponse as a variant constructor
+    const httpResponseCtor: VariantInfo = {
+      name: "HttpResponse",
+      qualifiedName: "HttpResponse",
+      parentQualifiedName: "HttpResponse",
+      typeParams: [],
+      fields: [
+        { name: "status", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+        { name: "body", type: { kind: "TypeName", name: "String", typeArgs: [] } },
+        { name: "headers", type: { kind: "TypeName", name: "List", typeArgs: [{ kind: "TypeName", name: "Pair", typeArgs: [{ kind: "TypeName", name: "String", typeArgs: [] }, { kind: "TypeName", name: "String", typeArgs: [] }] }] } },
+      ],
+      module,
+      parentDecl: { kind: "SumTypeDecl", name: "HttpResponse", typeParams: [], variants: [] } as ast.SumTypeDecl,
+    };
+    if (!moduleVariantConstructors.has("HttpResponse")) {
+      moduleVariantConstructors.set("HttpResponse", [httpResponseCtor]);
+    }
+
+    // Register builtin TcpSocket type
+    const builtinTcpSocketRecordDecl: ast.RecordTypeDecl = {
+      kind: "RecordTypeDecl",
+      name: "TcpSocket",
+      typeParams: [],
+      fields: [
+        { name: "id", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+        { name: "host", type: { kind: "TypeName", name: "String", typeArgs: [] } },
+        { name: "port", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+      ],
+    };
+
+    if (!moduleRecordTypes.has("TcpSocket")) {
+      const builtinTcpSocketInfo: RecordTypeInfo = {
+        name: "TcpSocket",
+        qualifiedName: "TcpSocket",
+        typeParams: [],
+        decl: builtinTcpSocketRecordDecl,
+        module,
+      };
+      moduleRecordTypes.set("TcpSocket", builtinTcpSocketInfo);
+    }
+
+    // Register TcpSocket as a variant constructor
+    const tcpSocketCtor: VariantInfo = {
+      name: "TcpSocket",
+      qualifiedName: "TcpSocket",
+      parentQualifiedName: "TcpSocket",
+      typeParams: [],
+      fields: [
+        { name: "id", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+        { name: "host", type: { kind: "TypeName", name: "String", typeArgs: [] } },
+        { name: "port", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+      ],
+      module,
+      parentDecl: { kind: "SumTypeDecl", name: "TcpSocket", typeParams: [], variants: [] } as ast.SumTypeDecl,
+    };
+    if (!moduleVariantConstructors.has("TcpSocket")) {
+      moduleVariantConstructors.set("TcpSocket", [tcpSocketCtor]);
+    }
+
+    // Register Indexed type (used by list.enumerate)
+    // Only if the module doesn't define its own Indexed type
+    const moduleDefinesIndexed = typeInfo?.recordTypes.has("Indexed") || typeInfo?.sumTypes.has("Indexed");
+    const builtinIndexedRecordDecl: ast.RecordTypeDecl = {
+      kind: "RecordTypeDecl",
+      name: "Indexed",
+      typeParams: ["T"],
+      fields: [
+        { name: "index", type: { kind: "TypeName", name: "Int", typeArgs: [] } },
+        { name: "value", type: { kind: "TypeName", name: "T", typeArgs: [] } },
+      ],
+    };
+
+    if (!moduleRecordTypes.has("Indexed") && !moduleDefinesIndexed) {
+      const builtinIndexedInfo: RecordTypeInfo = {
+        name: "Indexed",
+        qualifiedName: "Indexed",
+        typeParams: ["T"],
+        decl: builtinIndexedRecordDecl,
+        module,
+      };
+      moduleRecordTypes.set("Indexed", builtinIndexedInfo);
+    }
+
     for (const decl of module.decls) {
       if (decl.kind === "FnDecl") {
         const qualifiedName = modulePrefix ? `${modulePrefix}.${decl.name}` : decl.name;

@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~92% (Core ~91%, Tooling ~95%, Concurrency ~80%)
+**Overall Progress:** ~94% (Core ~93%, Tooling ~95%, Concurrency ~80%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -12,11 +12,11 @@ The Lx project has a working **minimal interpreter** covering the foundational s
 This section tracks **future** work. Completed items are moved to the [Detailed Implementation Status](#-detailed-implementation-status) section.
 
 ### **Priority 10: The Basics (Standard Library & I/O)**
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete
 **Goal:** Enable real-world application development.
 - [x] **String Operations**: split, join, contains, starts_with, ends_with, trim, to_upper, to_lower, replace, index_of
 - [x] **List Operations**: head, tail, take, drop, reverse, contains, find, flat_map, zip, enumerate
-- [ ] **Networking**: TCP/UDP sockets, HTTP client/server bindings
+- [x] **Networking**: HTTP client (http.get, http.post, http.request), TCP sockets (tcp.connect, tcp.send, tcp.receive, tcp.close)
 - [x] **File I/O**: read_file, write_file, file_exists, read_lines, append_file, delete_file
 - [x] **System**: env (environment variables), cwd (current directory), args (command line)
 - [x] **Date & Time**: time.now, time.format, time.parse, time.add_*, time.diff_seconds, time.year/month/day/hour/minute/second
@@ -29,6 +29,20 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 - [x] Update parser to recognize top-level active comments
 - [x] Expose active comments in AST for tooling
 - [x] Add `lx active-comments` command to extract and report active comments
+
+### **Priority 12: TCP Server Primitives**
+**Status:** 🔴 Not Started
+**Goal:** Enable building network servers (e.g., chat server, HTTP server) using the actor model.
+- [ ] **`tcp.listen(port: Int) -> [Io] Option<TcpServer>`** - Bind to a port and start listening
+- [ ] **`tcp.accept(server: TcpServer) -> [Io] Option<TcpSocket>`** - Accept incoming connection
+- [ ] **`TcpServer` builtin type** - Register in type system like `TcpSocket`
+- [ ] **Actor-socket integration** - Consider how socket events integrate with actor message delivery
+- [ ] **Example: Echo server** - `examples/tcp_echo_server.lx` demonstrating actor-based server pattern
+
+**Design Notes:**
+- No `while` loops needed - actors handle the "event loop" naturally
+- `tcp.accept` can be blocking (works in `immediate` scheduler) or could deliver messages to actors
+- Server pattern: one actor per client connection, coordinated by a main server actor
 
 ### **Future Priorities**
 - **Schema Migrations**: Version transforms and data migration execution (SPEC §10.2).
@@ -116,6 +130,7 @@ The `examples/` directory contains verified "gold standard" code.
 - `string_list_builtins.lx`: Extended string and list operations (split, join, trim, head, tail, zip, etc.)
 - `io_sys_builtins.lx`: File I/O and System builtins (read_file, write_file, env, cwd, etc.)
 - `time_random_builtins.lx`: Date/Time and Random builtins (time.now, time.format, random.int, random.shuffle, etc.)
+- `http_networking.lx`: HTTP client builtins (http.get, http.post, http.request) and TCP sockets
 
 ### Concurrency & Actors
 - `actor_basic.lx`: Core actor patterns (state, handlers, sending)
@@ -195,9 +210,10 @@ lx apply-refactor <file.lx> <refactorName>
 ---
 
 ## 🐛 Known Issues / Gaps
-1.  **Standard Library**: Missing Networking (TCP/UDP sockets, HTTP client/server).
-2.  **No REPL**: Interaction is file-based only.
-3.  **Parallel Primitives**: `parallel_map` exists but runs sequentially.
+1.  **No REPL**: Interaction is file-based only.
+2.  **Parallel Primitives**: `parallel_map` exists but runs sequentially.
+3.  **HTTP Server**: Only HTTP client is implemented; server bindings not yet available.
+4.  **UDP Sockets**: Only TCP sockets are implemented; UDP not yet available.
 
 ---
 

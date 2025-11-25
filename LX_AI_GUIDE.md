@@ -678,6 +678,40 @@ module app.auth
 - `random.shuffle(list: List<T>) -> List<T>` - Shuffle list (Fisher-Yates)
 - `random.float() -> Int` - Random value [0, 1000000) representing [0.0, 1.0)
 
+**HTTP Networking (requires `[Io]` effect):**
+- `http.get(url: String) -> Option<HttpResponse>` - HTTP GET request
+- `http.post(url: String, body: String, content_type: String) -> Option<HttpResponse>` - HTTP POST request
+- `http.request(method: String, url: String, body: String, headers: List<Pair<String, String>>) -> Option<HttpResponse>` - Full HTTP request with custom method/headers
+
+**HTTP Response Type:**
+```lx
+// HttpResponse is a builtin record type with:
+// - status: Int (HTTP status code, e.g., 200, 404)
+// - body: String (response body)
+// - headers: List<Pair<String, String>> (response headers)
+
+fn fetch_json(url: String) -> [Io] Option<String> {
+  match http.get(url) {
+    case Some { value: resp } => {
+      if resp.status >= 200 && resp.status < 300 {
+        return Some { value: resp.body }
+      } else {
+        return None
+      }
+    }
+    case None => {
+      return None
+    }
+  }
+}
+```
+
+**TCP Sockets (requires `[Io]` effect):**
+- `tcp.connect(host: String, port: Int) -> Option<TcpSocket>` - Connect to TCP server
+- `tcp.send(socket: TcpSocket, data: String) -> Bool` - Send data on socket
+- `tcp.receive(socket: TcpSocket) -> Option<String>` - Receive data from socket
+- `tcp.close(socket: TcpSocket) -> Unit` - Close socket
+
 **Printing (requires `[Io]` effect):**
 - `print(value: String) -> [Io] Unit`
 - `println(value: String) -> [Io] Unit`

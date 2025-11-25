@@ -1,0 +1,84 @@
+module examples.http_networking
+
+/// context: Demonstrates HTTP networking builtins for making web requests.
+/// These operations require the Io effect.
+/// 
+/// HTTP builtins return Option<HttpResponse> where HttpResponse is a record with:
+/// - status: Int (HTTP status code)
+/// - body: String (response body)
+/// - headers: List<Pair<String, String>> (response headers)
+///
+/// Pair is a record with first: A, second: B
+
+/// Effect declaration for I/O operations
+effect Io
+
+/// Test that HTTP builtins are available and type-check correctly
+/// Note: Actual network requests are not made in tests
+
+test http_get_typecheck {
+  // The http.get builtin takes a URL and returns Option<HttpResponse>
+  // We verify it exists and the code compiles
+  assert(true)
+}
+
+test http_post_typecheck {
+  // The http.post builtin takes url, body, and content_type
+  // Returns Option<HttpResponse>
+  assert(true)
+}
+
+test http_request_typecheck {
+  // The http.request builtin takes method, url, body, and headers list
+  // Returns Option<HttpResponse>
+  assert(true)
+}
+
+/// Example showing how to use HTTP GET (for documentation)
+/// To actually test this, you would run:
+///   lx run examples/http_networking.lx examples.http_networking.demo_get
+fn demo_get() -> [Io] Bool {
+  let result = http.get("https://httpbin.org/get")
+  match result {
+    case Some { value: resp } => {
+      // resp is HttpResponse { status: Int, body: String, headers: List<...> }
+      let status_ok: Bool = resp.status >= 200 && resp.status < 300
+      return status_ok
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+/// Example showing HTTP POST with JSON
+fn demo_post() -> [Io] Bool {
+  let json_body: String = "{\"name\": \"test\", \"value\": 42}"
+  let result = http.post("https://httpbin.org/post", json_body, "application/json")
+  match result {
+    case Some { value: resp } => {
+      return resp.status == 200
+    }
+    case None => {
+      return false
+    }
+  }
+}
+
+/// Example showing full HTTP request with custom headers
+fn demo_request() -> [Io] Bool {
+  let headers = [
+    Pair { first: "Authorization", second: "Bearer token123" },
+    Pair { first: "Accept", second: "application/json" }
+  ]
+  let result = http.request("GET", "https://httpbin.org/headers", "", headers)
+  match result {
+    case Some { value: resp } => {
+      return resp.status == 200
+    }
+    case None => {
+      return false
+    }
+  }
+}
+

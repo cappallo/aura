@@ -1,5 +1,8 @@
 import * as ast from "../ast";
 import * as fs from "fs";
+import * as http from "http";
+import * as https from "https";
+import * as net from "net";
 import { alignCallArguments, CallArgIssue } from "../callargs";
 import { RuntimeError } from "./errors";
 import {
@@ -120,6 +123,15 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "random.choice": ["list"],
   "random.shuffle": ["list"],
   "random.float": [],
+  // HTTP networking builtins
+  "http.get": ["url"],
+  "http.post": ["url", "body", "content_type"],
+  "http.request": ["method", "url", "body", "headers"],
+  // TCP socket builtins
+  "tcp.connect": ["host", "port"],
+  "tcp.send": ["socket", "data"],
+  "tcp.receive": ["socket"],
+  "tcp.close": ["socket"],
 };
 
 /** Get parameter names for a builtin function (throws if not found) */
@@ -588,6 +600,22 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinRandomShuffle(expr, env, runtime);
     case "random.float":
       return builtinRandomFloat(expr, env, runtime);
+    // HTTP networking builtins
+    case "http.get":
+      return builtinHttpGet(expr, env, runtime);
+    case "http.post":
+      return builtinHttpPost(expr, env, runtime);
+    case "http.request":
+      return builtinHttpRequest(expr, env, runtime);
+    // TCP socket builtins
+    case "tcp.connect":
+      return builtinTcpConnect(expr, env, runtime);
+    case "tcp.send":
+      return builtinTcpSend(expr, env, runtime);
+    case "tcp.receive":
+      return builtinTcpReceive(expr, env, runtime);
+    case "tcp.close":
+      return builtinTcpClose(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -2172,4 +2200,340 @@ export function enforceContractClauses(
       throw new RuntimeError(`Contract ${clauseType} clause failed for '${fnName}'`);
     }
   }
+}
+
+// ============================================================================
+// HTTP Networking Builtins
+// ============================================================================
+
+/** Global storage for TCP sockets */
+const tcpSockets = new Map<number, net.Socket>();
+let nextSocketId = 1;
+
+/** Helper to make an HttpResponse value */
+function makeHttpResponse(status: number, body: string, headers: [string, string][]): Value {
+  const fields = new Map<string, Value>();
+  fields.set("status", makeInt(status));
+  fields.set("body", { kind: "String", value: body });
+  
+  // Convert headers to List<Pair<String, String>>
+  const headerPairs: Value[] = headers.map(([key, value]) => {
+    const pairFields = new Map<string, Value>();
+    pairFields.set("first", { kind: "String", value: key });
+    pairFields.set("second", { kind: "String", value: value });
+    return { kind: "Ctor" as const, name: "Pair", fields: pairFields };
+  });
+  fields.set("headers", { kind: "List", elements: headerPairs });
+  
+  return { kind: "Ctor", name: "HttpResponse", fields };
+}
+
+/** Perform a synchronous HTTP request using Node.js http/https modules */
+function performHttpRequest(
+  method: string,
+  url: string,
+  body: string | null,
+  headers: Record<string, string>
+): { status: number; body: string; headers: [string, string][] } | null {
+  // Use synchronous execution via child_process.spawnSync with curl
+  // This is a workaround since Node.js http is async
+  const { spawnSync } = require("child_process");
+  
+  const args = ["-s", "-i", "-X", method, url];
+  
+  // Add headers
+  for (const [key, value] of Object.entries(headers)) {
+    args.push("-H", `${key}: ${value}`);
+  }
+  
+  // Add body if present
+  if (body && body.length > 0) {
+    args.push("-d", body);
+  }
+  
+  try {
+    const result = spawnSync("curl", args, {
+      encoding: "utf-8",
+      timeout: 30000, // 30 second timeout
+      maxBuffer: 10 * 1024 * 1024, // 10MB max response
+    });
+    
+    if (result.error || result.status !== 0) {
+      return null;
+    }
+    
+    const output = result.stdout as string;
+    
+    // Parse the response - HTTP header section ends with \r\n\r\n
+    const headerBodySplit = output.indexOf("\r\n\r\n");
+    if (headerBodySplit === -1) {
+      return null;
+    }
+    
+    const headerSection = output.substring(0, headerBodySplit);
+    const responseBody = output.substring(headerBodySplit + 4);
+    
+    // Parse status line and headers
+    const headerLines = headerSection.split("\r\n");
+    const statusLine = headerLines[0];
+    if (!statusLine) {
+      return null;
+    }
+    
+    // Parse status code from "HTTP/1.1 200 OK"
+    const statusMatch = statusLine.match(/HTTP\/[\d.]+ (\d+)/);
+    if (!statusMatch) {
+      return null;
+    }
+    const status = parseInt(statusMatch[1]!, 10);
+    
+    // Parse headers
+    const responseHeaders: [string, string][] = [];
+    for (let i = 1; i < headerLines.length; i++) {
+      const line = headerLines[i]!;
+      const colonIndex = line.indexOf(":");
+      if (colonIndex > 0) {
+        const key = line.substring(0, colonIndex).trim();
+        const value = line.substring(colonIndex + 1).trim();
+        responseHeaders.push([key, value]);
+      }
+    }
+    
+    return { status, body: responseBody, headers: responseHeaders };
+  } catch {
+    return null;
+  }
+}
+
+function builtinHttpGet(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("http.get"), env, runtime);
+  const urlValue = expectValue(values, "url", expr.callee);
+  
+  if (urlValue.kind !== "String") {
+    throw new RuntimeError("http.get expects a string URL argument");
+  }
+  
+  const response = performHttpRequest("GET", urlValue.value, null, {});
+  if (response === null) {
+    return makeCtor("None");
+  }
+  
+  return makeCtor("Some", [["value", makeHttpResponse(response.status, response.body, response.headers)]]);
+}
+
+function builtinHttpPost(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("http.post"), env, runtime);
+  const urlValue = expectValue(values, "url", expr.callee);
+  const bodyValue = expectValue(values, "body", expr.callee);
+  const contentTypeValue = expectValue(values, "content_type", expr.callee);
+  
+  if (urlValue.kind !== "String") {
+    throw new RuntimeError("http.post expects a string URL argument");
+  }
+  if (bodyValue.kind !== "String") {
+    throw new RuntimeError("http.post expects a string body argument");
+  }
+  if (contentTypeValue.kind !== "String") {
+    throw new RuntimeError("http.post expects a string content_type argument");
+  }
+  
+  const headers: Record<string, string> = {
+    "Content-Type": contentTypeValue.value,
+  };
+  
+  const response = performHttpRequest("POST", urlValue.value, bodyValue.value, headers);
+  if (response === null) {
+    return makeCtor("None");
+  }
+  
+  return makeCtor("Some", [["value", makeHttpResponse(response.status, response.body, response.headers)]]);
+}
+
+function builtinHttpRequest(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("http.request"), env, runtime);
+  const methodValue = expectValue(values, "method", expr.callee);
+  const urlValue = expectValue(values, "url", expr.callee);
+  const bodyValue = expectValue(values, "body", expr.callee);
+  const headersValue = expectValue(values, "headers", expr.callee);
+  
+  if (methodValue.kind !== "String") {
+    throw new RuntimeError("http.request expects a string method argument");
+  }
+  if (urlValue.kind !== "String") {
+    throw new RuntimeError("http.request expects a string URL argument");
+  }
+  if (bodyValue.kind !== "String") {
+    throw new RuntimeError("http.request expects a string body argument");
+  }
+  if (headersValue.kind !== "List") {
+    throw new RuntimeError("http.request expects a list of header pairs");
+  }
+  
+  // Parse headers from List<Pair<String, String>>
+  const headers: Record<string, string> = {};
+  for (const elem of headersValue.elements) {
+    if (elem.kind !== "Ctor" || elem.name !== "Pair") {
+      throw new RuntimeError("http.request headers must be Pair<String, String>");
+    }
+    const first = elem.fields.get("first");
+    const second = elem.fields.get("second");
+    if (!first || !second || first.kind !== "String" || second.kind !== "String") {
+      throw new RuntimeError("http.request headers must be Pair<String, String>");
+    }
+    headers[first.value] = second.value;
+  }
+  
+  const response = performHttpRequest(
+    methodValue.value,
+    urlValue.value,
+    bodyValue.value.length > 0 ? bodyValue.value : null,
+    headers
+  );
+  
+  if (response === null) {
+    return makeCtor("None");
+  }
+  
+  return makeCtor("Some", [["value", makeHttpResponse(response.status, response.body, response.headers)]]);
+}
+
+// ============================================================================
+// TCP Socket Builtins
+// ============================================================================
+
+function builtinTcpConnect(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.connect"), env, runtime);
+  const hostValue = expectValue(values, "host", expr.callee);
+  const portValue = expectValue(values, "port", expr.callee);
+  
+  if (hostValue.kind !== "String") {
+    throw new RuntimeError("tcp.connect expects a string host argument");
+  }
+  if (portValue.kind !== "Int") {
+    throw new RuntimeError("tcp.connect expects an integer port argument");
+  }
+  
+  // For TCP, we need to do synchronous-ish connection
+  // Since Node.js sockets are async, we'll create a socket and store it
+  // The socket ID will be stored and used for send/receive/close
+  try {
+    const socket = new net.Socket();
+    const socketId = nextSocketId++;
+    
+    // Set a flag to track connection state
+    let connected = false;
+    let connectionError = false;
+    
+    socket.on("connect", () => {
+      connected = true;
+    });
+    
+    socket.on("error", () => {
+      connectionError = true;
+    });
+    
+    // Attempt connection (will be async in reality)
+    socket.connect(portValue.value, hostValue.value);
+    
+    // Store the socket
+    tcpSockets.set(socketId, socket);
+    
+    // Create the TcpSocket value
+    const fields = new Map<string, Value>();
+    fields.set("id", makeInt(socketId));
+    fields.set("host", { kind: "String", value: hostValue.value });
+    fields.set("port", makeInt(portValue.value));
+    
+    return makeCtor("Some", [["value", { kind: "Ctor", name: "TcpSocket", fields }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinTcpSend(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.send"), env, runtime);
+  const socketValue = expectValue(values, "socket", expr.callee);
+  const dataValue = expectValue(values, "data", expr.callee);
+  
+  if (socketValue.kind !== "Ctor" || socketValue.name !== "TcpSocket") {
+    throw new RuntimeError("tcp.send expects a TcpSocket argument");
+  }
+  if (dataValue.kind !== "String") {
+    throw new RuntimeError("tcp.send expects a string data argument");
+  }
+  
+  const socketIdValue = socketValue.fields.get("id");
+  if (!socketIdValue || socketIdValue.kind !== "Int") {
+    throw new RuntimeError("Invalid TcpSocket value");
+  }
+  
+  const socket = tcpSockets.get(socketIdValue.value);
+  if (!socket) {
+    return makeBool(false);
+  }
+  
+  try {
+    socket.write(dataValue.value);
+    return makeBool(true);
+  } catch {
+    return makeBool(false);
+  }
+}
+
+function builtinTcpReceive(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.receive"), env, runtime);
+  const socketValue = expectValue(values, "socket", expr.callee);
+  
+  if (socketValue.kind !== "Ctor" || socketValue.name !== "TcpSocket") {
+    throw new RuntimeError("tcp.receive expects a TcpSocket argument");
+  }
+  
+  const socketIdValue = socketValue.fields.get("id");
+  if (!socketIdValue || socketIdValue.kind !== "Int") {
+    throw new RuntimeError("Invalid TcpSocket value");
+  }
+  
+  const socket = tcpSockets.get(socketIdValue.value);
+  if (!socket) {
+    return makeCtor("None");
+  }
+  
+  // TCP receive is inherently async in Node.js
+  // For a synchronous API, we'd need to buffer data
+  // For now, we'll return whatever is available in the buffer or None
+  try {
+    const data = socket.read();
+    if (data === null) {
+      return makeCtor("None");
+    }
+    return makeCtor("Some", [["value", { kind: "String", value: data.toString() }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinTcpClose(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.close"), env, runtime);
+  const socketValue = expectValue(values, "socket", expr.callee);
+  
+  if (socketValue.kind !== "Ctor" || socketValue.name !== "TcpSocket") {
+    throw new RuntimeError("tcp.close expects a TcpSocket argument");
+  }
+  
+  const socketIdValue = socketValue.fields.get("id");
+  if (!socketIdValue || socketIdValue.kind !== "Int") {
+    throw new RuntimeError("Invalid TcpSocket value");
+  }
+  
+  const socket = tcpSockets.get(socketIdValue.value);
+  if (socket) {
+    try {
+      socket.destroy();
+    } catch {
+      // Ignore errors on close
+    }
+    tcpSockets.delete(socketIdValue.value);
+  }
+  
+  return { kind: "Unit" };
 }

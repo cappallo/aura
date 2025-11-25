@@ -596,6 +596,110 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
     effects: new Set(["Io"]),
     instantiateType: () => makeFunctionType([], INT_TYPE), // We'll return as int * 1000000 for now (no float type)
   },
+  // HTTP networking builtins (require Io effect)
+  // http.get returns Option<HttpResponse> where HttpResponse = { status: Int, body: String, headers: List<Pair<String, String>> }
+  "http.get": {
+    arity: 1,
+    paramNames: ["url"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      // HttpResponse is a record-like constructor with status, body, headers
+      const httpResponseType: TypeConstructor = {
+        kind: "Constructor",
+        name: "HttpResponse",
+        args: [],
+      };
+      return makeFunctionType([STRING_TYPE], makeOptionType(httpResponseType));
+    },
+  },
+  "http.post": {
+    arity: 3,
+    paramNames: ["url", "body", "content_type"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const httpResponseType: TypeConstructor = {
+        kind: "Constructor",
+        name: "HttpResponse",
+        args: [],
+      };
+      return makeFunctionType([STRING_TYPE, STRING_TYPE, STRING_TYPE], makeOptionType(httpResponseType));
+    },
+  },
+  "http.request": {
+    arity: 4,
+    paramNames: ["method", "url", "body", "headers"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      // headers is List<Pair<String, String>>
+      const headerPairType: TypeConstructor = {
+        kind: "Constructor",
+        name: "Pair",
+        args: [STRING_TYPE, STRING_TYPE],
+      };
+      const httpResponseType: TypeConstructor = {
+        kind: "Constructor",
+        name: "HttpResponse",
+        args: [],
+      };
+      return makeFunctionType(
+        [STRING_TYPE, STRING_TYPE, STRING_TYPE, makeListType(headerPairType)],
+        makeOptionType(httpResponseType)
+      );
+    },
+  },
+  // TCP socket builtins
+  "tcp.connect": {
+    arity: 2,
+    paramNames: ["host", "port"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const socketType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpSocket",
+        args: [],
+      };
+      return makeFunctionType([STRING_TYPE, INT_TYPE], makeOptionType(socketType));
+    },
+  },
+  "tcp.send": {
+    arity: 2,
+    paramNames: ["socket", "data"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const socketType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpSocket",
+        args: [],
+      };
+      return makeFunctionType([socketType, STRING_TYPE], BOOL_TYPE);
+    },
+  },
+  "tcp.receive": {
+    arity: 1,
+    paramNames: ["socket"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const socketType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpSocket",
+        args: [],
+      };
+      return makeFunctionType([socketType], makeOptionType(STRING_TYPE));
+    },
+  },
+  "tcp.close": {
+    arity: 1,
+    paramNames: ["socket"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const socketType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpSocket",
+        args: [],
+      };
+      return makeFunctionType([socketType], UNIT_TYPE);
+    },
+  },
 };
 
 export const PURE_BUILTIN_FUNCTION_PARAMS: Record<string, string[]> = {
