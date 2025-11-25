@@ -7,18 +7,26 @@ const path = require("node:path");
 const cliPath = path.join("dist", "cli.js");
 
 function runCommand(command, args) {
-  const result = spawnSync(command, args, { stdio: "inherit" });
+  process.stdout.write(`Running: ${command} ${args.join(" ")} ... `);
+  const result = spawnSync(command, args, { stdio: "pipe" });
   if (result.status !== 0) {
+    console.log("❌ FAIL");
+    console.log(result.stdout.toString());
+    console.error(result.stderr.toString());
     process.exit(result.status ?? 1);
   }
+  console.log("✅ PASS");
 }
 
 function runExpectFailure(description, command, args) {
-  const result = spawnSync(command, args, { stdio: "inherit" });
+  process.stdout.write(`Running negative test: ${description} ... `);
+  const result = spawnSync(command, args, { stdio: "pipe" });
   if (result.status === 0) {
-    console.error(description);
+    console.log("❌ FAIL (Unexpected Success)");
+    console.log(result.stdout.toString());
     process.exit(1);
   }
+  console.log("✅ PASS (Expected Failure)");
 }
 
 runCommand("node", [cliPath, "test", "examples/median.lx"]);
