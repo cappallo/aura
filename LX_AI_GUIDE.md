@@ -563,6 +563,8 @@ This documentation is parsed, validated, and available to tooling for:
 - Contract/property test generation
 - LLM context for code understanding
 
+> **Recommendation:** It is **strongly encouraged** to use `/// spec:` comments for all exported functions and types. This practice prevents documentation drift (enforced by the compiler) and will enable automatic test generation in the future.
+
 ---
 
 ## Common Pitfalls

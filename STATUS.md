@@ -254,6 +254,7 @@ Based on the ROADMAP and SPEC, here are the next implementation priorities:
 - [x] Update structured logging (`Log.debug`) to emit JSON instead of console
 - [x] Create StructuredError and StructuredLog types
 - [x] Test with examples demonstrating JSON error/log output
+- [ ] Test Generation from Laws (convert `laws` in doc specs to property tests)
 - [ ] Add deterministic execution mode with seedable RNG (deferred)
 
 **Completed:** Structured output is now fully functional! The CLI supports `--format=json` flag for all commands (run, test, check). Errors include type, message, location, and optional hints. Logs are collected and emitted as structured JSON with timestamps, levels, and data payloads.
