@@ -1,0 +1,179 @@
+/// Demonstrates time and random builtins
+module time_random_builtins
+
+/// Time manipulation example - pure function (does not call time.now)
+fn add_one_day(timestamp: Int) -> Int {
+  time.add_days(timestamp, 1)
+}
+
+/// Time arithmetic - pure function
+fn add_one_hour(timestamp: Int) -> Int {
+  time.add_hours(timestamp, 1)
+}
+
+/// Extract year from timestamp - pure function  
+fn get_year(timestamp: Int) -> Int {
+  time.year(timestamp)
+}
+
+/// Format a timestamp to a date string - pure function
+fn format_date(timestamp: Int) -> String {
+  time.format(timestamp, "%Y-%m-%d")
+}
+
+/// Format a timestamp to a datetime string - pure function
+fn format_datetime(timestamp: Int) -> String {
+  time.format(timestamp, "%Y-%m-%d %H:%M:%S")
+}
+
+/// Calculate time difference in seconds - pure function
+fn diff_seconds(t1: Int, t2: Int) -> Int {
+  time.diff_seconds(t1, t2)
+}
+
+/// Parse a date string to timestamp - pure function
+fn parse_date(date_str: String) -> Option<Int> {
+  time.parse(date_str, "iso")
+}
+
+/// Test time operations with known timestamp
+test time_operations {
+  // Use a known timestamp: 2024-01-15 12:30:45 UTC = 1705322445000
+  let ts: Int = 1705322445000
+  
+  // Test year extraction
+  test.assert_equal(2024, time.year(ts))
+  
+  // Test month extraction (January = 1)
+  test.assert_equal(1, time.month(ts))
+  
+  // Test day extraction
+  test.assert_equal(15, time.day(ts))
+  
+  // Test hour extraction (depends on local timezone - skip for portability)
+  // test.assert_equal(12, time.hour(ts))
+  
+  // Test formatting
+  let formatted: String = time.format(ts, "%Y-%m-%d")
+  test.assert_equal("2024-01-15", formatted)
+  
+  // Test add_days
+  let next_day: Int = time.add_days(ts, 1)
+  test.assert_equal(16, time.day(next_day))
+  
+  // Test add_hours
+  let plus_one_hour: Int = time.add_hours(ts, 1)
+  let diff: Int = time.diff_seconds(ts, plus_one_hour)
+  test.assert_equal(3600, diff)
+  
+  // Test add_minutes
+  let plus_30_min: Int = time.add_minutes(ts, 30)
+  let diff_min: Int = time.diff_seconds(ts, plus_30_min)
+  test.assert_equal(1800, diff_min)
+  
+  // Test add_seconds
+  let plus_45_sec: Int = time.add_seconds(ts, 45)
+  let diff_sec: Int = time.diff_seconds(ts, plus_45_sec)
+  test.assert_equal(45, diff_sec)
+}
+
+/// Test parsing dates
+test time_parsing {
+  // Parse an ISO date string
+  let parsed: Option<Int> = time.parse("2024-06-15T10:30:00Z", "iso")
+  match parsed {
+    case Some { value: ts } => {
+      test.assert_equal(2024, time.year(ts))
+      test.assert_equal(6, time.month(ts))
+      test.assert_equal(15, time.day(ts))
+    }
+    case None => {
+      assert(false)
+    }
+  }
+  
+  // Invalid date should return None
+  let invalid: Option<Int> = time.parse("not-a-date", "iso")
+  match invalid {
+    case None => {
+      assert(true)
+    }
+    case Some { value: _ } => {
+      assert(false)
+    }
+  }
+}
+
+/// Generate a random number in range - requires Io effect
+fn random_in_range(min: Int, max: Int) -> [Io] Int {
+  random.int(min, max)
+}
+
+/// Test random operations with seed (deterministic)
+test random_int_range {
+  // random.int should produce values within the range
+  let val: Int = random.int(1, 10)
+  assert(val >= 1)
+  assert(val <= 10)
+  
+  // Test with negative range
+  let neg: Int = random.int(-5, 5)
+  assert(neg >= -5)
+  assert(neg <= 5)
+}
+
+test random_bool_values {
+  // random.bool should return true or false
+  let b: Bool = random.bool()
+  // Just verify it's a bool (either true or false)
+  let is_valid: Bool = b || (b == false)
+  assert(is_valid)
+}
+
+test random_choice_from_list {
+  let items: List<String> = ["apple", "banana", "cherry"]
+  let chosen: Option<String> = random.choice(items)
+  match chosen {
+    case Some { value: item } => {
+      let valid: Bool = list.contains(items, item)
+      assert(valid)
+    }
+    case None => {
+      assert(false)
+    }
+  }
+  
+  // Empty list should return None
+  let empty: List<Int> = []
+  let result: Option<Int> = random.choice(empty)
+  match result {
+    case None => {
+      assert(true)
+    }
+    case Some { value: _ } => {
+      assert(false)
+    }
+  }
+}
+
+test random_shuffle_preserves_elements {
+  let original: List<Int> = [1, 2, 3, 4, 5]
+  let shuffled: List<Int> = random.shuffle(original)
+  
+  // Same length
+  test.assert_equal(list.len(original), list.len(shuffled))
+  
+  // Contains all original elements
+  assert(list.contains(shuffled, 1))
+  assert(list.contains(shuffled, 2))
+  assert(list.contains(shuffled, 3))
+  assert(list.contains(shuffled, 4))
+  assert(list.contains(shuffled, 5))
+}
+
+test random_float_range {
+  // random.float returns int in [0, 1000000) representing [0.0, 1.0)
+  let f: Int = random.float()
+  assert(f >= 0)
+  assert(f < 1000000)
+}

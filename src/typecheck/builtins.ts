@@ -474,6 +474,128 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
     effects: new Set(["Io"]),
     instantiateType: () => makeFunctionType([], STRING_TYPE),
   },
+  // Time builtins
+  "time.now": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([], INT_TYPE),
+  },
+  "time.format": {
+    arity: 2,
+    paramNames: ["timestamp", "format"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, STRING_TYPE], STRING_TYPE),
+  },
+  "time.parse": {
+    arity: 2,
+    paramNames: ["date_string", "format"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], makeOptionType(INT_TYPE)),
+  },
+  "time.add_seconds": {
+    arity: 2,
+    paramNames: ["timestamp", "seconds"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "time.add_minutes": {
+    arity: 2,
+    paramNames: ["timestamp", "minutes"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "time.add_hours": {
+    arity: 2,
+    paramNames: ["timestamp", "hours"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "time.add_days": {
+    arity: 2,
+    paramNames: ["timestamp", "days"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "time.diff_seconds": {
+    arity: 2,
+    paramNames: ["t1", "t2"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "time.year": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "time.month": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "time.day": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "time.hour": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "time.minute": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  "time.second": {
+    arity: 1,
+    paramNames: ["timestamp"],
+    effects: new Set(),
+    instantiateType: () => makeFunctionType([INT_TYPE], INT_TYPE),
+  },
+  // Random builtins
+  "random.int": {
+    arity: 2,
+    paramNames: ["min", "max"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([INT_TYPE, INT_TYPE], INT_TYPE),
+  },
+  "random.bool": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([], BOOL_TYPE),
+  },
+  "random.choice": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(["Io"]),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element)], makeOptionType(element));
+    },
+  },
+  "random.shuffle": {
+    arity: 1,
+    paramNames: ["list"],
+    effects: new Set(["Io"]),
+    instantiateType: (state) => {
+      const element = freshTypeVar("T", false, state);
+      return makeFunctionType([makeListType(element)], makeListType(element));
+    },
+  },
+  "random.float": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([], INT_TYPE), // We'll return as int * 1000000 for now (no float type)
+  },
 };
 
 export const PURE_BUILTIN_FUNCTION_PARAMS: Record<string, string[]> = {

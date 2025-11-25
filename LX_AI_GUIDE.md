@@ -655,6 +655,29 @@ module app.auth
 - `sys.cwd() -> String` - Get current working directory
 - `sys.args() -> List<String>` - Get command line arguments
 
+**Date & Time:**
+- `time.now() -> [Io] Int` - Get current timestamp in milliseconds
+- `time.format(timestamp: Int, format: String) -> String` - Format timestamp (supports %Y, %m, %d, %H, %M, %S)
+- `time.parse(date_string: String, format: String) -> Option<Int>` - Parse date string to timestamp
+- `time.add_seconds(timestamp: Int, seconds: Int) -> Int` - Add seconds to timestamp
+- `time.add_minutes(timestamp: Int, minutes: Int) -> Int` - Add minutes to timestamp
+- `time.add_hours(timestamp: Int, hours: Int) -> Int` - Add hours to timestamp
+- `time.add_days(timestamp: Int, days: Int) -> Int` - Add days to timestamp
+- `time.diff_seconds(t1: Int, t2: Int) -> Int` - Get difference in seconds (t2 - t1)
+- `time.year(timestamp: Int) -> Int` - Extract year from timestamp
+- `time.month(timestamp: Int) -> Int` - Extract month (1-12) from timestamp
+- `time.day(timestamp: Int) -> Int` - Extract day of month from timestamp
+- `time.hour(timestamp: Int) -> Int` - Extract hour from timestamp
+- `time.minute(timestamp: Int) -> Int` - Extract minute from timestamp
+- `time.second(timestamp: Int) -> Int` - Extract second from timestamp
+
+**Random (requires `[Io]` effect):**
+- `random.int(min: Int, max: Int) -> Int` - Random integer in range [min, max]
+- `random.bool() -> Bool` - Random boolean
+- `random.choice(list: List<T>) -> Option<T>` - Random element from list
+- `random.shuffle(list: List<T>) -> List<T>` - Shuffle list (Fisher-Yates)
+- `random.float() -> Int` - Random value [0, 1000000) representing [0.0, 1.0)
+
 **Printing (requires `[Io]` effect):**
 - `print(value: String) -> [Io] Unit`
 - `println(value: String) -> [Io] Unit`

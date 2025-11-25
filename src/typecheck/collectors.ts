@@ -189,10 +189,10 @@ export function collectModuleFunctions(
 
 /**
  * Collect all declared effects from module declarations.
- * Includes built-in effects (Concurrent, Log).
+ * Includes built-in effects (Concurrent, Log, Io).
  */
 export function collectEffects(decls: ast.TopLevelDecl[]): Set<string> {
-  const effects = new Set<string>(["Concurrent", "Log"]);
+  const effects = new Set<string>(["Concurrent", "Log", "Io"]);
   for (const decl of decls) {
     if (decl.kind === "EffectDecl") {
       effects.add(decl.name);

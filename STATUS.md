@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~90% (Core ~89%, Tooling ~95%, Concurrency ~80%)
+**Overall Progress:** ~92% (Core ~91%, Tooling ~95%, Concurrency ~80%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -19,8 +19,8 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 - [ ] **Networking**: TCP/UDP sockets, HTTP client/server bindings
 - [x] **File I/O**: read_file, write_file, file_exists, read_lines, append_file, delete_file
 - [x] **System**: env (environment variables), cwd (current directory), args (command line)
-- [ ] **Date & Time**: Clock access, durations, formatting
-- [ ] **Random**: General purpose RNG (beyond testing)
+- [x] **Date & Time**: time.now, time.format, time.parse, time.add_*, time.diff_seconds, time.year/month/day/hour/minute/second
+- [x] **Random**: random.int, random.bool, random.choice, random.shuffle, random.float
 
 ### **Priority 11: Active Comments (LLM Control Plane)**
 **Status:** ✅ Complete
@@ -115,6 +115,7 @@ The `examples/` directory contains verified "gold standard" code.
 - `fibonacci.lx`: Recursion benchmarks
 - `string_list_builtins.lx`: Extended string and list operations (split, join, trim, head, tail, zip, etc.)
 - `io_sys_builtins.lx`: File I/O and System builtins (read_file, write_file, env, cwd, etc.)
+- `time_random_builtins.lx`: Date/Time and Random builtins (time.now, time.format, random.int, random.shuffle, etc.)
 
 ### Concurrency & Actors
 - `actor_basic.lx`: Core actor patterns (state, handlers, sending)
@@ -194,7 +195,7 @@ lx apply-refactor <file.lx> <refactorName>
 ---
 
 ## 🐛 Known Issues / Gaps
-1.  **Standard Library**: Very limited. Missing File I/O, Networking, Date/Time.
+1.  **Standard Library**: Missing Networking (TCP/UDP sockets, HTTP client/server).
 2.  **No REPL**: Interaction is file-based only.
 3.  **Parallel Primitives**: `parallel_map` exists but runs sequentially.
 

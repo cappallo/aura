@@ -99,7 +99,7 @@ export function typecheckModules(
   const errors: TypeCheckError[] = [];
 
   const globalFunctions = new Map<string, FnSignature>();
-  const globalEffects = new Set<string>(["Concurrent", "Log"]);
+  const globalEffects = new Set<string>(["Concurrent", "Log", "Io"]);
   const globalSumTypes = new Map<string, SumTypeInfo>();
   const globalRecordTypes = new Map<string, RecordTypeInfo>();
   const globalTypeDecls = new Map<string, TypeDeclInfo>();

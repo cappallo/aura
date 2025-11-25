@@ -99,6 +99,27 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "sys.args": [],
   "sys.env": ["name"],
   "sys.cwd": [],
+  // Time builtins
+  "time.now": [],
+  "time.format": ["timestamp", "format"],
+  "time.parse": ["date_string", "format"],
+  "time.add_seconds": ["timestamp", "seconds"],
+  "time.add_minutes": ["timestamp", "minutes"],
+  "time.add_hours": ["timestamp", "hours"],
+  "time.add_days": ["timestamp", "days"],
+  "time.diff_seconds": ["t1", "t2"],
+  "time.year": ["timestamp"],
+  "time.month": ["timestamp"],
+  "time.day": ["timestamp"],
+  "time.hour": ["timestamp"],
+  "time.minute": ["timestamp"],
+  "time.second": ["timestamp"],
+  // Random builtins
+  "random.int": ["min", "max"],
+  "random.bool": [],
+  "random.choice": ["list"],
+  "random.shuffle": ["list"],
+  "random.float": [],
 };
 
 /** Get parameter names for a builtin function (throws if not found) */
@@ -527,6 +548,46 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinSysEnv(expr, env, runtime);
     case "sys.cwd":
       return builtinSysCwd(expr, env, runtime);
+    // Time builtins
+    case "time.now":
+      return builtinTimeNow(expr, env, runtime);
+    case "time.format":
+      return builtinTimeFormat(expr, env, runtime);
+    case "time.parse":
+      return builtinTimeParse(expr, env, runtime);
+    case "time.add_seconds":
+      return builtinTimeAddSeconds(expr, env, runtime);
+    case "time.add_minutes":
+      return builtinTimeAddMinutes(expr, env, runtime);
+    case "time.add_hours":
+      return builtinTimeAddHours(expr, env, runtime);
+    case "time.add_days":
+      return builtinTimeAddDays(expr, env, runtime);
+    case "time.diff_seconds":
+      return builtinTimeDiffSeconds(expr, env, runtime);
+    case "time.year":
+      return builtinTimeYear(expr, env, runtime);
+    case "time.month":
+      return builtinTimeMonth(expr, env, runtime);
+    case "time.day":
+      return builtinTimeDay(expr, env, runtime);
+    case "time.hour":
+      return builtinTimeHour(expr, env, runtime);
+    case "time.minute":
+      return builtinTimeMinute(expr, env, runtime);
+    case "time.second":
+      return builtinTimeSecond(expr, env, runtime);
+    // Random builtins
+    case "random.int":
+      return builtinRandomInt(expr, env, runtime);
+    case "random.bool":
+      return builtinRandomBool(expr, env, runtime);
+    case "random.choice":
+      return builtinRandomChoice(expr, env, runtime);
+    case "random.shuffle":
+      return builtinRandomShuffle(expr, env, runtime);
+    case "random.float":
+      return builtinRandomFloat(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -1498,6 +1559,290 @@ function builtinSysEnv(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
 function builtinSysCwd(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
   bindCallArguments(expr, getBuiltinParamNames("sys.cwd"), env, runtime);
   return { kind: "String", value: process.cwd() };
+}
+
+// ============================================================================
+// Time Builtins
+// ============================================================================
+
+function builtinTimeNow(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("time.now"), env, runtime);
+  return { kind: "Int", value: Date.now() };
+}
+
+function builtinTimeFormat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.format"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  const format = expectValue(values, "format", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.format expects an integer timestamp");
+  }
+  if (format.kind !== "String") {
+    throw new RuntimeError("time.format expects a string format");
+  }
+  
+  const date = new Date(timestamp.value);
+  const formatStr = format.value;
+  
+  // Simple format string substitution
+  // Supported: %Y (year), %m (month), %d (day), %H (hour), %M (minute), %S (second)
+  const result = formatStr
+    .replace(/%Y/g, date.getFullYear().toString())
+    .replace(/%m/g, (date.getMonth() + 1).toString().padStart(2, "0"))
+    .replace(/%d/g, date.getDate().toString().padStart(2, "0"))
+    .replace(/%H/g, date.getHours().toString().padStart(2, "0"))
+    .replace(/%M/g, date.getMinutes().toString().padStart(2, "0"))
+    .replace(/%S/g, date.getSeconds().toString().padStart(2, "0"));
+  
+  return { kind: "String", value: result };
+}
+
+function builtinTimeParse(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.parse"), env, runtime);
+  const dateString = expectValue(values, "date_string", expr.callee);
+  const format = expectValue(values, "format", expr.callee);
+  
+  if (dateString.kind !== "String") {
+    throw new RuntimeError("time.parse expects a string date_string");
+  }
+  if (format.kind !== "String") {
+    throw new RuntimeError("time.parse expects a string format");
+  }
+  
+  // Simple ISO date parsing (format parameter guides which parts to extract)
+  // For now, we support ISO-8601 format strings
+  try {
+    const date = new Date(dateString.value);
+    if (isNaN(date.getTime())) {
+      return makeCtor("None");
+    }
+    return makeCtor("Some", [["value", { kind: "Int", value: date.getTime() }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinTimeAddSeconds(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.add_seconds"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  const seconds = expectValue(values, "seconds", expr.callee);
+  
+  if (timestamp.kind !== "Int" || seconds.kind !== "Int") {
+    throw new RuntimeError("time.add_seconds expects integer arguments");
+  }
+  
+  return { kind: "Int", value: timestamp.value + seconds.value * 1000 };
+}
+
+function builtinTimeAddMinutes(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.add_minutes"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  const minutes = expectValue(values, "minutes", expr.callee);
+  
+  if (timestamp.kind !== "Int" || minutes.kind !== "Int") {
+    throw new RuntimeError("time.add_minutes expects integer arguments");
+  }
+  
+  return { kind: "Int", value: timestamp.value + minutes.value * 60 * 1000 };
+}
+
+function builtinTimeAddHours(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.add_hours"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  const hours = expectValue(values, "hours", expr.callee);
+  
+  if (timestamp.kind !== "Int" || hours.kind !== "Int") {
+    throw new RuntimeError("time.add_hours expects integer arguments");
+  }
+  
+  return { kind: "Int", value: timestamp.value + hours.value * 60 * 60 * 1000 };
+}
+
+function builtinTimeAddDays(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.add_days"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  const days = expectValue(values, "days", expr.callee);
+  
+  if (timestamp.kind !== "Int" || days.kind !== "Int") {
+    throw new RuntimeError("time.add_days expects integer arguments");
+  }
+  
+  return { kind: "Int", value: timestamp.value + days.value * 24 * 60 * 60 * 1000 };
+}
+
+function builtinTimeDiffSeconds(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.diff_seconds"), env, runtime);
+  const t1 = expectValue(values, "t1", expr.callee);
+  const t2 = expectValue(values, "t2", expr.callee);
+  
+  if (t1.kind !== "Int" || t2.kind !== "Int") {
+    throw new RuntimeError("time.diff_seconds expects integer arguments");
+  }
+  
+  return { kind: "Int", value: Math.floor((t2.value - t1.value) / 1000) };
+}
+
+function builtinTimeYear(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.year"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.year expects an integer timestamp");
+  }
+  
+  return { kind: "Int", value: new Date(timestamp.value).getFullYear() };
+}
+
+function builtinTimeMonth(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.month"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.month expects an integer timestamp");
+  }
+  
+  // Return 1-indexed month (January = 1)
+  return { kind: "Int", value: new Date(timestamp.value).getMonth() + 1 };
+}
+
+function builtinTimeDay(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.day"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.day expects an integer timestamp");
+  }
+  
+  return { kind: "Int", value: new Date(timestamp.value).getDate() };
+}
+
+function builtinTimeHour(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.hour"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.hour expects an integer timestamp");
+  }
+  
+  return { kind: "Int", value: new Date(timestamp.value).getHours() };
+}
+
+function builtinTimeMinute(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.minute"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.minute expects an integer timestamp");
+  }
+  
+  return { kind: "Int", value: new Date(timestamp.value).getMinutes() };
+}
+
+function builtinTimeSecond(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("time.second"), env, runtime);
+  const timestamp = expectValue(values, "timestamp", expr.callee);
+  
+  if (timestamp.kind !== "Int") {
+    throw new RuntimeError("time.second expects an integer timestamp");
+  }
+  
+  return { kind: "Int", value: new Date(timestamp.value).getSeconds() };
+}
+
+// ============================================================================
+// Random Builtins
+// ============================================================================
+
+function builtinRandomInt(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("random.int"), env, runtime);
+  const minVal = expectValue(values, "min", expr.callee);
+  const maxVal = expectValue(values, "max", expr.callee);
+  
+  if (minVal.kind !== "Int" || maxVal.kind !== "Int") {
+    throw new RuntimeError("random.int expects integer arguments");
+  }
+  
+  const min = minVal.value;
+  const max = maxVal.value;
+  
+  // Use seeded RNG if available, otherwise use Math.random
+  if (runtime.rng) {
+    const random = runtime.rng.next();
+    return { kind: "Int", value: Math.floor(random * (max - min + 1)) + min };
+  } else {
+    return { kind: "Int", value: Math.floor(Math.random() * (max - min + 1)) + min };
+  }
+}
+
+function builtinRandomBool(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("random.bool"), env, runtime);
+  
+  if (runtime.rng) {
+    return { kind: "Bool", value: runtime.rng.next() < 0.5 };
+  } else {
+    return { kind: "Bool", value: Math.random() < 0.5 };
+  }
+}
+
+function builtinRandomChoice(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("random.choice"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  
+  if (list.kind !== "List") {
+    throw new RuntimeError("random.choice expects a list argument");
+  }
+  
+  if (list.elements.length === 0) {
+    return makeCtor("None");
+  }
+  
+  let index: number;
+  if (runtime.rng) {
+    index = Math.floor(runtime.rng.next() * list.elements.length);
+  } else {
+    index = Math.floor(Math.random() * list.elements.length);
+  }
+  
+  return makeCtor("Some", [["value", list.elements[index]!]]);
+}
+
+function builtinRandomShuffle(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("random.shuffle"), env, runtime);
+  const list = expectValue(values, "list", expr.callee);
+  
+  if (list.kind !== "List") {
+    throw new RuntimeError("random.shuffle expects a list argument");
+  }
+  
+  // Fisher-Yates shuffle
+  const shuffled = [...list.elements];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    let j: number;
+    if (runtime.rng) {
+      j = Math.floor(runtime.rng.next() * (i + 1));
+    } else {
+      j = Math.floor(Math.random() * (i + 1));
+    }
+    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+  }
+  
+  return { kind: "List", elements: shuffled };
+}
+
+function builtinRandomFloat(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("random.float"), env, runtime);
+  
+  // Return as integer * 1000000 since we don't have float type
+  // This gives 6 decimal places of precision
+  let random: number;
+  if (runtime.rng) {
+    random = runtime.rng.next();
+  } else {
+    random = Math.random();
+  }
+  
+  return { kind: "Int", value: Math.floor(random * 1000000) };
 }
 
 function resolveFunctionReference(name: string, runtime: Runtime, context: string): ast.FnDecl {
