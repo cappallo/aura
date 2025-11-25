@@ -642,6 +642,19 @@ module app.auth
 - `list.zip(left: List<A>, right: List<B>) -> List<Pair<A, B>>` - Combine two lists
 - `list.enumerate(list: List<T>) -> List<Indexed<T>>` - Add indices
 
+**File I/O (requires `[Io]` effect):**
+- `io.read_file(path: String) -> Option<String>` - Read entire file
+- `io.write_file(path: String, content: String) -> Bool` - Write to file
+- `io.append_file(path: String, content: String) -> Bool` - Append to file
+- `io.file_exists(path: String) -> Bool` - Check if file exists
+- `io.read_lines(path: String) -> Option<List<String>>` - Read file as lines
+- `io.delete_file(path: String) -> Bool` - Delete file
+
+**System (requires `[Io]` effect):**
+- `sys.env(name: String) -> Option<String>` - Get environment variable
+- `sys.cwd() -> String` - Get current working directory
+- `sys.args() -> List<String>` - Get command line arguments
+
 **Printing (requires `[Io]` effect):**
 - `print(value: String) -> [Io] Unit`
 - `println(value: String) -> [Io] Unit`

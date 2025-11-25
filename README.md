@@ -83,7 +83,7 @@ The interpreter now exposes `parallel_map`, `parallel_fold`, and `parallel_for_e
 ## Documentation
 
 - **[SPEC.md](SPEC.md)** - Full language specification
-- **[SPEC.md](SPEC.md)** - Full language specification (including Concurrency)
+- **[WHY.md](WHY.md)** - Why you (or your AI) should care about Lx
 - **[THOUGHTS.md](THOUGHTS.md)** - Design philosophy and LLM-first principles
 - **[STATUS.md](STATUS.md)** - **Source of Truth** for implementation status and roadmap
 

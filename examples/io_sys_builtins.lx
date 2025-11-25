@@ -1,0 +1,139 @@
+module examples.io_sys_builtins
+
+/// context: Demonstrates File I/O and System builtins.
+/// These functions require the [Io] effect to be declared.
+
+effect Io
+
+/// File I/O functions
+
+fn write_test_file() -> [Io] Bool {
+  io.write_file("tmp/test_io.txt", "Hello, Lx!")
+}
+
+fn read_test_file() -> [Io] String? {
+  io.read_file("tmp/test_io.txt")
+}
+
+fn append_to_test_file() -> [Io] Bool {
+  io.append_file("tmp/test_io.txt", "\nAppended line")
+}
+
+fn check_file_exists() -> [Io] Bool {
+  io.file_exists("tmp/test_io.txt")
+}
+
+fn read_lines_test() -> [Io] List<String>? {
+  io.read_lines("tmp/test_io.txt")
+}
+
+fn cleanup_test_file() -> [Io] Bool {
+  io.delete_file("tmp/test_io.txt")
+}
+
+/// System functions
+
+fn get_cwd() -> [Io] String {
+  sys.cwd()
+}
+
+fn get_path_env() -> [Io] String? {
+  sys.env("PATH")
+}
+
+fn get_nonexistent_env() -> [Io] String? {
+  sys.env("NONEXISTENT_VAR_12345")
+}
+
+/// Tests
+
+test file_write_read {
+  // Write a file
+  let write_result: Bool = write_test_file()
+  assert(write_result)
+  
+  // Check it exists
+  let exists: Bool = check_file_exists()
+  assert(exists)
+  
+  // Read it back
+  match read_test_file() {
+    case Some { value: content } => {
+      assert(content == "Hello, Lx!")
+    }
+    case None => {
+      assert(false)
+    }
+  }
+}
+
+test file_append {
+  // Ensure file exists first
+  let write_ok = io.write_file("tmp/test_append.txt", "Line 1")
+  assert(write_ok)
+  
+  // Append content
+  let append_ok = io.append_file("tmp/test_append.txt", "\nLine 2")
+  assert(append_ok)
+  
+  // Read lines
+  match io.read_lines("tmp/test_append.txt") {
+    case Some { value: lines } => {
+      assert(list.len(lines) == 2)
+    }
+    case None => {
+      assert(false)
+    }
+  }
+  
+  // Cleanup
+  let deleted = io.delete_file("tmp/test_append.txt")
+  assert(deleted)
+}
+
+test file_not_found {
+  match io.read_file("nonexistent_file_12345.txt") {
+    case Some { value: content } => {
+      assert(false)
+    }
+    case None => {
+      assert(true)
+    }
+  }
+}
+
+test sys_cwd {
+  let cwd: String = sys.cwd()
+  // CWD should be non-empty
+  assert(str.len(cwd) > 0)
+}
+
+test sys_env_path {
+  // PATH should exist on most systems
+  match sys.env("PATH") {
+    case Some { value: path } => {
+      assert(str.len(path) > 0)
+    }
+    case None => {
+      // PATH might not exist on some systems, that's ok
+      assert(true)
+    }
+  }
+}
+
+test sys_env_nonexistent {
+  match sys.env("NONEXISTENT_VAR_12345") {
+    case Some { value: v } => {
+      assert(false)
+    }
+    case None => {
+      assert(true)
+    }
+  }
+}
+
+test cleanup {
+  // Clean up any test files that might be left over
+  let _ = io.delete_file("tmp/test_io.txt")
+  assert(true)
+}

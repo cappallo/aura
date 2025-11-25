@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~88% (Core ~87%, Tooling ~95%, Concurrency ~80%)
+**Overall Progress:** ~90% (Core ~89%, Tooling ~95%, Concurrency ~80%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -17,8 +17,8 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 - [x] **String Operations**: split, join, contains, starts_with, ends_with, trim, to_upper, to_lower, replace, index_of
 - [x] **List Operations**: head, tail, take, drop, reverse, contains, find, flat_map, zip, enumerate
 - [ ] **Networking**: TCP/UDP sockets, HTTP client/server bindings
-- [ ] **File I/O**: File reading/writing, directory traversal, path manipulation
-- [ ] **System**: Environment variables, process arguments, subprocess spawning
+- [x] **File I/O**: read_file, write_file, file_exists, read_lines, append_file, delete_file
+- [x] **System**: env (environment variables), cwd (current directory), args (command line)
 - [ ] **Date & Time**: Clock access, durations, formatting
 - [ ] **Random**: General purpose RNG (beyond testing)
 
@@ -114,6 +114,7 @@ The `examples/` directory contains verified "gold standard" code.
 - `result.lx`: Error handling patterns
 - `fibonacci.lx`: Recursion benchmarks
 - `string_list_builtins.lx`: Extended string and list operations (split, join, trim, head, tail, zip, etc.)
+- `io_sys_builtins.lx`: File I/O and System builtins (read_file, write_file, env, cwd, etc.)
 
 ### Concurrency & Actors
 - `actor_basic.lx`: Core actor patterns (state, handlers, sending)

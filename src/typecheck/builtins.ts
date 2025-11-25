@@ -418,6 +418,62 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([STRING_TYPE], resultType);
     },
   },
+  // File I/O builtins (require Io effect)
+  "io.read_file": {
+    arity: 1,
+    paramNames: ["path"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE], makeOptionType(STRING_TYPE)),
+  },
+  "io.write_file": {
+    arity: 2,
+    paramNames: ["path", "content"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], BOOL_TYPE),
+  },
+  "io.file_exists": {
+    arity: 1,
+    paramNames: ["path"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE], BOOL_TYPE),
+  },
+  "io.read_lines": {
+    arity: 1,
+    paramNames: ["path"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE], makeOptionType(makeListType(STRING_TYPE))),
+  },
+  "io.append_file": {
+    arity: 2,
+    paramNames: ["path", "content"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE, STRING_TYPE], BOOL_TYPE),
+  },
+  "io.delete_file": {
+    arity: 1,
+    paramNames: ["path"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE], BOOL_TYPE),
+  },
+  // System builtins
+  "sys.args": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([], makeListType(STRING_TYPE)),
+  },
+  "sys.env": {
+    arity: 1,
+    paramNames: ["name"],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([STRING_TYPE], makeOptionType(STRING_TYPE)),
+  },
+  "sys.cwd": {
+    arity: 0,
+    paramNames: [],
+    effects: new Set(["Io"]),
+    instantiateType: () => makeFunctionType([], STRING_TYPE),
+  },
 };
 
 export const PURE_BUILTIN_FUNCTION_PARAMS: Record<string, string[]> = {

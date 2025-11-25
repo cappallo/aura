@@ -1,4 +1,5 @@
 import * as ast from "../ast";
+import * as fs from "fs";
 import { alignCallArguments, CallArgIssue } from "../callargs";
 import { RuntimeError } from "./errors";
 import {
@@ -87,6 +88,17 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "Concurrent.flush": [],
   "Concurrent.step": [],
   "Concurrent.stop": ["actor"],
+  // File I/O builtins
+  "io.read_file": ["path"],
+  "io.write_file": ["path", "content"],
+  "io.file_exists": ["path"],
+  "io.read_lines": ["path"],
+  "io.append_file": ["path", "content"],
+  "io.delete_file": ["path"],
+  // System builtins
+  "sys.args": [],
+  "sys.env": ["name"],
+  "sys.cwd": [],
 };
 
 /** Get parameter names for a builtin function (throws if not found) */
@@ -495,6 +507,26 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
       return builtinConcurrentStep(expr, env, runtime);
     case "Concurrent.stop":
       return builtinConcurrentStop(expr, env, runtime);
+    // File I/O builtins
+    case "io.read_file":
+      return builtinIoReadFile(expr, env, runtime);
+    case "io.write_file":
+      return builtinIoWriteFile(expr, env, runtime);
+    case "io.file_exists":
+      return builtinIoFileExists(expr, env, runtime);
+    case "io.read_lines":
+      return builtinIoReadLines(expr, env, runtime);
+    case "io.append_file":
+      return builtinIoAppendFile(expr, env, runtime);
+    case "io.delete_file":
+      return builtinIoDeleteFile(expr, env, runtime);
+    // System builtins
+    case "sys.args":
+      return builtinSysArgs(expr, env, runtime);
+    case "sys.env":
+      return builtinSysEnv(expr, env, runtime);
+    case "sys.cwd":
+      return builtinSysCwd(expr, env, runtime);
     case "__negate":
       return builtinNegate(expr, env, runtime);
     case "__not":
@@ -1343,6 +1375,129 @@ function builtinConcurrentStop(expr: ast.CallExpr, env: Env, runtime: Runtime): 
   }
   const stopped = stopActor(runtime, actorValue.id);
   return makeBool(stopped);
+}
+
+// ============================================================================
+// File I/O Builtins
+// ============================================================================
+
+function builtinIoReadFile(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.read_file"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.read_file expects a string path argument");
+  }
+  try {
+    const content = fs.readFileSync(pathValue.value, "utf-8");
+    return makeCtor("Some", [["value", { kind: "String", value: content }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinIoWriteFile(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.write_file"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  const contentValue = expectValue(values, "content", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.write_file expects a string path argument");
+  }
+  if (contentValue.kind !== "String") {
+    throw new RuntimeError("io.write_file expects a string content argument");
+  }
+  try {
+    fs.writeFileSync(pathValue.value, contentValue.value, "utf-8");
+    return makeBool(true);
+  } catch {
+    return makeBool(false);
+  }
+}
+
+function builtinIoFileExists(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.file_exists"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.file_exists expects a string path argument");
+  }
+  return makeBool(fs.existsSync(pathValue.value));
+}
+
+function builtinIoReadLines(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.read_lines"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.read_lines expects a string path argument");
+  }
+  try {
+    const content = fs.readFileSync(pathValue.value, "utf-8");
+    const lines = content.split("\n");
+    const lineValues: Value[] = lines.map((line) => ({ kind: "String" as const, value: line }));
+    return makeCtor("Some", [["value", { kind: "List", elements: lineValues }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinIoAppendFile(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.append_file"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  const contentValue = expectValue(values, "content", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.append_file expects a string path argument");
+  }
+  if (contentValue.kind !== "String") {
+    throw new RuntimeError("io.append_file expects a string content argument");
+  }
+  try {
+    fs.appendFileSync(pathValue.value, contentValue.value, "utf-8");
+    return makeBool(true);
+  } catch {
+    return makeBool(false);
+  }
+}
+
+function builtinIoDeleteFile(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("io.delete_file"), env, runtime);
+  const pathValue = expectValue(values, "path", expr.callee);
+  if (pathValue.kind !== "String") {
+    throw new RuntimeError("io.delete_file expects a string path argument");
+  }
+  try {
+    fs.unlinkSync(pathValue.value);
+    return makeBool(true);
+  } catch {
+    return makeBool(false);
+  }
+}
+
+// ============================================================================
+// System Builtins
+// ============================================================================
+
+function builtinSysArgs(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("sys.args"), env, runtime);
+  // Skip node executable and script path
+  const args = process.argv.slice(2);
+  const argValues: Value[] = args.map((arg) => ({ kind: "String" as const, value: arg }));
+  return { kind: "List", elements: argValues };
+}
+
+function builtinSysEnv(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("sys.env"), env, runtime);
+  const nameValue = expectValue(values, "name", expr.callee);
+  if (nameValue.kind !== "String") {
+    throw new RuntimeError("sys.env expects a string name argument");
+  }
+  const value = process.env[nameValue.value];
+  if (value !== undefined) {
+    return makeCtor("Some", [["value", { kind: "String", value }]]);
+  }
+  return makeCtor("None");
+}
+
+function builtinSysCwd(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  bindCallArguments(expr, getBuiltinParamNames("sys.cwd"), env, runtime);
+  return { kind: "String", value: process.cwd() };
 }
 
 function resolveFunctionReference(name: string, runtime: Runtime, context: string): ast.FnDecl {
