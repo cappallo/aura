@@ -26,9 +26,9 @@ Implement in this order (The "Vertical Slice"):
 
 ## 5. RECORD
 - **Update `STATUS.md`**:
-    - Mark item as ✅.
+    - Mark item as ✅ in the Feature Matrix or Detailed Status.
     - Update "Overall Progress" %.
-    - Add notes to "Recent Work".
+    - Move completed items from Roadmap to Detailed Status.
     - Add any new "Known Issues".
 - **Update `LX_AI_GUIDE.md`**: If a user-facing feature, document it.
 
