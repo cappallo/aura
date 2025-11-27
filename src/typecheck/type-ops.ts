@@ -26,7 +26,6 @@ export function findTypeDecl(
   ctx: TypecheckContext,
   module: ast.Module | undefined,
 ): TypeDeclInfo | undefined {
-  // console.log(`findTypeDecl: ${name}`);
   if (ctx.typeDecls.has(name)) {
     return ctx.typeDecls.get(name);
   }

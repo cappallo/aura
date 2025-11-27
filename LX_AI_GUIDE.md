@@ -712,6 +712,45 @@ fn fetch_json(url: String) -> [Io] Option<String> {
 - `tcp.receive(socket: TcpSocket) -> Option<String>` - Receive data from socket
 - `tcp.close(socket: TcpSocket) -> Unit` - Close socket
 
+**TCP Server (requires `[Io]` effect):**
+- `tcp.listen(port: Int) -> Option<TcpServer>` - Bind to a port and start listening
+- `tcp.accept(server: TcpServer) -> Option<TcpSocket>` - Accept incoming connection (blocking, waits for connection)
+- `tcp.close_server(server: TcpServer) -> Unit` - Stop listening and close server
+
+```lx
+/// Example: Echo server that handles one connection
+fn echo_once() -> [Io] Bool {
+  match tcp.listen(8080) {
+    case Some { value: server } => {
+      match tcp.accept(server) {
+        case Some { value: client } => {
+          match tcp.receive(client) {
+            case Some { value: msg } => {
+              let _ = tcp.send(client, msg)
+              let _ = tcp.close(client)
+              let _ = tcp.close_server(server)
+              return true
+            }
+            case None => {
+              let _ = tcp.close(client)
+              let _ = tcp.close_server(server)
+              return false
+            }
+          }
+        }
+        case None => {
+          let _ = tcp.close_server(server)
+          return false
+        }
+      }
+    }
+    case None => {
+      return false
+    }
+  }
+}
+```
+
 **Printing (requires `[Io]` effect):**
 - `print(value: String) -> [Io] Unit`
 - `println(value: String) -> [Io] Unit`

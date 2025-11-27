@@ -700,6 +700,51 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinFunctionInfo> = {
       return makeFunctionType([socketType], UNIT_TYPE);
     },
   },
+  // TCP server builtins
+  "tcp.listen": {
+    arity: 1,
+    paramNames: ["port"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const serverType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpServer",
+        args: [],
+      };
+      return makeFunctionType([INT_TYPE], makeOptionType(serverType));
+    },
+  },
+  "tcp.accept": {
+    arity: 1,
+    paramNames: ["server"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const serverType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpServer",
+        args: [],
+      };
+      const socketType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpSocket",
+        args: [],
+      };
+      return makeFunctionType([serverType], makeOptionType(socketType));
+    },
+  },
+  "tcp.close_server": {
+    arity: 1,
+    paramNames: ["server"],
+    effects: new Set(["Io"]),
+    instantiateType: () => {
+      const serverType: TypeConstructor = {
+        kind: "Constructor",
+        name: "TcpServer",
+        args: [],
+      };
+      return makeFunctionType([serverType], UNIT_TYPE);
+    },
+  },
 };
 
 export const PURE_BUILTIN_FUNCTION_PARAMS: Record<string, string[]> = {
@@ -713,4 +758,6 @@ export const BUILTIN_SCALAR_TYPES = new Map<string, TypeConstructor>([
   ["Bool", BOOL_TYPE],
   ["String", STRING_TYPE],
   ["Unit", UNIT_TYPE],
+  ["TcpSocket", { kind: "Constructor", name: "TcpSocket", args: [] }],
+  ["TcpServer", { kind: "Constructor", name: "TcpServer", args: [] }],
 ]);

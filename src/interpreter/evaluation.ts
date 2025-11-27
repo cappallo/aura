@@ -132,6 +132,10 @@ const BUILTIN_PARAM_NAMES: Record<string, string[]> = {
   "tcp.send": ["socket", "data"],
   "tcp.receive": ["socket"],
   "tcp.close": ["socket"],
+  // TCP server builtins
+  "tcp.listen": ["port"],
+  "tcp.accept": ["server"],
+  "tcp.close_server": ["server"],
 };
 
 /** Get parameter names for a builtin function (throws if not found) */
@@ -608,6 +612,12 @@ function evalCall(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
     case "http.request":
       return builtinHttpRequest(expr, env, runtime);
     // TCP socket builtins
+    case "tcp.listen":
+      return builtinTcpListen(expr, env, runtime);
+    case "tcp.accept":
+      return builtinTcpAccept(expr, env, runtime);
+    case "tcp.close_server":
+      return builtinTcpCloseServer(expr, env, runtime);
     case "tcp.connect":
       return builtinTcpConnect(expr, env, runtime);
     case "tcp.send":
@@ -2498,11 +2508,35 @@ function builtinTcpReceive(expr: ast.CallExpr, env: Env, runtime: Runtime): Valu
     return makeCtor("None");
   }
   
-  // TCP receive is inherently async in Node.js
-  // For a synchronous API, we'd need to buffer data
-  // For now, we'll return whatever is available in the buffer or None
   try {
-    const data = socket.read();
+    // Try to read immediately
+    let data = socket.read();
+    
+    // If no data, block and wait for it
+    if (data === null) {
+      const deasync = require("deasync");
+      let readable = false;
+      let ended = false;
+      
+      const onReadable = () => { readable = true; };
+      const onEnd = () => { ended = true; };
+      const onClose = () => { ended = true; };
+      
+      socket.once("readable", onReadable);
+      socket.once("end", onEnd);
+      socket.once("close", onClose);
+      
+      // Wait for data, end of stream, or socket destruction
+      deasync.loopWhile(() => !readable && !ended && !socket.destroyed);
+      
+      socket.removeListener("readable", onReadable);
+      socket.removeListener("end", onEnd);
+      socket.removeListener("close", onClose);
+      
+      // Try reading again
+      data = socket.read();
+    }
+    
     if (data === null) {
       return makeCtor("None");
     }
@@ -2533,6 +2567,176 @@ function builtinTcpClose(expr: ast.CallExpr, env: Env, runtime: Runtime): Value 
       // Ignore errors on close
     }
     tcpSockets.delete(socketIdValue.value);
+  }
+  
+  return { kind: "Unit" };
+}
+
+// ============================================================================
+// TCP Server Builtins
+// ============================================================================
+
+interface TcpServerData {
+  server: net.Server;
+  pendingConnections: net.Socket[];
+  closed: boolean;
+}
+
+const tcpServers = new Map<number, TcpServerData>();
+let nextServerId = 1;
+
+function builtinTcpListen(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.listen"), env, runtime);
+  const portValue = expectValue(values, "port", expr.callee);
+  
+  if (portValue.kind !== "Int") {
+    throw new RuntimeError("tcp.listen expects an integer port argument");
+  }
+  
+  const port = portValue.value;
+  const serverId = nextServerId++;
+  
+  try {
+    const server = net.createServer();
+    const serverData: TcpServerData = {
+      server,
+      pendingConnections: [],
+      closed: false,
+    };
+    
+    // Set up connection handling - queue incoming connections
+    server.on("connection", (socket: net.Socket) => {
+      if (!serverData.closed) {
+        serverData.pendingConnections.push(socket);
+      } else {
+        socket.destroy();
+      }
+    });
+    
+    // Start listening
+    let listenError: Error | null = null;
+    let listening = false;
+    
+    server.on("error", (err: Error) => {
+      listenError = err;
+      listening = true; // Stop waiting
+    });
+    
+    server.listen(port, () => {
+      listening = true;
+    });
+    
+    // Block until listening or error
+    const deasync = require("deasync");
+    deasync.loopWhile(() => !listening);
+    
+    if (listenError) {
+      server.close();
+      return makeCtor("None");
+    }
+    
+    // Store the server
+    tcpServers.set(serverId, serverData);
+    
+    // Create the TcpServer value
+    const fields = new Map<string, Value>();
+    fields.set("id", makeInt(serverId));
+    fields.set("port", makeInt(port));
+    
+    return makeCtor("Some", [["value", { kind: "Ctor", name: "TcpServer", fields }]]);
+  } catch {
+    return makeCtor("None");
+  }
+}
+
+function builtinTcpAccept(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.accept"), env, runtime);
+  const serverValue = expectValue(values, "server", expr.callee);
+  
+  if (serverValue.kind !== "Ctor" || serverValue.name !== "TcpServer") {
+    throw new RuntimeError("tcp.accept expects a TcpServer argument");
+  }
+  
+  const serverIdValue = serverValue.fields.get("id");
+  if (!serverIdValue || serverIdValue.kind !== "Int") {
+    throw new RuntimeError("Invalid TcpServer value");
+  }
+  
+  const serverData = tcpServers.get(serverIdValue.value);
+  if (!serverData || serverData.closed) {
+    return makeCtor("None");
+  }
+  
+  // If we already have a pending connection, use it immediately
+  if (serverData.pendingConnections.length > 0) {
+    const socket = serverData.pendingConnections.shift()!;
+    const socketId = nextSocketId++;
+    tcpSockets.set(socketId, socket);
+    
+    const remoteAddr = socket.remoteAddress ?? "unknown";
+    const remotePort = socket.remotePort ?? 0;
+    
+    const fields = new Map<string, Value>();
+    fields.set("id", makeInt(socketId));
+    fields.set("host", { kind: "String", value: remoteAddr });
+    fields.set("port", makeInt(remotePort));
+    
+    return makeCtor("Some", [["value", { kind: "Ctor", name: "TcpSocket", fields }]]);
+  }
+  
+  // Wait for a connection using deasync
+  const deasync = require("deasync");
+  
+  // Loop until we have a connection or the server is closed
+  // This blocks the interpreter but pumps the event loop
+  deasync.loopWhile(() => serverData.pendingConnections.length === 0 && !serverData.closed);
+  
+  if (serverData.closed || serverData.pendingConnections.length === 0) {
+    return makeCtor("None");
+  }
+  
+  const socket = serverData.pendingConnections.shift()!;
+  const socketId = nextSocketId++;
+  tcpSockets.set(socketId, socket);
+  
+  const remoteAddr = socket.remoteAddress ?? "unknown";
+  const remotePort = socket.remotePort ?? 0;
+  
+  const fields = new Map<string, Value>();
+  fields.set("id", makeInt(socketId));
+  fields.set("host", { kind: "String", value: remoteAddr });
+  fields.set("port", makeInt(remotePort));
+  
+  return makeCtor("Some", [["value", { kind: "Ctor", name: "TcpSocket", fields }]]);
+}
+
+function builtinTcpCloseServer(expr: ast.CallExpr, env: Env, runtime: Runtime): Value {
+  const { values } = bindCallArguments(expr, getBuiltinParamNames("tcp.close_server"), env, runtime);
+  const serverValue = expectValue(values, "server", expr.callee);
+  
+  if (serverValue.kind !== "Ctor" || serverValue.name !== "TcpServer") {
+    throw new RuntimeError("tcp.close_server expects a TcpServer argument");
+  }
+  
+  const serverIdValue = serverValue.fields.get("id");
+  if (!serverIdValue || serverIdValue.kind !== "Int") {
+    throw new RuntimeError("Invalid TcpServer value");
+  }
+  
+  const serverData = tcpServers.get(serverIdValue.value);
+  if (serverData) {
+    try {
+      serverData.server.close();
+      serverData.closed = true;
+      // Close all pending connections
+      for (const socket of serverData.pendingConnections) {
+        socket.destroy();
+      }
+      serverData.pendingConnections = [];
+    } catch {
+      // Ignore errors
+    }
+    tcpServers.delete(serverIdValue.value);
   }
   
   return { kind: "Unit" };

@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "deasync": "^0.1.31",
     "peggy": "^5.0.6"
   },
   "devDependencies": {

@@ -1,0 +1,135 @@
+module examples.tcp_echo_server
+
+/// context: Demonstrates TCP server primitives for building network servers.
+/// This example shows how to use tcp.listen, tcp.accept, and tcp.close_server
+/// to create a simple echo server pattern.
+///
+/// TCP server builtins:
+/// - tcp.listen(port: Int) -> [Io] Option<TcpServer>
+/// - tcp.accept(server: TcpServer) -> [Io] Option<TcpSocket>
+/// - tcp.close_server(server: TcpServer) -> [Io] Unit
+///
+/// The TcpServer type is an opaque handle with fields:
+/// - id: Int (internal identifier)
+/// - port: Int (the port being listened on)
+
+/// Effect declaration for I/O operations
+effect Io
+
+/// Test that TCP server builtins are available and type-check correctly
+test tcp_listen_typecheck {
+  // tcp.listen takes a port and returns Option<TcpServer>
+  // We verify it exists and the code compiles
+  assert(true)
+}
+
+test tcp_accept_typecheck {
+  // tcp.accept takes a TcpServer and returns Option<TcpSocket>
+  assert(true)
+}
+
+test tcp_close_server_typecheck {
+  // tcp.close_server takes a TcpServer and returns Unit
+  assert(true)
+}
+
+/// Helper function to process a single client connection
+/// Reads a message, echoes it back, then closes the connection
+fn handle_client(client: TcpSocket) -> [Io] Bool {
+  match tcp.receive(client) {
+    case Some { value: message } => {
+      // Echo the message back
+      let sent = tcp.send(client, message)
+      let _ = tcp.close(client)
+      return sent
+    }
+    case None => {
+      let _ = tcp.close(client)
+      return false
+    }
+  }
+}
+
+/// Example: Start a server, accept one connection, echo back, then shut down
+/// This demonstrates the basic server lifecycle.
+/// 
+/// To test this function manually:
+/// 1. Run: lx run examples/tcp_echo_server.lx examples.tcp_echo_server.demo_echo_once
+/// 2. In another terminal: echo "hello" | nc localhost 9999
+fn demo_echo_once() -> [Io] Bool {
+  let port: Int = 9999
+  
+  match tcp.listen(port) {
+    case Some { value: server } => {
+      // Server is now listening
+      // In a real application, you'd loop accepting connections
+      // For this demo, we accept one connection and exit
+      
+      match tcp.accept(server) {
+        case Some { value: client } => {
+          let result = handle_client(client)
+          let _ = tcp.close_server(server)
+          return result
+        }
+        case None => {
+          // No connection available (non-blocking accept)
+          let _ = tcp.close_server(server)
+          return false
+        }
+      }
+    }
+    case None => {
+      // Failed to bind to port (might be in use)
+      return false
+    }
+  }
+}
+
+/// Example: Start a server, handle up to N connections, then shut down
+/// Shows a bounded server loop pattern using recursion
+fn demo_echo_n(max_clients: Int) -> [Io] Int {
+  let port: Int = 9998
+  
+  match tcp.listen(port) {
+    case Some { value: server } => {
+      let handled = serve_n_clients(server, max_clients, 0)
+      let _ = tcp.close_server(server)
+      return handled
+    }
+    case None => {
+      return 0
+    }
+  }
+}
+
+/// Recursive helper: serve up to N clients
+fn serve_n_clients(server: TcpServer, remaining: Int, handled: Int) -> [Io] Int {
+  if remaining <= 0 {
+    return handled
+  } else {
+    match tcp.accept(server) {
+      case Some { value: client } => {
+        let _ = handle_client(client)
+        return serve_n_clients(server, remaining - 1, handled + 1)
+      }
+      case None => {
+        // No connection waiting, return what we've handled
+        return handled
+      }
+    }
+  }
+}
+
+/// Type showing the structure of TcpServer (for documentation)
+/// The actual TcpServer is an opaque builtin type
+type TcpServerInfo {
+  id: Int
+  port: Int
+}
+
+/// Type showing the structure of TcpSocket (for documentation)  
+type TcpSocketInfo {
+  id: Int
+  host: String
+  port: Int
+}

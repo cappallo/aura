@@ -1,7 +1,7 @@
 # Lx Implementation Status Report
 
 **Last Updated:** November 25, 2025
-**Overall Progress:** ~94% (Core ~93%, Tooling ~95%, Concurrency ~80%)
+**Overall Progress:** ~95% (Core ~93%, Tooling ~95%, Concurrency ~85%)
 
 The Lx project has a working **minimal interpreter** covering the foundational subset described in the ROADMAP.
 
@@ -16,7 +16,7 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 **Goal:** Enable real-world application development.
 - [x] **String Operations**: split, join, contains, starts_with, ends_with, trim, to_upper, to_lower, replace, index_of
 - [x] **List Operations**: head, tail, take, drop, reverse, contains, find, flat_map, zip, enumerate
-- [x] **Networking**: HTTP client (http.get, http.post, http.request), TCP sockets (tcp.connect, tcp.send, tcp.receive, tcp.close)
+- [x] **Networking**: HTTP client (http.get, http.post, http.request), TCP client sockets (tcp.connect, tcp.send, tcp.receive, tcp.close), TCP server (tcp.listen, tcp.accept, tcp.close_server)
 - [x] **File I/O**: read_file, write_file, file_exists, read_lines, append_file, delete_file
 - [x] **System**: env (environment variables), cwd (current directory), args (command line)
 - [x] **Date & Time**: time.now, time.format, time.parse, time.add_*, time.diff_seconds, time.year/month/day/hour/minute/second
@@ -31,17 +31,17 @@ This section tracks **future** work. Completed items are moved to the [Detailed 
 - [x] Add `lx active-comments` command to extract and report active comments
 
 ### **Priority 12: TCP Server Primitives**
-**Status:** 🔴 Not Started
+**Status:** ✅ Complete
 **Goal:** Enable building network servers (e.g., chat server, HTTP server) using the actor model.
-- [ ] **`tcp.listen(port: Int) -> [Io] Option<TcpServer>`** - Bind to a port and start listening
-- [ ] **`tcp.accept(server: TcpServer) -> [Io] Option<TcpSocket>`** - Accept incoming connection
-- [ ] **`TcpServer` builtin type** - Register in type system like `TcpSocket`
-- [ ] **Actor-socket integration** - Consider how socket events integrate with actor message delivery
-- [ ] **Example: Echo server** - `examples/tcp_echo_server.lx` demonstrating actor-based server pattern
+- [x] **`tcp.listen(port: Int) -> [Io] Option<TcpServer>`** - Bind to a port and start listening
+- [x] **`tcp.accept(server: TcpServer) -> [Io] Option<TcpSocket>`** - Accept incoming connection
+- [x] **`tcp.close_server(server: TcpServer) -> [Io] Unit`** - Stop listening and close server
+- [x] **`TcpServer` builtin type** - Registered in type system like `TcpSocket`
+- [x] **Example: Echo server** - `examples/tcp_echo_server.lx` demonstrating server patterns
 
 **Design Notes:**
 - No `while` loops needed - actors handle the "event loop" naturally
-- `tcp.accept` can be blocking (works in `immediate` scheduler) or could deliver messages to actors
+- `tcp.accept` blocks until a connection is received, providing synchronous semantics
 - Server pattern: one actor per client connection, coordinated by a main server actor
 
 ### **Future Priorities**
@@ -130,7 +130,8 @@ The `examples/` directory contains verified "gold standard" code.
 - `string_list_builtins.lx`: Extended string and list operations (split, join, trim, head, tail, zip, etc.)
 - `io_sys_builtins.lx`: File I/O and System builtins (read_file, write_file, env, cwd, etc.)
 - `time_random_builtins.lx`: Date/Time and Random builtins (time.now, time.format, random.int, random.shuffle, etc.)
-- `http_networking.lx`: HTTP client builtins (http.get, http.post, http.request) and TCP sockets
+- `http_networking.lx`: HTTP client builtins (http.get, http.post, http.request) and TCP client sockets
+- `tcp_echo_server.lx`: TCP server builtins (tcp.listen, tcp.accept, tcp.close_server)
 
 ### Concurrency & Actors
 - `actor_basic.lx`: Core actor patterns (state, handlers, sending)
@@ -212,8 +213,8 @@ lx apply-refactor <file.lx> <refactorName>
 ## 🐛 Known Issues / Gaps
 1.  **No REPL**: Interaction is file-based only.
 2.  **Parallel Primitives**: `parallel_map` exists but runs sequentially.
-3.  **HTTP Server**: Only HTTP client is implemented; server bindings not yet available.
-4.  **UDP Sockets**: Only TCP sockets are implemented; UDP not yet available.
+3.  **UDP Sockets**: Only TCP sockets are implemented; UDP not yet available.
+4.  **HTTP Server**: TCP server primitives exist; higher-level HTTP server framework not built-in.
 
 ---
 

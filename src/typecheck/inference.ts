@@ -601,6 +601,11 @@ function inferActorSendCall(
     return null;
   }
 
+  // Check if this is a builtin function (e.g., tcp.send is a builtin, not an actor send)
+  if (BUILTIN_FUNCTIONS[expr.callee]) {
+    return null;
+  }
+
   if (state.ctx.functions.has(expr.callee)) {
     return null;
   }
